@@ -1,0 +1,20 @@
+[
+  {
+    "id": "ds_cardio_synthea_v1",
+    "vendorId": "vnd_demo_health",
+    "title": "Synthetic Cardiology Cohort (Synthea)",
+    "description": "Synthetic patients with cardiovascular conditions: encounters, medications, observations. Fully synthetic (Synthea) — no real patient data.",
+    "priceCents": 4900,
+    "recordCount": 10000,
+    "tags": ["cardiology", "synthetic", "synthea"]
+  },
+  {
+    "id": "ds_diabetes_synthea_v1",
+    "vendorId": "vnd_demo_health",
+    "title": "Synthetic Type 2 Diabetes Cohort (Synthea)",
+    "description": "Synthetic longitudinal records for type 2 diabetes: labs (HbA1c), medications, outcomes. Fully synthetic (Synthea) — no real patient data.",
+    "priceCents": 5900,
+    "recordCount": 8000,
+    "tags": ["diabetes", "endocrinology", "synthetic", "synthea"]
+  }
+]
