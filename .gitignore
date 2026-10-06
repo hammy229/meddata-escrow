@@ -30,8 +30,16 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files (never commit real secrets; template is tracked)
 .env*
+!.env.example
+
+# generated / local data (Synthea synthetic patient output, local db)
+/data/synthea/
+/data/output/
+*.sqlite
+*.sqlite3
+*.db
 
 # vercel
 .vercel
