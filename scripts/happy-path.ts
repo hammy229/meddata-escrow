@@ -35,7 +35,7 @@ function mockPayPal(): EscrowPayPal {
     async authorizeOrder(orderId) {
       return { orderId, authorizationId: "MOCK-AUTH-1", status: "CREATED" };
     },
-    async captureAuthorization(authId) {
+    async captureAuthorization(_authId) {
       return { captureId: "MOCK-CAP-1", status: "COMPLETED" };
     },
   };
