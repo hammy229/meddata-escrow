@@ -99,6 +99,22 @@ Production build: `npm run build && npm start`.
 - 🌐 **Hosted demo:** _placeholder — link coming soon_
 - 🎥 **Demo video (YouTube, < 3 min):** _placeholder — link coming soon_
 
+### Run it locally
+
+```bash
+npm test          # unit tests (node:test + tsx): escrow state machine,
+                  # PayPal client, matcher, delivery, /api/orders validation
+npm run demo      # happy-path: request → match → authorize → deliver → capture
+npm run demo -- --sandbox "heart disease cohort"   # real sandbox calls (.env.local)
+```
+
+The escrow lifecycle is a pure state machine in `lib/escrow/state-machine.ts`
+(`MATCHED → AUTHORIZED → DELIVERED → CAPTURED → PAID_OUT`, with
+`DISPUTED → VOIDED | CAPTURED`). The default `npm run demo` is mock-first — it
+drives the real state machine + matcher against a stubbed PayPal client, so no
+AWS and no credentials are needed. See [TODO-paypal-tools.md](./TODO-paypal-tools.md)
+for the sponsor-tool verification pass (AI-Toolkit plugin + PayPal MCP).
+
 ## Project structure
 
 ```
