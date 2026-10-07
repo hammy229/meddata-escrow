@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "meddata-escrow",
+  title: "MedData Escrow",
   description:
     "AI procurement + escrow marketplace for medical research data, settled with PayPal.",
 };
