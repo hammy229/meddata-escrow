@@ -30,7 +30,10 @@ export type EscrowEvent =
   | "VOID"
   | "CANCEL";
 
-const TRANSITIONS: Record<EscrowState, Partial<Record<EscrowEvent, EscrowState>>> = {
+const TRANSITIONS: Record<
+  EscrowState,
+  Partial<Record<EscrowEvent, EscrowState>>
+> = {
   MATCHED: { AUTHORIZE: "AUTHORIZED", CANCEL: "CANCELLED" },
   AUTHORIZED: { DELIVER: "DELIVERED", VOID: "VOIDED", DISPUTE: "DISPUTED" },
   DELIVERED: { CAPTURE: "CAPTURED", DISPUTE: "DISPUTED" },
@@ -58,7 +61,10 @@ export class InvalidTransitionError extends Error {
 }
 
 /** Next state for an event, or throw InvalidTransitionError if not allowed. */
-export function transition(state: EscrowState, event: EscrowEvent): EscrowState {
+export function transition(
+  state: EscrowState,
+  event: EscrowEvent,
+): EscrowState {
   const next = TRANSITIONS[state][event];
   if (next === undefined) throw new InvalidTransitionError(state, event);
   return next;

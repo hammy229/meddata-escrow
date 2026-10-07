@@ -51,7 +51,11 @@ for (const [from, event] of ILLEGAL) {
 }
 
 // Terminal states reject every event.
-const TERMINALS: ReadonlyArray<EscrowState> = ["PAID_OUT", "VOIDED", "CANCELLED"];
+const TERMINALS: ReadonlyArray<EscrowState> = [
+  "PAID_OUT",
+  "VOIDED",
+  "CANCELLED",
+];
 const EVERY_EVENT: ReadonlyArray<EscrowEvent> = [
   "AUTHORIZE",
   "DELIVER",
@@ -75,7 +79,13 @@ for (const state of TERMINALS) {
 }
 
 test("non-terminal states report isTerminal=false", () => {
-  for (const state of ["MATCHED", "AUTHORIZED", "DELIVERED", "CAPTURED", "DISPUTED"] as EscrowState[]) {
+  for (const state of [
+    "MATCHED",
+    "AUTHORIZED",
+    "DELIVERED",
+    "CAPTURED",
+    "DISPUTED",
+  ] as EscrowState[]) {
     assert.equal(isTerminal(state), false);
   }
 });

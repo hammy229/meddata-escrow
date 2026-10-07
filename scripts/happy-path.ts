@@ -22,15 +22,26 @@ import {
 
 // Minimal shape the demo needs — satisfied by the real client and the mock.
 interface EscrowPayPal {
-  createAuthorizeOrder(i: { amount: number; currency?: string; referenceId?: string }): Promise<CreateOrderResult>;
+  createAuthorizeOrder(i: {
+    amount: number;
+    currency?: string;
+    referenceId?: string;
+  }): Promise<CreateOrderResult>;
   authorizeOrder(orderId: string): Promise<AuthorizeResult>;
-  captureAuthorization(authId: string, o?: { requestId?: string }): Promise<CaptureResult>;
+  captureAuthorization(
+    authId: string,
+    o?: { requestId?: string },
+  ): Promise<CaptureResult>;
 }
 
 function mockPayPal(): EscrowPayPal {
   return {
     async createAuthorizeOrder() {
-      return { orderId: "MOCK-ORDER-1", status: "CREATED", approveUrl: "https://sandbox.paypal.com/checkoutnow?token=MOCK-ORDER-1" };
+      return {
+        orderId: "MOCK-ORDER-1",
+        status: "CREATED",
+        approveUrl: "https://sandbox.paypal.com/checkoutnow?token=MOCK-ORDER-1",
+      };
     },
     async authorizeOrder(orderId) {
       return { orderId, authorizationId: "MOCK-AUTH-1", status: "CREATED" };
@@ -50,25 +61,36 @@ function step(event: Parameters<typeof transition>[1], note: string) {
 async function main() {
   const args = process.argv.slice(2);
   const sandbox = args.includes("--sandbox");
-  const description = args.find((a) => !a.startsWith("--")) ?? "cardiovascular disease patient cohort";
+  const description =
+    args.find((a) => !a.startsWith("--")) ??
+    "cardiovascular disease patient cohort";
 
-  console.log(`\nMedData Escrow happy-path  (${sandbox ? "SANDBOX" : "mock"} mode)`);
+  console.log(
+    `\nMedData Escrow happy-path  (${sandbox ? "SANDBOX" : "mock"} mode)`,
+  );
   console.log(`Study: "${description}"\n`);
 
   // 1. Match (mock Bedrock ranker over the local catalog).
   const ranked = await matchDatasets(description);
   const top = ranked[0];
-  console.log(`Matched dataset: ${top.datasetId}  (score ${top.score} — ${top.rationale})`);
+  console.log(
+    `Matched dataset: ${top.datasetId}  (score ${top.score} — ${top.rationale})`,
+  );
 
   const pp: EscrowPayPal = sandbox ? payPalClientFromEnv() : mockPayPal();
   const amount = 49.0; // demo price (USD)
 
   // 2. Create order (intent=AUTHORIZE) and authorize funds into escrow.
-  const order = await pp.createAuthorizeOrder({ amount, referenceId: `study-${Date.now()}` });
+  const order = await pp.createAuthorizeOrder({
+    amount,
+    referenceId: `study-${Date.now()}`,
+  });
   console.log(`\nOrder ${order.orderId} created (${order.status}).`);
   if (sandbox) {
     console.log(`Buyer must approve first: ${order.approveUrl}`);
-    console.log("(Sandbox authorize requires approval — finish via the PayPal MCP/test accounts.)");
+    console.log(
+      "(Sandbox authorize requires approval — finish via the PayPal MCP/test accounts.)",
+    );
   }
   const auth = await pp.authorizeOrder(order.orderId);
   step("AUTHORIZE", `authorizationId=${auth.authorizationId}`);
@@ -78,13 +100,18 @@ async function main() {
   step("DELIVER", `delivery=${url.slice(0, 60)}...`);
 
   // 4. Buyer confirms within the window -> capture the held funds.
-  const cap = await pp.captureAuthorization(auth.authorizationId, { requestId: randomUUID() });
+  const cap = await pp.captureAuthorization(auth.authorizationId, {
+    requestId: randomUUID(),
+  });
   step("CAPTURE", `captureId=${cap.captureId} (${cap.status})`);
 
   console.log(`\nDone. Final escrow state: ${state}\n`);
 }
 
 main().catch((err) => {
-  console.error("\nhappy-path failed:", err instanceof Error ? err.message : err);
+  console.error(
+    "\nhappy-path failed:",
+    err instanceof Error ? err.message : err,
+  );
   process.exitCode = 1;
 });

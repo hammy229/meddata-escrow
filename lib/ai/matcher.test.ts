@@ -9,7 +9,9 @@ test("ranks the cardiology dataset first for a cardiovascular study", async () =
 });
 
 test("ranks the diabetes dataset first for a diabetes study", async () => {
-  const ranked = await matchDatasets("type 2 diabetes HbA1c longitudinal study");
+  const ranked = await matchDatasets(
+    "type 2 diabetes HbA1c longitudinal study",
+  );
   assert.equal(ranked[0].datasetId, "ds_diabetes_synthea_v1");
 });
 

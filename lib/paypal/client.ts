@@ -59,7 +59,9 @@ export function createPayPalClient(config: PayPalConfig) {
   async function accessToken(): Promise<string> {
     // Refresh a minute before expiry to avoid edge-of-window failures.
     if (token && token.expiresAt > Date.now() + 60_000) return token.value;
-    const basic = Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64");
+    const basic = Buffer.from(
+      `${config.clientId}:${config.clientSecret}`,
+    ).toString("base64");
     const res = await doFetch(`${base}/v1/oauth2/token`, {
       method: "POST",
       headers: {
@@ -68,9 +70,16 @@ export function createPayPalClient(config: PayPalConfig) {
       },
       body: "grant_type=client_credentials",
     });
-    if (!res.ok) throw new PayPalError("oauth2/token", res.status, await res.text());
-    const json = (await res.json()) as { access_token: string; expires_in: number };
-    token = { value: json.access_token, expiresAt: Date.now() + json.expires_in * 1000 };
+    if (!res.ok)
+      throw new PayPalError("oauth2/token", res.status, await res.text());
+    const json = (await res.json()) as {
+      access_token: string;
+      expires_in: number;
+    };
+    token = {
+      value: json.access_token,
+      expiresAt: Date.now() + json.expires_in * 1000,
+    };
     return token.value;
   }
 
@@ -107,30 +116,48 @@ export function createPayPalClient(config: PayPalConfig) {
         purchase_units: [
           {
             ...(input.referenceId ? { reference_id: input.referenceId } : {}),
-            amount: { currency_code: input.currency ?? "USD", value: money(input.amount) },
+            amount: {
+              currency_code: input.currency ?? "USD",
+              value: money(input.amount),
+            },
           },
         ],
       };
-      const json = await call<{ id: string; status: string; links?: Array<{ rel: string; href: string }> }>(
-        "orders.create",
-        "/v2/checkout/orders",
-        { body },
-      );
+      const json = await call<{
+        id: string;
+        status: string;
+        links?: Array<{ rel: string; href: string }>;
+      }>("orders.create", "/v2/checkout/orders", { body });
       return {
         orderId: json.id,
         status: json.status,
-        approveUrl: json.links?.find((l) => l.rel === "approve" || l.rel === "payer-action")?.href,
+        approveUrl: json.links?.find(
+          (l) => l.rel === "approve" || l.rel === "payer-action",
+        )?.href,
       };
     },
 
     async authorizeOrder(orderId: string): Promise<AuthorizeResult> {
       const json = await call<{
         id: string;
-        purchase_units?: Array<{ payments?: { authorizations?: Array<{ id: string; status: string }> } }>;
-      }>("orders.authorize", `/v2/checkout/orders/${orderId}/authorize`, { body: {} });
+        purchase_units?: Array<{
+          payments?: { authorizations?: Array<{ id: string; status: string }> };
+        }>;
+      }>("orders.authorize", `/v2/checkout/orders/${orderId}/authorize`, {
+        body: {},
+      });
       const auth = json.purchase_units?.[0]?.payments?.authorizations?.[0];
-      if (!auth) throw new PayPalError("orders.authorize", 200, "no authorization in response");
-      return { orderId: json.id, authorizationId: auth.id, status: auth.status };
+      if (!auth)
+        throw new PayPalError(
+          "orders.authorize",
+          200,
+          "no authorization in response",
+        );
+      return {
+        orderId: json.id,
+        authorizationId: auth.id,
+        status: auth.status,
+      };
     },
 
     async captureAuthorization(
@@ -146,7 +173,10 @@ export function createPayPalClient(config: PayPalConfig) {
     },
 
     async voidAuthorization(authorizationId: string): Promise<void> {
-      await call<void>("payments.void", `/v2/payments/authorizations/${authorizationId}/void`);
+      await call<void>(
+        "payments.void",
+        `/v2/payments/authorizations/${authorizationId}/void`,
+      );
     },
 
     async reauthorizeAuthorization(
@@ -157,7 +187,12 @@ export function createPayPalClient(config: PayPalConfig) {
         "payments.reauthorize",
         `/v2/payments/authorizations/${authorizationId}/reauthorize`,
         {
-          body: { amount: { currency_code: input.currency ?? "USD", value: money(input.amount) } },
+          body: {
+            amount: {
+              currency_code: input.currency ?? "USD",
+              value: money(input.amount),
+            },
+          },
           requestId: input.requestId,
         },
       );
@@ -173,7 +208,13 @@ export function payPalClientFromEnv(): PayPalClient {
   const clientId = process.env.PAYPAL_CLIENT_ID;
   const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    throw new Error("PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET must be set (see .env.example)");
+    throw new Error(
+      "PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET must be set (see .env.example)",
+    );
   }
-  return createPayPalClient({ clientId, clientSecret, apiBase: process.env.PAYPAL_API_BASE });
+  return createPayPalClient({
+    clientId,
+    clientSecret,
+    apiBase: process.env.PAYPAL_API_BASE,
+  });
 }

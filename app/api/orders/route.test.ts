@@ -29,16 +29,23 @@ test("PATCH authorize without orderId is 422", async () => {
 });
 
 test("PATCH capture from an illegal state is 409 (no charge attempted)", async () => {
-  const res = await PATCH(req({ action: "capture", authorizationId: "AUTH-1", state: "MATCHED" }));
+  const res = await PATCH(
+    req({ action: "capture", authorizationId: "AUTH-1", state: "MATCHED" }),
+  );
   assert.equal(res.status, 409);
 });
 
 test("PATCH authorize with valid input reaches PayPal and reports it unconfigured (503) without creds", async () => {
-  const saved = { id: process.env.PAYPAL_CLIENT_ID, secret: process.env.PAYPAL_CLIENT_SECRET };
+  const saved = {
+    id: process.env.PAYPAL_CLIENT_ID,
+    secret: process.env.PAYPAL_CLIENT_SECRET,
+  };
   delete process.env.PAYPAL_CLIENT_ID;
   delete process.env.PAYPAL_CLIENT_SECRET;
   try {
-    const res = await PATCH(req({ action: "authorize", orderId: "ORDER-1", state: "MATCHED" }));
+    const res = await PATCH(
+      req({ action: "authorize", orderId: "ORDER-1", state: "MATCHED" }),
+    );
     assert.equal(res.status, 503);
   } finally {
     if (saved.id) process.env.PAYPAL_CLIENT_ID = saved.id;

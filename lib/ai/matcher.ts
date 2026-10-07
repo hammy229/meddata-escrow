@@ -26,16 +26,22 @@ function loadCatalog(): CatalogEntry[] {
 
 // Lowercase word tokens of length >= 3 (drops noise like "2", "of", "a").
 function tokens(text: string): string[] {
-  return (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((t) => t.length >= 3);
+  return (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
+    (t) => t.length >= 3,
+  );
 }
 
-export async function matchDatasets(studyDescription: string): Promise<DatasetMatch[]> {
+export async function matchDatasets(
+  studyDescription: string,
+): Promise<DatasetMatch[]> {
   const query = new Set(tokens(studyDescription));
   const catalog = loadCatalog();
 
   return catalog
     .map((d) => {
-      const haystack = new Set(tokens(`${d.title} ${d.description} ${d.tags.join(" ")}`));
+      const haystack = new Set(
+        tokens(`${d.title} ${d.description} ${d.tags.join(" ")}`),
+      );
       const matched = [...query].filter((t) => haystack.has(t));
       return {
         datasetId: d.id,

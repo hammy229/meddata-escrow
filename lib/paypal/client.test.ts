@@ -6,17 +6,31 @@ import assert from "node:assert/strict";
 
 import { createPayPalClient, PayPalError } from "./client";
 
-type Handler = (init: { method?: string; headers?: Record<string, string>; body?: string }) => {
+type Handler = (init: {
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+}) => {
   status: number;
   body?: unknown;
 };
 
 function fakeFetch(routes: Record<string, Handler>) {
-  const calls: Array<{ url: string; method: string; headers: Record<string, string>; body?: string }> = [];
+  const calls: Array<{
+    url: string;
+    method: string;
+    headers: Record<string, string>;
+    body?: string;
+  }> = [];
   const fn = (async (url: string | URL, init: Record<string, unknown> = {}) => {
     const u = String(url);
     const headers = (init.headers ?? {}) as Record<string, string>;
-    calls.push({ url: u, method: (init.method as string) ?? "GET", headers, body: init.body as string });
+    calls.push({
+      url: u,
+      method: (init.method as string) ?? "GET",
+      headers,
+      body: init.body as string,
+    });
     const key = Object.keys(routes).find((k) => u.endsWith(k));
     if (!key) throw new Error(`fakeFetch: no route for ${u}`);
     const { status, body } = routes[key](init as never);
@@ -34,7 +48,11 @@ function fakeFetch(routes: Record<string, Handler>) {
   return { fn, calls };
 }
 
-const CREDS = { clientId: "cid", clientSecret: "csecret", apiBase: "https://api-m.sandbox.paypal.com" };
+const CREDS = {
+  clientId: "cid",
+  clientSecret: "csecret",
+  apiBase: "https://api-m.sandbox.paypal.com",
+};
 
 const TOKEN_OK: Handler = () => ({
   status: 200,
@@ -44,7 +62,10 @@ const TOKEN_OK: Handler = () => ({
 test("fetches an OAuth token with Basic auth and caches it across calls", async () => {
   const { fn, calls } = fakeFetch({
     "/v1/oauth2/token": TOKEN_OK,
-    "/v2/checkout/orders": () => ({ status: 201, body: { id: "O1", status: "CREATED", links: [] } }),
+    "/v2/checkout/orders": () => ({
+      status: 201,
+      body: { id: "O1", status: "CREATED", links: [] },
+    }),
   });
   const pp = createPayPalClient({ ...CREDS, fetch: fn });
   await pp.createAuthorizeOrder({ amount: 10 });
@@ -52,7 +73,8 @@ test("fetches an OAuth token with Basic auth and caches it across calls", async 
 
   const tokenCalls = calls.filter((c) => c.url.endsWith("/v1/oauth2/token"));
   assert.equal(tokenCalls.length, 1, "token should be cached, fetched once");
-  const expectedBasic = "Basic " + Buffer.from("cid:csecret").toString("base64");
+  const expectedBasic =
+    "Basic " + Buffer.from("cid:csecret").toString("base64");
   assert.equal(tokenCalls[0].headers.Authorization, expectedBasic);
   assert.match(tokenCalls[0].body ?? "", /grant_type=client_credentials/);
 });
@@ -65,12 +87,21 @@ test("createAuthorizeOrder sends intent=AUTHORIZE and returns id + approve url",
       body: {
         id: "ORDER-1",
         status: "CREATED",
-        links: [{ rel: "approve", href: "https://www.sandbox.paypal.com/checkoutnow?token=ORDER-1" }],
+        links: [
+          {
+            rel: "approve",
+            href: "https://www.sandbox.paypal.com/checkoutnow?token=ORDER-1",
+          },
+        ],
       },
     }),
   });
   const pp = createPayPalClient({ ...CREDS, fetch: fn });
-  const res = await pp.createAuthorizeOrder({ amount: 42.5, currency: "USD", referenceId: "order-7" });
+  const res = await pp.createAuthorizeOrder({
+    amount: 42.5,
+    currency: "USD",
+    referenceId: "order-7",
+  });
 
   const orderCall = calls.find((c) => c.url.endsWith("/v2/checkout/orders"))!;
   assert.equal(orderCall.method, "POST");
@@ -82,7 +113,10 @@ test("createAuthorizeOrder sends intent=AUTHORIZE and returns id + approve url",
   assert.equal(sent.purchase_units[0].reference_id, "order-7");
 
   assert.equal(res.orderId, "ORDER-1");
-  assert.equal(res.approveUrl, "https://www.sandbox.paypal.com/checkoutnow?token=ORDER-1");
+  assert.equal(
+    res.approveUrl,
+    "https://www.sandbox.paypal.com/checkoutnow?token=ORDER-1",
+  );
 });
 
 test("authorizeOrder extracts the authorization id from the order", async () => {
@@ -93,7 +127,11 @@ test("authorizeOrder extracts the authorization id from the order", async () => 
       body: {
         id: "ORDER-1",
         status: "COMPLETED",
-        purchase_units: [{ payments: { authorizations: [{ id: "AUTH-9", status: "CREATED" }] } }],
+        purchase_units: [
+          {
+            payments: { authorizations: [{ id: "AUTH-9", status: "CREATED" }] },
+          },
+        ],
       },
     }),
   });
@@ -106,7 +144,10 @@ test("authorizeOrder extracts the authorization id from the order", async () => 
 test("captureAuthorization sends PayPal-Request-Id for idempotency", async () => {
   const { fn, calls } = fakeFetch({
     "/v1/oauth2/token": TOKEN_OK,
-    "/v2/payments/authorizations/AUTH-9/capture": () => ({ status: 201, body: { id: "CAP-1", status: "COMPLETED" } }),
+    "/v2/payments/authorizations/AUTH-9/capture": () => ({
+      status: 201,
+      body: { id: "CAP-1", status: "COMPLETED" },
+    }),
   });
   const pp = createPayPalClient({ ...CREDS, fetch: fn });
   const res = await pp.captureAuthorization("AUTH-9", { requestId: "req-abc" });
@@ -121,10 +162,16 @@ test("captureAuthorization sends PayPal-Request-Id for idempotency", async () =>
 test("reauthorizeAuthorization sends amount and an idempotency key", async () => {
   const { fn, calls } = fakeFetch({
     "/v1/oauth2/token": TOKEN_OK,
-    "/v2/payments/authorizations/AUTH-9/reauthorize": () => ({ status: 201, body: { id: "AUTH-9", status: "CREATED" } }),
+    "/v2/payments/authorizations/AUTH-9/reauthorize": () => ({
+      status: 201,
+      body: { id: "AUTH-9", status: "CREATED" },
+    }),
   });
   const pp = createPayPalClient({ ...CREDS, fetch: fn });
-  await pp.reauthorizeAuthorization("AUTH-9", { amount: 15, requestId: "req-reauth" });
+  await pp.reauthorizeAuthorization("AUTH-9", {
+    amount: 15,
+    requestId: "req-reauth",
+  });
 
   const call = calls.find((c) => c.url.endsWith("/reauthorize"))!;
   assert.equal(call.headers["PayPal-Request-Id"], "req-reauth");
@@ -144,12 +191,18 @@ test("voidAuthorization posts to the void endpoint", async () => {
 test("throws PayPalError with the HTTP status on a non-2xx response", async () => {
   const { fn } = fakeFetch({
     "/v1/oauth2/token": TOKEN_OK,
-    "/v2/checkout/orders": () => ({ status: 422, body: { name: "UNPROCESSABLE_ENTITY" } }),
+    "/v2/checkout/orders": () => ({
+      status: 422,
+      body: { name: "UNPROCESSABLE_ENTITY" },
+    }),
   });
   const pp = createPayPalClient({ ...CREDS, fetch: fn });
-  await assert.rejects(() => pp.createAuthorizeOrder({ amount: 1 }), (err: unknown) => {
-    assert.ok(err instanceof PayPalError);
-    assert.equal((err as PayPalError).status, 422);
-    return true;
-  });
+  await assert.rejects(
+    () => pp.createAuthorizeOrder({ amount: 1 }),
+    (err: unknown) => {
+      assert.ok(err instanceof PayPalError);
+      assert.equal((err as PayPalError).status, 422);
+      return true;
+    },
+  );
 });
