@@ -3,6 +3,16 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![CI](https://github.com/hammy229/meddata-escrow/actions/workflows/ci.yml/badge.svg)](https://github.com/hammy229/meddata-escrow/actions/workflows/ci.yml)
 
+## In Progress: MedData Escrow
+
+MedData Escrow is an AI procurement and escrow marketplace for medical research data. Buyers describe the data they need, Amazon Bedrock (Claude) matches relevant dataset listings, PayPal authorizes and holds payment before access is granted, and data is delivered through time-limited Amazon S3 presigned URLs before payment is captured and settled with the seller.
+
+**Tech stack:** Amazon Bedrock (Claude), Amazon S3, DynamoDB, AWS Lambda + API Gateway, and PayPal sandbox APIs.
+
+**Status:** Actively building for the PayPal AI Hackathon (Devpost deadline: November 12, 2026).
+
+**Architecture flow:** Request → Bedrock match → PayPal authorization → S3 delivery → capture → seller payout.
+
 > **An AI procurement + escrow marketplace for medical research data.** Describe your study in plain English; an AI agent finds the right dataset, verifies a sample, and buys it via PayPal escrow — funds captured only if the sample passes.
 
 ## Problem & who it's for
