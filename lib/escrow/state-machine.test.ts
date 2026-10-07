@@ -10,7 +10,7 @@ import {
   InvalidTransitionError,
   type EscrowState,
   type EscrowEvent,
-} from "./state-machine.ts";
+} from "./state-machine";
 
 // Every allowed transition: [from, event, to]
 const ALLOWED: ReadonlyArray<[EscrowState, EscrowEvent, EscrowState]> = [
