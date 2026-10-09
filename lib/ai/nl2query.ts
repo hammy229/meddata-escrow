@@ -19,7 +19,13 @@ export interface CompiledQuery {
 // this from the dataset schema; here we whitelist a few generic numeric/group
 // fields so an unrecognized field name can never reach the SQL string.
 const NUMERIC_FIELDS = ["age", "value", "cost", "los", "bmi", "score"] as const;
-const GROUP_FIELDS = ["sex", "region", "age_group", "diagnosis", "year"] as const;
+const GROUP_FIELDS = [
+  "sex",
+  "region",
+  "age_group",
+  "diagnosis",
+  "year",
+] as const;
 
 const DEFAULT_NUMERIC_FIELD = "value";
 
