@@ -3,13 +3,17 @@
 //   POST  { datasetId, amount, currency?, referenceId? }
 //         -> create an Orders v2 order (intent=AUTHORIZE). Returns the approve
 //            URL; escrow starts at MATCHED (funds not yet authorized).
-//   PATCH { action: "authorize"|"capture"|"void", state?, orderId?,
-//           authorizationId?, requestId? }
+//   PATCH { action: "authorize"|"deliver"|"capture"|"payout"|"void", state?,
+//           orderId?, authorizationId?, requestId? }
 //         -> advance the escrow. The state-machine transition is validated
 //            BEFORE any PayPal call, so an illegal move never charges anyone.
+//            `deliver` is internal fulfilment (never touches PayPal).
 //
 // Stateless for now (no DB): the caller passes the current `state`. Secrets
 // come only from env via payPalClientFromEnv; errors never leak internals.
+//
+// MOCK MODE: set PAYPAL_MODE=mock to drive the whole arc with no credentials
+// (local demo). It is opt-in — without the flag, missing creds still 503.
 import { payPalClientFromEnv, PayPalError } from "../../../lib/paypal/client";
 import {
   transition,
@@ -17,17 +21,22 @@ import {
   type EscrowState,
   type EscrowEvent,
 } from "../../../lib/escrow/state-machine";
+import { mockId, isMockMode } from "../../../lib/mock/ids";
 
 const ACTION_EVENT: Record<string, EscrowEvent> = {
   authorize: "AUTHORIZE",
+  deliver: "DELIVER",
   capture: "CAPTURE",
+  payout: "PAYOUT",
   void: "VOID",
 };
 
 // Default "from" state per action when the caller omits it (no DB yet).
 const DEFAULT_FROM: Record<EscrowEvent, EscrowState> = {
   AUTHORIZE: "MATCHED",
+  DELIVER: "AUTHORIZED",
   CAPTURE: "DELIVERED",
+  PAYOUT: "CAPTURED",
   VOID: "AUTHORIZED",
 } as Record<EscrowEvent, EscrowState>;
 
@@ -63,6 +72,20 @@ export async function POST(request: Request) {
     !(amount > 0)
   ) {
     return bad("datasetId (string) and amount (positive number) are required");
+  }
+  // MOCK MODE (opt-in): run the escrow with no PayPal creds for the local demo.
+  if (isMockMode()) {
+    const orderId = mockId("MOCK-ORDER");
+    return Response.json(
+      {
+        orderId,
+        status: "CREATED",
+        approveUrl: `https://sandbox.paypal.com/checkoutnow?token=${orderId}`,
+        escrowState: "MATCHED",
+        mock: true,
+      },
+      { status: 201 },
+    );
   }
   try {
     const pp = payPalClientFromEnv();
@@ -115,6 +138,49 @@ export async function PATCH(request: Request) {
       return Response.json({ error: err.message }, { status: 409 });
     return errorResponse(err);
   }
+
+  // DELIVER is internal fulfilment, not a payment: pure transition, no PayPal
+  // in either mode.
+  if (event === "DELIVER") {
+    return Response.json({
+      escrowState: nextState,
+      ...(isMockMode() ? { mock: true } : {}),
+    });
+  }
+
+  // MOCK MODE (opt-in): deterministic results, no PayPal client, no network.
+  if (isMockMode()) {
+    if (event === "AUTHORIZE")
+      return Response.json({
+        escrowState: nextState,
+        authorizationId: mockId("MOCK-AUTH"),
+        status: "COMPLETED",
+        mock: true,
+      });
+    if (event === "CAPTURE")
+      return Response.json({
+        escrowState: nextState,
+        captureId: mockId("MOCK-CAP"),
+        status: "COMPLETED",
+        mock: true,
+      });
+    if (event === "PAYOUT")
+      return Response.json({
+        escrowState: nextState,
+        payoutBatchId: mockId("MOCK-PAYOUT"),
+        status: "PENDING",
+        mock: true,
+      });
+    // VOID
+    return Response.json({ escrowState: nextState, mock: true });
+  }
+
+  // REAL MODE: Payouts is the not-yet-built seam (deliberate, not a side effect).
+  if (event === "PAYOUT")
+    return Response.json(
+      { error: "real PayPal Payouts not implemented" },
+      { status: 501 },
+    );
 
   try {
     const pp = payPalClientFromEnv();
