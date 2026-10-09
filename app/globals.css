@@ -24,3 +24,11 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
+
+/* AG Grid: clickable rows + highlight the picked dataset match. */
+.ag-row.cursor-pointer {
+  cursor: pointer;
+}
+.ag-row.dg-row-selected {
+  background-color: color-mix(in srgb, #10b981 16%, transparent);
+}
