@@ -112,18 +112,28 @@ Production build: `npm run build && npm start`.
 ### Run it locally
 
 ```bash
-npm test          # unit tests (node:test + tsx): escrow state machine,
-                  # PayPal client, matcher, delivery, /api/orders validation
-npm run demo      # happy-path: request → match → authorize → deliver → capture
+npm test               # unit tests (node:test + tsx): escrow state machine, SQLite
+                       # persistence, PayPal client, matcher, nl2query, privacy guard, routes
+npm run demo           # happy-path CLI: match → authorize → deliver → capture → payout
+npm run dev:mock       # full UI + API, no PayPal keys needed (http://localhost:3000)
 npm run demo -- --sandbox "heart disease cohort"   # real sandbox calls (.env.local)
 ```
 
+**Try the full flow in the browser (no credentials):** `npm run dev:mock`, then
+open [`/researcher`](http://localhost:3000/researcher) — describe a study, pick a
+ranked match, **Buy (escrow)**, then walk the escrow arc with the on-page buttons
+(**Deliver → Confirm & release → Pay out vendor**) and run a privacy-safe query.
+[`/vendor`](http://localhost:3000/vendor) shows the dataset catalog.
+
 The escrow lifecycle is a pure state machine in `lib/escrow/state-machine.ts`
 (`MATCHED → AUTHORIZED → DELIVERED → CAPTURED → PAID_OUT`, with
-`DISPUTED → VOIDED | CAPTURED`). The default `npm run demo` is mock-first — it
-drives the real state machine + matcher against a stubbed PayPal client, so no
-AWS and no credentials are needed. See [TODO-paypal-tools.md](./TODO-paypal-tools.md)
-for the sponsor-tool verification pass (AI-Toolkit plugin + PayPal MCP).
+`DISPUTED → VOIDED | CAPTURED`); order state persists via SQLite
+(`lib/db`, built on Node's `node:sqlite`). Everything is **mock-first**: both the
+CLI (`npm run demo`) and the app (`PAYPAL_MODE=mock`) drive the real state machine,
+matcher, and privacy guard against stubbed PayPal + delivery, so no AWS and no
+credentials are needed. The real sandbox path drops in behind the same interfaces —
+see [TODO-paypal-tools.md](./TODO-paypal-tools.md) for the sponsor-tool
+verification pass (AI-Toolkit plugin + PayPal MCP).
 
 ## Project structure
 
