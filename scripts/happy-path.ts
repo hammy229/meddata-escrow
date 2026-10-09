@@ -1,4 +1,4 @@
-// Happy-path demo: request -> match -> authorize -> deliver -> capture.
+// Happy-path demo: request -> match -> authorize -> deliver -> capture -> payout.
 //
 //   npm run demo                  # mock mode (no creds, no network)
 //   npm run demo -- --sandbox     # real sandbox calls (needs .env.local)
@@ -20,6 +20,12 @@ import {
   type CaptureResult,
 } from "../lib/paypal/client";
 
+// Result of releasing escrowed funds to the vendor (PayPal Payouts shape).
+interface PayoutResult {
+  payoutBatchId: string;
+  status: string;
+}
+
 // Minimal shape the demo needs — satisfied by the real client and the mock.
 interface EscrowPayPal {
   createAuthorizeOrder(i: {
@@ -32,6 +38,14 @@ interface EscrowPayPal {
     authId: string,
     o?: { requestId?: string },
   ): Promise<CaptureResult>;
+  // Release captured funds to the dataset vendor. Mock here; the real PayPal
+  // Payouts call drops in behind this same method (see sandboxPayPal / the
+  // "real PayPal Payouts goes here" seam) without touching the loop below.
+  payoutToVendor(i: {
+    amount: number;
+    currency?: string;
+    receiver?: string;
+  }): Promise<PayoutResult>;
 }
 
 function mockPayPal(): EscrowPayPal {
@@ -48,6 +62,27 @@ function mockPayPal(): EscrowPayPal {
     },
     async captureAuthorization(_authId) {
       return { captureId: "MOCK-CAP-1", status: "COMPLETED" };
+    },
+    async payoutToVendor() {
+      return { payoutBatchId: "MOCK-PAYOUT-1", status: "PENDING" };
+    },
+  };
+}
+
+// Sandbox adapter: the real Orders v2 client covers create/authorize/capture,
+// but has no Payouts method yet. We wrap it and supply a payout seam so the
+// interface is satisfied and real PayPal Payouts can drop in here later.
+function sandboxPayPal(): EscrowPayPal {
+  const client = payPalClientFromEnv();
+  return {
+    createAuthorizeOrder: (i) => client.createAuthorizeOrder(i),
+    authorizeOrder: (id) => client.authorizeOrder(id),
+    captureAuthorization: (id, o) => client.captureAuthorization(id, o),
+    async payoutToVendor() {
+      // real PayPal Payouts goes here (POST /v1/payments/payouts via the client).
+      throw new Error(
+        "PayPal Payouts not implemented for --sandbox yet (mock mode reaches PAID_OUT).",
+      );
     },
   };
 }
@@ -77,7 +112,7 @@ async function main() {
     `Matched dataset: ${top.datasetId}  (score ${top.score} — ${top.rationale})`,
   );
 
-  const pp: EscrowPayPal = sandbox ? payPalClientFromEnv() : mockPayPal();
+  const pp: EscrowPayPal = sandbox ? sandboxPayPal() : mockPayPal();
   const amount = 49.0; // demo price (USD)
 
   // 2. Create order (intent=AUTHORIZE) and authorize funds into escrow.
@@ -104,6 +139,10 @@ async function main() {
     requestId: randomUUID(),
   });
   step("CAPTURE", `captureId=${cap.captureId} (${cap.status})`);
+
+  // 5. Release the captured funds to the vendor (mock PayPal Payouts).
+  const payout = await pp.payoutToVendor({ amount, currency: "USD" });
+  step("PAYOUT", `payoutBatchId=${payout.payoutBatchId} (${payout.status})`);
 
   console.log(`\nDone. Final escrow state: ${state}\n`);
 }
