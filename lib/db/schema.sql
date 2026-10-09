@@ -25,8 +25,11 @@ CREATE TABLE IF NOT EXISTS orders (
   buyer_email      TEXT NOT NULL,
   paypal_order_id  TEXT,
   authorization_id TEXT,
-  -- authorized | captured | voided
-  status           TEXT NOT NULL DEFAULT 'authorized',
+  -- Canonical EscrowState (see lib/escrow/state-machine.ts). One of:
+  --   MATCHED | AUTHORIZED | DELIVERED | CAPTURED | PAID_OUT
+  --   | DISPUTED | VOIDED | CANCELLED
+  -- The DB only ever stores a state the state machine produced.
+  status           TEXT NOT NULL DEFAULT 'MATCHED',
   amount_cents     INTEGER NOT NULL,
   created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
