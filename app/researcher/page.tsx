@@ -3,9 +3,10 @@
 // Researcher workspace (client component — interactive flow).
 //
 // Describe a study -> POST /api/match -> rank matches in a grid -> pick one ->
-// "Buy (escrow)" authorizes payment via POST /api/orders -> ask a question ->
-// POST /api/query returns a privacy-safe aggregate. Escrow state is shown at
-// each step. All data comes from the Batch-A/B APIs; this file only calls them.
+// "Buy (escrow)" authorizes payment via /api/orders -> drive the escrow arc
+// (deliver -> capture -> payout, or void) -> ask a question -> POST /api/query
+// returns a privacy-safe aggregate. All data comes from the Batch-A/B APIs;
+// this file only calls them.
 import { useState } from "react";
 import Link from "next/link";
 import type { ColDef } from "ag-grid-community";
@@ -24,8 +25,8 @@ interface AggregateRow {
   count: number;
 }
 
-// The escrow lifecycle, in order. `MATCHED` is where a selected dataset sits
-// before payment; the UI advances through these as the flow progresses.
+// The escrow lifecycle, in order. The UI advances through these as the flow
+// progresses; VOIDED is a terminal off-ramp handled separately.
 const ESCROW_FLOW = [
   "MATCHED",
   "AUTHORIZED",
@@ -34,6 +35,13 @@ const ESCROW_FLOW = [
   "PAID_OUT",
 ] as const;
 type EscrowState = (typeof ESCROW_FLOW)[number] | null;
+
+// PATCH action -> the escrow state it advances to (for optimistic/degrade UI).
+const ADVANCE: Record<string, Exclude<EscrowState, null>> = {
+  deliver: "DELIVERED",
+  capture: "CAPTURED",
+  payout: "PAID_OUT",
+};
 
 function usd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -61,7 +69,13 @@ const resultColumns: ColDef<AggregateRow>[] = [
   { field: "count", headerName: "Count", flex: 1, maxWidth: 160 },
 ];
 
-function EscrowStepper({ state }: { state: EscrowState }) {
+function EscrowStepper({
+  state,
+  voided,
+}: {
+  state: EscrowState;
+  voided: boolean;
+}) {
   const activeIndex = state ? ESCROW_FLOW.indexOf(state) : -1;
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -84,9 +98,19 @@ function EscrowStepper({ state }: { state: EscrowState }) {
           </span>
         );
       })}
+      {voided && (
+        <span className="rounded-full border border-rose-300 bg-rose-50 px-3 py-1 font-mono text-xs text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300">
+          VOIDED
+        </span>
+      )}
     </div>
   );
 }
+
+const primaryBtn =
+  "rounded-full bg-emerald-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40";
+const dangerBtn =
+  "rounded-full border border-rose-300 px-5 py-2 text-sm font-medium text-rose-700 transition-colors hover:bg-rose-50 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/10";
 
 export default function ResearcherPage() {
   const [description, setDescription] = useState("");
@@ -96,8 +120,11 @@ export default function ResearcherPage() {
   const [selected, setSelected] = useState<Match | null>(null);
 
   const [escrow, setEscrow] = useState<EscrowState>(null);
-  const [buying, setBuying] = useState(false);
-  const [orderNote, setOrderNote] = useState<string | null>(null);
+  const [voided, setVoided] = useState(false);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [authorizationId, setAuthorizationId] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [escrowNote, setEscrowNote] = useState<string | null>(null);
   const [approveUrl, setApproveUrl] = useState<string | null>(null);
 
   const [question, setQuestion] = useState("");
@@ -107,18 +134,25 @@ export default function ResearcherPage() {
   const [compiled, setCompiled] = useState<string | null>(null);
   const [results, setResults] = useState<AggregateRow[] | null>(null);
 
+  function resetEscrow() {
+    setEscrow(null);
+    setVoided(false);
+    setOrderId(null);
+    setAuthorizationId(null);
+    setEscrowNote(null);
+    setApproveUrl(null);
+    setResults(null);
+    setQueryError(null);
+    setQueryReasons([]);
+    setCompiled(null);
+  }
+
   async function runMatch() {
     if (!description.trim()) return;
     setMatching(true);
     setMatchError(null);
     setSelected(null);
-    setEscrow(null);
-    setApproveUrl(null);
-    setOrderNote(null);
-    setResults(null);
-    setQueryError(null);
-    setQueryReasons([]);
-    setCompiled(null);
+    resetEscrow();
     try {
       const res = await fetch("/api/match", {
         method: "POST",
@@ -145,20 +179,19 @@ export default function ResearcherPage() {
 
   function selectMatch(m: Match) {
     setSelected(m);
+    resetEscrow();
     setEscrow("MATCHED");
-    setApproveUrl(null);
-    setOrderNote(null);
-    setResults(null);
-    setQueryError(null);
-    setQueryReasons([]);
-    setCompiled(null);
   }
 
+  // Buy = create the order then authorize it, so the escrow reaches AUTHORIZED
+  // (funds held). Falls back to an optimistic "mock" advance if the orders
+  // service isn't wired yet (no PayPal creds), so the demo stays unblocked.
   async function buyEscrow() {
     if (!selected) return;
-    setBuying(true);
-    setOrderNote(null);
+    setBusyAction("buy");
+    setEscrowNote(null);
     setApproveUrl(null);
+    setVoided(false);
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
@@ -169,27 +202,97 @@ export default function ResearcherPage() {
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok) {
+      if (!res.ok || typeof data.orderId !== "string") {
         setEscrow("AUTHORIZED");
-        setApproveUrl(typeof data.approveUrl === "string" ? data.approveUrl : null);
-        setOrderNote(
-          data.orderId
-            ? `Order ${data.orderId} created — funds held in escrow.`
-            : "Funds held in escrow.",
+        setEscrowNote(
+          `Escrow authorize mocked for demo (${data?.error ?? res.status}).`,
         );
+        return;
+      }
+      setOrderId(data.orderId);
+      if (typeof data.approveUrl === "string") setApproveUrl(data.approveUrl);
+
+      // Authorize the created order -> AUTHORIZED, returns the authorizationId.
+      const auth = await fetch("/api/orders", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "authorize",
+          orderId: data.orderId,
+          state: "MATCHED",
+        }),
+      });
+      const adata = await auth.json().catch(() => ({}));
+      if (auth.ok) {
+        if (typeof adata.authorizationId === "string")
+          setAuthorizationId(adata.authorizationId);
+        setEscrow(adata.escrowState ?? "AUTHORIZED");
+        const mock = data.mock || adata.mock ? " (mock mode)" : "";
+        setEscrowNote(`Order ${data.orderId} authorized — funds held in escrow.${mock}`);
       } else {
-        // PayPal credentials aren't wired for the local/mock demo (503, etc.).
-        // Keep the flow moving so the privacy-safe query can still be shown.
         setEscrow("AUTHORIZED");
-        setOrderNote(
-          `Escrow authorize is mocked for this demo (${data?.error ?? res.status}).`,
+        setEscrowNote(
+          `Escrow authorize mocked for demo (${adata?.error ?? auth.status}).`,
         );
       }
     } catch {
       setEscrow("AUTHORIZED");
-      setOrderNote("Escrow authorize is mocked for this demo (service offline).");
+      setEscrowNote("Escrow authorize mocked for demo (service offline).");
     } finally {
-      setBuying(false);
+      setBusyAction(null);
+    }
+  }
+
+  // Advance the escrow one step via PATCH (deliver / capture / payout).
+  async function advanceEscrow(action: keyof typeof ADVANCE) {
+    const nextState = ADVANCE[action];
+    setBusyAction(action);
+    try {
+      const res = await fetch("/api/orders", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action,
+          orderId,
+          authorizationId,
+          state: escrow,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setEscrow(data.escrowState ?? nextState);
+        if (data.mock) setEscrowNote(`${action} confirmed (mock mode).`);
+        else setEscrowNote(null);
+      } else {
+        setEscrow(nextState);
+        setEscrowNote(`${action} mocked for demo (${data?.error ?? res.status}).`);
+      }
+    } catch {
+      setEscrow(nextState);
+      setEscrowNote(`${action} mocked for demo (service offline).`);
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  // Void the authorization (sample failed) -> VOIDED, buyer not charged.
+  async function voidEscrow() {
+    setBusyAction("void");
+    try {
+      await fetch("/api/orders", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "void",
+          orderId,
+          authorizationId,
+          state: escrow,
+        }),
+      }).catch(() => undefined);
+    } finally {
+      setVoided(true);
+      setEscrowNote("Authorization voided — the buyer was not charged.");
+      setBusyAction(null);
     }
   }
 
@@ -209,21 +312,21 @@ export default function ResearcherPage() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         // 403 => privacy guard rejected the query (row-level/PII/small cell).
-        setQueryError(
-          data?.error ?? `Query rejected (${res.status}).`,
-        );
+        setQueryError(data?.error ?? `Query rejected (${res.status}).`);
         setQueryReasons(Array.isArray(data?.reasons) ? data.reasons : []);
         return;
       }
       setCompiled(typeof data.compiled === "string" ? data.compiled : null);
       setResults(Array.isArray(data.result) ? data.result : []);
-      setEscrow("DELIVERED");
     } catch {
       setQueryError("Could not reach the query service.");
     } finally {
       setQuerying(false);
     }
   }
+
+  const delivered =
+    escrow === "DELIVERED" || escrow === "CAPTURED" || escrow === "PAID_OUT";
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10">
@@ -262,7 +365,7 @@ export default function ResearcherPage() {
           <button
             onClick={runMatch}
             disabled={matching || !description.trim()}
-            className="rounded-full bg-emerald-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
+            className={primaryBtn}
           >
             {matching ? "Matching…" : "Find datasets"}
           </button>
@@ -297,14 +400,14 @@ export default function ResearcherPage() {
         </section>
       )}
 
-      {/* Step 3 — escrow / buy */}
+      {/* Step 3 — escrow / buy + full lifecycle */}
       {selected && (
         <section className="mt-6 rounded-2xl border border-zinc-200 p-6 dark:border-zinc-800">
           <div className="flex items-center gap-2">
             <span className="font-mono text-sm text-emerald-600 dark:text-emerald-400">
               03
             </span>
-            <h2 className="text-lg font-medium">Buy with escrow</h2>
+            <h2 className="text-lg font-medium">Escrow</h2>
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -313,24 +416,67 @@ export default function ResearcherPage() {
                 {selected.datasetId} · {usd(selected.priceCents)}
               </p>
             </div>
-            <button
-              onClick={buyEscrow}
-              disabled={buying || escrow !== "MATCHED"}
-              className="rounded-full bg-emerald-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {buying
-                ? "Authorizing…"
-                : escrow === "MATCHED"
-                  ? `Buy (escrow) · ${usd(selected.priceCents)}`
-                  : "Funds held ✓"}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {escrow === "MATCHED" && !voided && (
+                <button
+                  onClick={buyEscrow}
+                  disabled={busyAction !== null}
+                  className={primaryBtn}
+                >
+                  {busyAction === "buy"
+                    ? "Authorizing…"
+                    : `Buy (escrow) · ${usd(selected.priceCents)}`}
+                </button>
+              )}
+              {escrow === "AUTHORIZED" && !voided && (
+                <>
+                  <button
+                    onClick={() => advanceEscrow("deliver")}
+                    disabled={busyAction !== null}
+                    className={primaryBtn}
+                  >
+                    {busyAction === "deliver" ? "Delivering…" : "Deliver dataset"}
+                  </button>
+                  <button
+                    onClick={voidEscrow}
+                    disabled={busyAction !== null}
+                    className={dangerBtn}
+                  >
+                    {busyAction === "void" ? "Voiding…" : "Void (sample failed)"}
+                  </button>
+                </>
+              )}
+              {escrow === "DELIVERED" && (
+                <button
+                  onClick={() => advanceEscrow("capture")}
+                  disabled={busyAction !== null}
+                  className={primaryBtn}
+                >
+                  {busyAction === "capture"
+                    ? "Releasing…"
+                    : "Confirm & release payment"}
+                </button>
+              )}
+              {escrow === "CAPTURED" && (
+                <button
+                  onClick={() => advanceEscrow("payout")}
+                  disabled={busyAction !== null}
+                  className={primaryBtn}
+                >
+                  {busyAction === "payout" ? "Paying out…" : "Pay out vendor"}
+                </button>
+              )}
+              {escrow === "PAID_OUT" && (
+                <span className="rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300">
+                  ✓ Vendor paid out
+                </span>
+              )}
+            </div>
           </div>
           <div className="mt-5">
-            <EscrowStepper state={escrow} />
+            <EscrowStepper state={escrow} voided={voided} />
           </div>
-          {orderNote && (
-            <p className="mt-4 text-sm text-zinc-500">{orderNote}</p>
-          )}
+          {escrowNote && <p className="mt-4 text-sm text-zinc-500">{escrowNote}</p>}
           {approveUrl && (
             <a
               href={approveUrl}
@@ -344,8 +490,8 @@ export default function ResearcherPage() {
         </section>
       )}
 
-      {/* Step 4 — privacy-safe query */}
-      {selected && escrow && escrow !== "MATCHED" && (
+      {/* Step 4 — privacy-safe query (available once the dataset is delivered) */}
+      {selected && delivered && !voided && (
         <section className="mt-6 rounded-2xl border border-zinc-200 p-6 dark:border-zinc-800">
           <div className="flex items-center gap-2">
             <span className="font-mono text-sm text-emerald-600 dark:text-emerald-400">
@@ -370,7 +516,7 @@ export default function ResearcherPage() {
             <button
               onClick={runQuery}
               disabled={querying || !question.trim()}
-              className="rounded-full bg-emerald-600 px-5 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
+              className={primaryBtn}
             >
               {querying ? "Querying…" : "Run query"}
             </button>
