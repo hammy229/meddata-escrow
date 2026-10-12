@@ -104,6 +104,41 @@ export function getOrder(db: DatabaseSync, id: string): OrderRow | undefined {
     OrderRow | undefined;
 }
 
+/** Optional filters for `listOrders` (all AND-combined). */
+export interface OrderFilter {
+  status?: EscrowState;
+  datasetId?: string;
+  buyerEmail?: string;
+}
+
+/**
+ * List orders, newest first, optionally filtered. Backs the read endpoint the
+ * UI polls (vendor incoming-orders view, dispute queue).
+ */
+export function listOrders(
+  db: DatabaseSync,
+  filter: OrderFilter = {},
+): OrderRow[] {
+  const where: string[] = [];
+  const values: string[] = [];
+  if (filter.status) {
+    where.push("status = ?");
+    values.push(filter.status);
+  }
+  if (filter.datasetId) {
+    where.push("dataset_id = ?");
+    values.push(filter.datasetId);
+  }
+  if (filter.buyerEmail) {
+    where.push("buyer_email = ?");
+    values.push(filter.buyerEmail);
+  }
+  const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  return db
+    .prepare(`SELECT * FROM orders ${clause} ORDER BY created_at DESC, id DESC`)
+    .all(...values) as OrderRow[];
+}
+
 /** A persisted dataset row (snake_case columns, as stored). */
 export interface DatasetRow {
   id: string;

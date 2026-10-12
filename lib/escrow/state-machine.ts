@@ -44,6 +44,14 @@ const TRANSITIONS: Record<
   CANCELLED: {},
 };
 
+/** Every canonical escrow state (the state-machine's own node set). */
+export const ESCROW_STATES = Object.keys(TRANSITIONS) as EscrowState[];
+
+/** Narrowing guard: is `v` a known EscrowState? */
+export function isEscrowState(v: unknown): v is EscrowState {
+  return typeof v === "string" && (ESCROW_STATES as string[]).includes(v);
+}
+
 const TERMINAL_STATES: ReadonlySet<EscrowState> = new Set<EscrowState>([
   "PAID_OUT",
   "VOIDED",

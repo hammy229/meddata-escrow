@@ -7,6 +7,8 @@ import {
   transition,
   can,
   isTerminal,
+  isEscrowState,
+  ESCROW_STATES,
   InvalidTransitionError,
   type EscrowState,
   type EscrowEvent,
@@ -88,4 +90,28 @@ test("non-terminal states report isTerminal=false", () => {
   ] as EscrowState[]) {
     assert.equal(isTerminal(state), false);
   }
+});
+
+test("ESCROW_STATES lists all eight canonical states", () => {
+  assert.equal(ESCROW_STATES.length, 8);
+  for (const state of [
+    "MATCHED",
+    "AUTHORIZED",
+    "DELIVERED",
+    "CAPTURED",
+    "PAID_OUT",
+    "DISPUTED",
+    "VOIDED",
+    "CANCELLED",
+  ] as EscrowState[]) {
+    assert.ok(ESCROW_STATES.includes(state), `missing ${state}`);
+  }
+});
+
+test("isEscrowState accepts known states and rejects anything else", () => {
+  assert.equal(isEscrowState("DISPUTED"), true);
+  assert.equal(isEscrowState("REFUNDED"), false);
+  assert.equal(isEscrowState(""), false);
+  assert.equal(isEscrowState(42), false);
+  assert.equal(isEscrowState(undefined), false);
 });

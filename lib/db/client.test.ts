@@ -4,7 +4,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { openDb, createOrder, getOrder, advanceOrder } from "./client";
+import {
+  openDb,
+  createOrder,
+  getOrder,
+  advanceOrder,
+  listOrders,
+} from "./client";
 import { InvalidTransitionError } from "../escrow/state-machine";
 
 // Fresh in-memory DB with the parent vendor/dataset rows that orders
@@ -110,5 +116,58 @@ test("advanceOrder on a missing order throws", () => {
     () => advanceOrder(db, "ord_missing", "AUTHORIZE"),
     /not found/,
   );
+  db.close();
+});
+
+test("listOrders returns all orders, newest first", () => {
+  const db = freshDb();
+  const a = createOrder(db, {
+    id: "ord_a",
+    datasetId: "ds_x",
+    buyerEmail: "a@example.com",
+    amountCents: 100,
+  });
+  const b = createOrder(db, {
+    id: "ord_b",
+    datasetId: "ds_cardio_synthea_v1",
+    buyerEmail: "b@example.com",
+    amountCents: 4900,
+  });
+
+  const ids = listOrders(db).map((o) => o.id);
+  // Same created_at (CURRENT_TIMESTAMP granularity) -> id DESC breaks the tie.
+  assert.deepEqual(ids, [b.id, a.id]);
+  db.close();
+});
+
+test("listOrders filters by status, datasetId, and buyerEmail", () => {
+  const db = freshDb();
+  createOrder(db, {
+    id: "ord_1",
+    datasetId: "ds_x",
+    buyerEmail: "buyer1@example.com",
+    amountCents: 100,
+  });
+  createOrder(db, {
+    id: "ord_2",
+    datasetId: "ds_cardio_synthea_v1",
+    buyerEmail: "buyer2@example.com",
+    amountCents: 4900,
+    status: "DISPUTED",
+  });
+
+  assert.deepEqual(
+    listOrders(db, { status: "DISPUTED" }).map((o) => o.id),
+    ["ord_2"],
+  );
+  assert.deepEqual(
+    listOrders(db, { datasetId: "ds_x" }).map((o) => o.id),
+    ["ord_1"],
+  );
+  assert.deepEqual(
+    listOrders(db, { buyerEmail: "buyer2@example.com" }).map((o) => o.id),
+    ["ord_2"],
+  );
+  assert.equal(listOrders(db, { status: "PAID_OUT" }).length, 0);
   db.close();
 });
