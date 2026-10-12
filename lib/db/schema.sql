@@ -31,7 +31,10 @@ CREATE TABLE IF NOT EXISTS orders (
   -- The DB only ever stores a state the state machine produced.
   status           TEXT NOT NULL DEFAULT 'MATCHED',
   amount_cents     INTEGER NOT NULL,
-  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- Bumped on every state transition (see advanceOrder) so the UI can show and
+  -- sort by last activity. Added to existing DBs via a guarded ALTER in migrate().
+  updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Per-query usage, billed individually.

@@ -32,6 +32,8 @@ export interface OrderRow {
   status: EscrowState;
   amount_cents: number;
   created_at: string;
+  /** Null only for rows created before the column existed (guarded ALTER). */
+  updated_at: string | null;
 }
 
 /** Fields accepted when creating an order. */
@@ -63,6 +65,26 @@ export function resolveDbPath(
 /** Apply schema.sql (idempotent — every statement is CREATE TABLE IF NOT EXISTS). */
 export function migrate(db: DatabaseSync): void {
   db.exec(readFileSync(SCHEMA_PATH, "utf8"));
+  // Back-fill columns added after a DB was first created. SQLite disallows a
+  // non-constant DEFAULT on ADD COLUMN, so the column is nullable here; new
+  // writes set it explicitly (createOrder/advanceOrder) and fresh DBs get the
+  // CURRENT_TIMESTAMP default from schema.sql.
+  ensureColumn(db, "orders", "updated_at", "TEXT");
+}
+
+/** Add `table.column` if it is missing (idempotent schema back-fill). */
+function ensureColumn(
+  db: DatabaseSync,
+  table: string,
+  column: string,
+  decl: string,
+): void {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as {
+    name: string;
+  }[];
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
+  }
 }
 
 /**
@@ -84,8 +106,8 @@ export function createOrder(db: DatabaseSync, input: NewOrder): OrderRow {
   const status: EscrowState = input.status ?? "MATCHED";
   db.prepare(
     `INSERT INTO orders
-       (id, dataset_id, buyer_email, paypal_order_id, authorization_id, status, amount_cents)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       (id, dataset_id, buyer_email, paypal_order_id, authorization_id, status, amount_cents, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
   ).run(
     id,
     input.datasetId,
@@ -185,7 +207,8 @@ export function advanceOrder(
 
   // One UPDATE: the new state plus any PayPal ids the transition produced
   // (authorization id on AUTHORIZE, etc.), so state and ids never drift apart.
-  const sets = ["status = ?"];
+  // updated_at tracks last activity for the UI.
+  const sets = ["status = ?", "updated_at = CURRENT_TIMESTAMP"];
   const values: (string | null)[] = [next];
   if (patch && "paypalOrderId" in patch) {
     sets.push("paypal_order_id = ?");

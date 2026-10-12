@@ -73,7 +73,8 @@ function errorResponse(err: unknown): Response {
 }
 
 // Read orders from the DB (no PayPal). Backs the UI's vendor incoming-orders
-// view and dispute queue, and lets a view poll one order's state.
+// view and dispute queue, and lets a view poll one order's state. Rows are the
+// raw OrderRow (snake_case) incl. updated_at — the shape Terminal 2 consumes.
 //
 //   GET /api/orders            -> { orders: OrderRow[] }   (newest first)
 //   GET /api/orders?status=DISPUTED&datasetId=..&buyerEmail=..  (AND filters)
