@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
-import { POST, PATCH } from "./route";
+import { GET, POST, PATCH } from "./route";
 import {
   openDb,
   createOrder,
@@ -367,4 +367,64 @@ test(
     },
     { mock: true },
   ),
+);
+
+// --- GET (read endpoint for the UI) ---
+
+function getReq(query = "") {
+  return new Request(`http://localhost/api/orders${query}`, { method: "GET" });
+}
+
+test(
+  "GET lists all orders, newest first",
+  withEnv(async ({ url }) => {
+    const a = seedOrder(url, { id: "ord_a" });
+    const b = seedOrder(url, { id: "ord_b" });
+    const res = await GET(getReq());
+    assert.equal(res.status, 200);
+    const json = (await res.json()) as { orders: Array<{ id: string }> };
+    assert.deepEqual(
+      json.orders.map((o) => o.id),
+      [b.id, a.id], // same timestamp -> id DESC tiebreak
+    );
+  }),
+);
+
+test(
+  "GET ?id= returns a single order, or 404 when unknown",
+  withEnv(async ({ url }) => {
+    const order = seedOrder(url, { id: "ord_one" });
+    const ok = await GET(getReq(`?id=${order.id}`));
+    assert.equal(ok.status, 200);
+    assert.equal(
+      ((await ok.json()) as { order: { id: string } }).order.id,
+      order.id,
+    );
+
+    const missing = await GET(getReq("?id=ord_nope"));
+    assert.equal(missing.status, 404);
+  }),
+);
+
+test(
+  "GET ?status= filters by escrow state",
+  withEnv(async ({ url }) => {
+    seedOrder(url, { id: "ord_matched" });
+    seedOrder(url, { id: "ord_disputed", status: "DISPUTED" });
+    const res = await GET(getReq("?status=DISPUTED"));
+    assert.equal(res.status, 200);
+    const json = (await res.json()) as { orders: Array<{ id: string }> };
+    assert.deepEqual(
+      json.orders.map((o) => o.id),
+      ["ord_disputed"],
+    );
+  }),
+);
+
+test(
+  "GET ?status= with an unknown state is 422",
+  withEnv(async () => {
+    const res = await GET(getReq("?status=REFUNDED"));
+    assert.equal(res.status, 422);
+  }),
 );

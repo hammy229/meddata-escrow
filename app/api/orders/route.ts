@@ -23,6 +23,7 @@ import { payPalClientFromEnv, PayPalError } from "../../../lib/paypal/client";
 import {
   transition,
   InvalidTransitionError,
+  isEscrowState,
   type EscrowEvent,
 } from "../../../lib/escrow/state-machine";
 import {
@@ -31,7 +32,9 @@ import {
   getOrder,
   getDataset,
   advanceOrder,
+  listOrders,
   type OrderPatch,
+  type OrderFilter,
 } from "../../../lib/db/client";
 import { mockId, isMockMode } from "../../../lib/mock/ids";
 
@@ -67,6 +70,39 @@ function errorResponse(err: unknown): Response {
   // Unexpected: log server-side, return a generic error (no internals leaked).
   console.error("orders route error:", err);
   return Response.json({ error: "internal error" }, { status: 500 });
+}
+
+// Read orders from the DB (no PayPal). Backs the UI's vendor incoming-orders
+// view and dispute queue, and lets a view poll one order's state.
+//
+//   GET /api/orders            -> { orders: OrderRow[] }   (newest first)
+//   GET /api/orders?status=DISPUTED&datasetId=..&buyerEmail=..  (AND filters)
+//   GET /api/orders?id=ord_..  -> { order: OrderRow }  (404 if unknown)
+export async function GET(request: Request) {
+  const params = new URL(request.url).searchParams;
+  const id = params.get("id");
+  try {
+    if (id !== null) {
+      const order = withDb((db) => getOrder(db, id));
+      if (!order) return bad(`unknown orderId: ${id}`, 404);
+      return Response.json({ order });
+    }
+    const status = params.get("status");
+    if (status !== null && !isEscrowState(status))
+      return bad(`unknown status: ${status}`);
+
+    const filter: OrderFilter = {};
+    if (status) filter.status = status;
+    const datasetId = params.get("datasetId");
+    if (datasetId) filter.datasetId = datasetId;
+    const buyerEmail = params.get("buyerEmail");
+    if (buyerEmail) filter.buyerEmail = buyerEmail;
+
+    const orders = withDb((db) => listOrders(db, filter));
+    return Response.json({ orders });
+  } catch (err) {
+    return errorResponse(err);
+  }
 }
 
 export async function POST(request: Request) {
