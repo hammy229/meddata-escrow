@@ -7,7 +7,11 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
-import { openDb, getOrder } from "./client";
+import { getOrder, withDb } from "./client";
+
+// Re-exported from the DB client (its natural home) so existing importers that
+// reach for it here — e.g. app/api/billing/route.ts — keep working unchanged.
+export { withDb };
 
 /** A persisted usage row (snake_case columns, as stored). */
 export interface UsageRow {
@@ -67,19 +71,6 @@ export function listUsage(db: DatabaseSync, orderId: string): UsageRow[] {
       `SELECT * FROM query_usage WHERE order_id = ? ORDER BY created_at DESC, id DESC`,
     )
     .all(orderId) as UsageRow[];
-}
-
-/**
- * Convenience for routes: open the default DB (honoring DATABASE_URL), run
- * `fn`, and always close. `url` lets callers/tests point at an isolated DB.
- */
-export function withDb<T>(fn: (db: DatabaseSync) => T, url?: string): T {
-  const db = openDb(url);
-  try {
-    return fn(db);
-  } finally {
-    db.close();
-  }
 }
 
 function requireUsage(db: DatabaseSync, id: string): UsageRow {

@@ -104,6 +104,35 @@ export function getOrder(db: DatabaseSync, id: string): OrderRow | undefined {
     OrderRow | undefined;
 }
 
+/** A persisted dataset row (snake_case columns, as stored). */
+export interface DatasetRow {
+  id: string;
+  vendor_id: string;
+  title: string;
+  description: string | null;
+  price_cents: number;
+  created_at: string;
+}
+
+/**
+ * Read one dataset by id, or undefined if it does not exist. Routes use this to
+ * turn a bad `datasetId` into a clean 422 instead of a foreign-key level throw
+ * when `createOrder` runs.
+ */
+export function getDataset(
+  db: DatabaseSync,
+  id: string,
+): DatasetRow | undefined {
+  return db.prepare(`SELECT * FROM datasets WHERE id = ?`).get(id) as
+    DatasetRow | undefined;
+}
+
+/** Optional columns an `advanceOrder` call may patch alongside the state. */
+export interface OrderPatch {
+  paypalOrderId?: string | null;
+  authorizationId?: string | null;
+}
+
 /**
  * Advance an order by applying a state-machine event and persisting the
  * resulting state. Throws InvalidTransitionError (from `transition`) on an
@@ -114,11 +143,41 @@ export function advanceOrder(
   db: DatabaseSync,
   id: string,
   event: EscrowEvent,
+  patch?: OrderPatch,
 ): OrderRow {
   const current = requireOrder(db, id);
   const next = transition(current.status, event); // throws => no write below
-  db.prepare(`UPDATE orders SET status = ? WHERE id = ?`).run(next, id);
+
+  // One UPDATE: the new state plus any PayPal ids the transition produced
+  // (authorization id on AUTHORIZE, etc.), so state and ids never drift apart.
+  const sets = ["status = ?"];
+  const values: (string | null)[] = [next];
+  if (patch && "paypalOrderId" in patch) {
+    sets.push("paypal_order_id = ?");
+    values.push(patch.paypalOrderId ?? null);
+  }
+  if (patch && "authorizationId" in patch) {
+    sets.push("authorization_id = ?");
+    values.push(patch.authorizationId ?? null);
+  }
+  values.push(id);
+  db.prepare(`UPDATE orders SET ${sets.join(", ")} WHERE id = ?`).run(
+    ...values,
+  );
   return requireOrder(db, id);
+}
+
+/**
+ * Convenience for routes: open the default DB (honoring DATABASE_URL), run
+ * `fn`, and always close. `url` lets callers/tests point at an isolated DB.
+ */
+export function withDb<T>(fn: (db: DatabaseSync) => T, url?: string): T {
+  const db = openDb(url);
+  try {
+    return fn(db);
+  } finally {
+    db.close();
+  }
 }
 
 function requireOrder(db: DatabaseSync, id: string): OrderRow {
