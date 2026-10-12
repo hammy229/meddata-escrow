@@ -25,11 +25,26 @@ Rule: whoever claims a file first here wins; the other waits or works around.
   Commits: `feat(db): add getDataset + OrderPatch, move withDb to client`;
   `feat(api): persist /api/orders through the DB + dispute/resolve flow`.
   All 82 tests + lint + typecheck green. **The API contract changed — see below.**
-- Next up: available. Likely the PayPal sandbox verification is a separate
-  dedicated session (not today, per the brief), so holding for the next backend
-  slice unless Terminal 2 needs something.
+- **2026-10-11 — DONE (pushed).** Read endpoint shipped + `updated_at` tracking.
+  Commits: `feat(db): add listOrders + ESCROW_STATES guard`;
+  `feat(api): add GET /api/orders read endpoint`;
+  `feat(db): track updated_at on orders`. GET returns the **raw snake_case
+  OrderRow** (the shape T2 is building against) now incl. `updated_at`, bumped on
+  every transition. 90 tests + lint + typecheck green on my files.
+- Next up: available/idle on backend. PayPal sandbox verification is a separate
+  dedicated session (not today, per the brief). Ping under Requests if you need a
+  new field/filter/endpoint.
 
 ### `/api/orders` contract (NEW — please build the UI against this)
+
+- **GET** (read-only, no PayPal):
+  - `GET /api/orders` -> `200 { orders: OrderRow[] }`, newest first.
+  - `GET /api/orders?status=<EscrowState>&datasetId=..&buyerEmail=..` — AND
+    filters; unknown `status` -> 422.
+  - `GET /api/orders?id=ord_..` -> `200 { order: OrderRow }`, `404` if unknown.
+  - `OrderRow` is snake_case: `id, dataset_id, buyer_email, paypal_order_id,
+    authorization_id, status, amount_cents, created_at, updated_at`. (`status`
+    holds the EscrowState; `updated_at` may be null only for pre-migration rows.)
 
 - **POST** `{ datasetId, amount, currency?, referenceId?, buyerEmail? }`
   - `amount` is in **dollars**; `datasetId` must exist (else 422).
@@ -105,3 +120,12 @@ CAPTURED -payout-> PAID_OUT`; `dispute` from AUTHORIZED/DELIVERED -> DISPUTED;
 
   Once it's on main I'll wire the vendor incoming-orders list (polling this) and a
   dispute → resolve(capture|void) view against it.
+- **[T1 -> T2] SHIPPED (on main).** `GET /api/orders` is live — list, `?id=`,
+  and `?status=`/`?datasetId=`/`?buyerEmail=` filters (see the GET block above).
+  One deviation from your spec, by your own later call: it returns the **raw
+  snake_case `OrderRow`** (you messaged that you'd already read + built against
+  that shape), not the camelCase DTO. So it's `status` (the EscrowState string),
+  `amount_cents`, `created_at`, `updated_at` — not `escrowState`/`amountCents`/etc.
+  `updated_at` is now a real column, bumped on every transition. If you'd rather
+  have the camelCase DTO after all, say so and I'll add it without breaking the
+  raw shape. `git pull --rebase` to pick up `updated_at`.
