@@ -1,27 +1,42 @@
-// /api/orders — escrow lifecycle via PayPal authorize-then-capture.
+// /api/orders — escrow lifecycle via PayPal authorize-then-capture, persisted
+// through the SQLite DB layer (lib/db/client).
 //
-//   POST  { datasetId, amount, currency?, referenceId? }
-//         -> create an Orders v2 order (intent=AUTHORIZE). Returns the approve
-//            URL; escrow starts at MATCHED (funds not yet authorized).
-//   PATCH { action: "authorize"|"deliver"|"capture"|"payout"|"void", state?,
-//           orderId?, authorizationId?, requestId? }
-//         -> advance the escrow. The state-machine transition is validated
-//            BEFORE any PayPal call, so an illegal move never charges anyone.
-//            `deliver` is internal fulfilment (never touches PayPal).
+//   POST  { datasetId, amount, currency?, referenceId?, buyerEmail? }
+//         -> create an Orders v2 order (intent=AUTHORIZE) AND an `orders` row
+//            (status MATCHED). Returns the DB `orderId`, the `paypalOrderId`,
+//            and the approve URL.
+//   PATCH { orderId, action, resolution?, requestId? }
+//         action: authorize | deliver | capture | payout | void | dispute
+//                 | resolve  (resolve needs resolution: "capture" | "void")
+//         -> advance the escrow. The stored row is the source of truth: `from`
+//            state and the PayPal ids come from the DB, not the caller. The
+//            state-machine transition is validated BEFORE any PayPal call, so an
+//            illegal move never charges anyone and never writes. On success the
+//            new state (and any produced id) is persisted via `advanceOrder`,
+//            which re-runs the transition inside the write — the DB can never
+//            hold a state the machine would not allow.
 //
-// Stateless for now (no DB): the caller passes the current `state`. Secrets
-// come only from env via payPalClientFromEnv; errors never leak internals.
-//
-// MOCK MODE: set PAYPAL_MODE=mock to drive the whole arc with no credentials
-// (local demo). It is opt-in — without the flag, missing creds still 503.
+// MOCK MODE: set PAYPAL_MODE=mock to drive the whole arc with no credentials.
+// It still persists to the DB — the demo gets real, queryable order rows with
+// mock PayPal ids. It is opt-in — without the flag, missing creds still 503.
 import { payPalClientFromEnv, PayPalError } from "../../../lib/paypal/client";
 import {
   transition,
   InvalidTransitionError,
-  type EscrowState,
   type EscrowEvent,
 } from "../../../lib/escrow/state-machine";
+import {
+  withDb,
+  createOrder,
+  getOrder,
+  getDataset,
+  advanceOrder,
+  type OrderPatch,
+} from "../../../lib/db/client";
 import { mockId, isMockMode } from "../../../lib/mock/ids";
+
+// Buyer identity when the caller omits it (local demo — no auth layer yet).
+const DEFAULT_BUYER_EMAIL = "demo-buyer@meddata.test";
 
 const ACTION_EVENT: Record<string, EscrowEvent> = {
   authorize: "AUTHORIZE",
@@ -29,16 +44,8 @@ const ACTION_EVENT: Record<string, EscrowEvent> = {
   capture: "CAPTURE",
   payout: "PAYOUT",
   void: "VOID",
+  dispute: "DISPUTE",
 };
-
-// Default "from" state per action when the caller omits it (no DB yet).
-const DEFAULT_FROM: Record<EscrowEvent, EscrowState> = {
-  AUTHORIZE: "MATCHED",
-  DELIVER: "AUTHORIZED",
-  CAPTURE: "DELIVERED",
-  PAYOUT: "CAPTURED",
-  VOID: "AUTHORIZED",
-} as Record<EscrowEvent, EscrowState>;
 
 function bad(error: string, status = 422) {
   return Response.json({ error }, { status });
@@ -73,34 +80,73 @@ export async function POST(request: Request) {
   ) {
     return bad("datasetId (string) and amount (positive number) are required");
   }
-  // MOCK MODE (opt-in): run the escrow with no PayPal creds for the local demo.
+  const buyerEmail =
+    typeof body?.buyerEmail === "string" && body.buyerEmail.trim() !== ""
+      ? body.buyerEmail
+      : DEFAULT_BUYER_EMAIL;
+  const amountCents = Math.round(amount * 100);
+
+  // The dataset must exist (orders.dataset_id is a FK) — turn a bad id into a
+  // clean 422 instead of a DB-level foreign-key throw.
+  let dataset;
+  try {
+    dataset = withDb((db) => getDataset(db, datasetId));
+  } catch (err) {
+    return errorResponse(err);
+  }
+  if (!dataset) return bad(`unknown datasetId: ${datasetId}`);
+
+  // MOCK MODE (opt-in): no PayPal, but we DO persist — a real, queryable order
+  // row with a mock PayPal order id.
   if (isMockMode()) {
-    const orderId = mockId("MOCK-ORDER");
+    const paypalOrderId = mockId("MOCK-ORDER");
+    const order = withDb((db) =>
+      createOrder(db, {
+        datasetId,
+        buyerEmail,
+        amountCents,
+        paypalOrderId,
+        status: "MATCHED",
+      }),
+    );
     return Response.json(
       {
-        orderId,
+        orderId: order.id,
+        paypalOrderId,
         status: "CREATED",
-        approveUrl: `https://sandbox.paypal.com/checkoutnow?token=${orderId}`,
-        escrowState: "MATCHED",
+        approveUrl: `https://sandbox.paypal.com/checkoutnow?token=${paypalOrderId}`,
+        escrowState: order.status,
         mock: true,
       },
       { status: 201 },
     );
   }
+
   try {
     const pp = payPalClientFromEnv();
-    const order = await pp.createAuthorizeOrder({
+    const ppOrder = await pp.createAuthorizeOrder({
       amount,
       currency: typeof body?.currency === "string" ? body.currency : undefined,
       referenceId:
         typeof body?.referenceId === "string" ? body.referenceId : undefined,
     });
+    // Persist only after PayPal confirms the order — no dangling rows.
+    const order = withDb((db) =>
+      createOrder(db, {
+        datasetId,
+        buyerEmail,
+        amountCents,
+        paypalOrderId: ppOrder.orderId,
+        status: "MATCHED",
+      }),
+    );
     return Response.json(
       {
-        orderId: order.orderId,
-        status: order.status,
-        approveUrl: order.approveUrl,
-        escrowState: "MATCHED",
+        orderId: order.id,
+        paypalOrderId: ppOrder.orderId,
+        status: ppOrder.status,
+        approveUrl: ppOrder.approveUrl,
+        escrowState: order.status,
       },
       { status: 201 },
     );
@@ -111,68 +157,94 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   const body = await request.json().catch(() => null);
-  const action = body?.action;
-  const event = typeof action === "string" ? ACTION_EVENT[action] : undefined;
+  const action = typeof body?.action === "string" ? body.action : undefined;
+
+  // Resolve a dispute: "resolve" picks a direction (capture = vendor is paid,
+  // void = buyer is released) and maps to the matching state-machine event.
+  let event: EscrowEvent | undefined;
+  if (action === "resolve") {
+    const resolution = body?.resolution;
+    if (resolution !== "capture" && resolution !== "void")
+      return bad('resolve requires resolution: "capture" or "void"');
+    event = resolution === "capture" ? "RESOLVE_CAPTURE" : "RESOLVE_VOID";
+  } else if (action) {
+    event = ACTION_EVENT[action];
+  }
   if (!event)
     return bad(
-      `action must be one of: ${Object.keys(ACTION_EVENT).join(", ")}`,
+      `action must be one of: ${[...Object.keys(ACTION_EVENT), "resolve"].join(", ")}`,
     );
 
-  // Required ids per action (checked before PayPal so bad input is a clean 422).
-  if (event === "AUTHORIZE" && typeof body?.orderId !== "string")
+  const orderId = body?.orderId;
+  if (typeof orderId !== "string" || orderId.trim() === "")
     return bad("orderId is required");
-  if (
-    (event === "CAPTURE" || event === "VOID") &&
-    typeof body?.authorizationId !== "string"
-  ) {
-    return bad("authorizationId is required");
-  }
 
-  const from: EscrowState =
-    typeof body?.state === "string" ? body.state : DEFAULT_FROM[event];
-  let nextState: EscrowState;
+  // The stored row is the source of truth for `from` state and the PayPal ids.
+  let order;
   try {
-    nextState = transition(from, event); // validated before any money moves
+    order = withDb((db) => getOrder(db, orderId));
+  } catch (err) {
+    return errorResponse(err);
+  }
+  if (!order) return bad(`unknown orderId: ${orderId}`, 404);
+
+  // Validate the transition BEFORE any PayPal call so an illegal move never
+  // charges anyone. (advanceOrder re-validates inside the write as well.)
+  try {
+    transition(order.status, event);
   } catch (err) {
     if (err instanceof InvalidTransitionError)
       return Response.json({ error: err.message }, { status: 409 });
     return errorResponse(err);
   }
 
-  // DELIVER is internal fulfilment, not a payment: pure transition, no PayPal
-  // in either mode.
-  if (event === "DELIVER") {
+  // Persist the advance (optionally patching PayPal ids) once the money move
+  // below has succeeded.
+  const advance = (patch?: OrderPatch) =>
+    withDb((db) => advanceOrder(db, orderId, event, patch));
+
+  // DELIVER and DISPUTE are internal state changes — no PayPal, in either mode.
+  if (event === "DELIVER" || event === "DISPUTE") {
+    const row = advance();
     return Response.json({
-      escrowState: nextState,
+      escrowState: row.status,
       ...(isMockMode() ? { mock: true } : {}),
     });
   }
 
-  // MOCK MODE (opt-in): deterministic results, no PayPal client, no network.
+  // MOCK MODE (opt-in): deterministic ids, no PayPal client, no network.
   if (isMockMode()) {
-    if (event === "AUTHORIZE")
+    if (event === "AUTHORIZE") {
+      const authorizationId = mockId("MOCK-AUTH");
+      const row = advance({ authorizationId });
       return Response.json({
-        escrowState: nextState,
-        authorizationId: mockId("MOCK-AUTH"),
+        escrowState: row.status,
+        authorizationId,
         status: "COMPLETED",
         mock: true,
       });
-    if (event === "CAPTURE")
+    }
+    if (event === "CAPTURE" || event === "RESOLVE_CAPTURE") {
+      const row = advance();
       return Response.json({
-        escrowState: nextState,
+        escrowState: row.status,
         captureId: mockId("MOCK-CAP"),
         status: "COMPLETED",
         mock: true,
       });
-    if (event === "PAYOUT")
+    }
+    if (event === "PAYOUT") {
+      const row = advance();
       return Response.json({
-        escrowState: nextState,
+        escrowState: row.status,
         payoutBatchId: mockId("MOCK-PAYOUT"),
         status: "PENDING",
         mock: true,
       });
-    // VOID
-    return Response.json({ escrowState: nextState, mock: true });
+    }
+    // VOID or RESOLVE_VOID
+    const row = advance();
+    return Response.json({ escrowState: row.status, mock: true });
   }
 
   // REAL MODE: Payouts is the not-yet-built seam (deliberate, not a side effect).
@@ -185,26 +257,36 @@ export async function PATCH(request: Request) {
   try {
     const pp = payPalClientFromEnv();
     if (event === "AUTHORIZE") {
-      const auth = await pp.authorizeOrder(body.orderId);
+      if (!order.paypal_order_id)
+        return bad("order has no PayPal order id to authorize", 409);
+      const auth = await pp.authorizeOrder(order.paypal_order_id);
+      const row = advance({ authorizationId: auth.authorizationId });
       return Response.json({
-        escrowState: nextState,
+        escrowState: row.status,
         authorizationId: auth.authorizationId,
         status: auth.status,
       });
     }
-    if (event === "CAPTURE") {
-      const cap = await pp.captureAuthorization(body.authorizationId, {
+    if (event === "CAPTURE" || event === "RESOLVE_CAPTURE") {
+      if (!order.authorization_id)
+        return bad("order has no authorization to capture", 409);
+      const cap = await pp.captureAuthorization(order.authorization_id, {
         requestId:
           typeof body?.requestId === "string" ? body.requestId : undefined,
       });
+      const row = advance();
       return Response.json({
-        escrowState: nextState,
+        escrowState: row.status,
         captureId: cap.captureId,
         status: cap.status,
       });
     }
-    await pp.voidAuthorization(body.authorizationId);
-    return Response.json({ escrowState: nextState });
+    // VOID or RESOLVE_VOID
+    if (!order.authorization_id)
+      return bad("order has no authorization to void", 409);
+    await pp.voidAuthorization(order.authorization_id);
+    const row = advance();
+    return Response.json({ escrowState: row.status });
   } catch (err) {
     return errorResponse(err);
   }
