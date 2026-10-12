@@ -72,9 +72,11 @@ const resultColumns: ColDef<AggregateRow>[] = [
 function EscrowStepper({
   state,
   voided,
+  disputed,
 }: {
   state: EscrowState;
   voided: boolean;
+  disputed: boolean;
 }) {
   const activeIndex = state ? ESCROW_FLOW.indexOf(state) : -1;
   return (
@@ -98,6 +100,11 @@ function EscrowStepper({
           </span>
         );
       })}
+      {disputed && (
+        <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 font-mono text-xs text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+          DISPUTED
+        </span>
+      )}
       {voided && (
         <span className="rounded-full border border-rose-300 bg-rose-50 px-3 py-1 font-mono text-xs text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300">
           VOIDED
@@ -121,6 +128,7 @@ export default function ResearcherPage() {
 
   const [escrow, setEscrow] = useState<EscrowState>(null);
   const [voided, setVoided] = useState(false);
+  const [disputed, setDisputed] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [escrowNote, setEscrowNote] = useState<string | null>(null);
@@ -136,6 +144,7 @@ export default function ResearcherPage() {
   function resetEscrow() {
     setEscrow(null);
     setVoided(false);
+    setDisputed(false);
     setOrderId(null);
     setEscrowNote(null);
     setApproveUrl(null);
@@ -190,6 +199,7 @@ export default function ResearcherPage() {
     setEscrowNote(null);
     setApproveUrl(null);
     setVoided(false);
+    setDisputed(false);
     try {
       const res = await fetch("/api/orders", {
         method: "POST",
@@ -288,6 +298,34 @@ export default function ResearcherPage() {
     } finally {
       setVoided(true);
       setEscrowNote("Authorization voided — the buyer was not charged.");
+      setBusyAction(null);
+    }
+  }
+
+  // Raise a dispute (sample looks wrong) -> DISPUTED. The vendor then resolves it
+  // from their workspace: capture (release to vendor) or void (refund buyer).
+  async function disputeEscrow() {
+    setBusyAction("dispute");
+    try {
+      const res = await fetch("/api/orders", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "dispute",
+          orderId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      setDisputed(true);
+      setEscrowNote(
+        res.ok
+          ? "Dispute raised — awaiting resolution in the vendor workspace."
+          : `Dispute raised for demo (${data?.error ?? res.status}).`,
+      );
+    } catch {
+      setDisputed(true);
+      setEscrowNote("Dispute raised for demo (service offline).");
+    } finally {
       setBusyAction(null);
     }
   }
@@ -426,7 +464,7 @@ export default function ResearcherPage() {
                     : `Buy (escrow) · ${usd(selected.priceCents)}`}
                 </button>
               )}
-              {escrow === "AUTHORIZED" && !voided && (
+              {escrow === "AUTHORIZED" && !voided && !disputed && (
                 <>
                   <button
                     onClick={() => advanceEscrow("deliver")}
@@ -436,6 +474,13 @@ export default function ResearcherPage() {
                     {busyAction === "deliver"
                       ? "Delivering…"
                       : "Deliver dataset"}
+                  </button>
+                  <button
+                    onClick={disputeEscrow}
+                    disabled={busyAction !== null}
+                    className={dangerBtn}
+                  >
+                    {busyAction === "dispute" ? "Disputing…" : "Raise dispute"}
                   </button>
                   <button
                     onClick={voidEscrow}
@@ -448,18 +493,32 @@ export default function ResearcherPage() {
                   </button>
                 </>
               )}
-              {escrow === "DELIVERED" && (
-                <button
-                  onClick={() => advanceEscrow("capture")}
-                  disabled={busyAction !== null}
-                  className={primaryBtn}
-                >
-                  {busyAction === "capture"
-                    ? "Releasing…"
-                    : "Confirm & release payment"}
-                </button>
+              {escrow === "DELIVERED" && !disputed && (
+                <>
+                  <button
+                    onClick={() => advanceEscrow("capture")}
+                    disabled={busyAction !== null}
+                    className={primaryBtn}
+                  >
+                    {busyAction === "capture"
+                      ? "Releasing…"
+                      : "Confirm & release payment"}
+                  </button>
+                  <button
+                    onClick={disputeEscrow}
+                    disabled={busyAction !== null}
+                    className={dangerBtn}
+                  >
+                    {busyAction === "dispute" ? "Disputing…" : "Raise dispute"}
+                  </button>
+                </>
               )}
-              {escrow === "CAPTURED" && (
+              {disputed && (
+                <span className="rounded-full border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+                  ⚠ Dispute pending vendor resolution
+                </span>
+              )}
+              {escrow === "CAPTURED" && !disputed && (
                 <button
                   onClick={() => advanceEscrow("payout")}
                   disabled={busyAction !== null}
@@ -476,7 +535,7 @@ export default function ResearcherPage() {
             </div>
           </div>
           <div className="mt-5">
-            <EscrowStepper state={escrow} voided={voided} />
+            <EscrowStepper state={escrow} voided={voided} disputed={disputed} />
           </div>
           {escrowNote && (
             <p className="mt-4 text-sm text-zinc-500">{escrowNote}</p>
@@ -495,7 +554,7 @@ export default function ResearcherPage() {
       )}
 
       {/* Step 4 — privacy-safe query (available once the dataset is delivered) */}
-      {selected && delivered && !voided && (
+      {selected && delivered && !voided && !disputed && (
         <section className="mt-6 rounded-2xl border border-zinc-200 p-6 dark:border-zinc-800">
           <div className="flex items-center gap-2">
             <span className="font-mono text-sm text-emerald-600 dark:text-emerald-400">

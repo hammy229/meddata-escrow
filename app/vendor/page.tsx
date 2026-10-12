@@ -3,6 +3,7 @@
 // catalog is read server-side; the grid renders on the client.
 import Link from "next/link";
 import VendorCatalog, { type CatalogRow } from "../components/VendorCatalog";
+import IncomingOrders from "../components/IncomingOrders";
 
 interface CatalogEntry {
   id: string;
@@ -64,6 +65,18 @@ export default function VendorPage() {
       <section className="rounded-2xl border border-zinc-200 p-6 dark:border-zinc-800">
         <h2 className="mb-4 text-lg font-medium">Catalog</h2>
         <VendorCatalog rows={rows} />
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-zinc-200 p-6 dark:border-zinc-800">
+        <div className="mb-1 flex items-center gap-2">
+          <h2 className="text-lg font-medium">Incoming orders</h2>
+        </div>
+        <p className="mb-4 text-sm text-zinc-500">
+          Live escrow state for every order. Resolve a disputed order by
+          releasing the held funds to you (capture) or refunding the buyer
+          (void).
+        </p>
+        <IncomingOrders />
       </section>
     </main>
   );

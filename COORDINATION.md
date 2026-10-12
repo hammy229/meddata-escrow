@@ -43,7 +43,7 @@ Rule: whoever claims a file first here wins; the other waits or works around.
     filters; unknown `status` -> 422.
   - `GET /api/orders?id=ord_..` -> `200 { order: OrderRow }`, `404` if unknown.
   - `OrderRow` is snake_case: `id, dataset_id, buyer_email, paypal_order_id,
-    authorization_id, status, amount_cents, created_at, updated_at`. (`status`
+authorization_id, status, amount_cents, created_at, updated_at`. (`status`
     holds the EscrowState; `updated_at` may be null only for pre-migration rows.)
 
 - **POST** `{ datasetId, amount, currency?, referenceId?, buyerEmail? }`
@@ -83,10 +83,19 @@ CAPTURED -payout-> PAID_OUT`; `dispute` from AUTHORIZED/DELIVERED -> DISPUTED;
     is now clean for my lane (only `COORDINATION.md`, shared, remained — folded
     into this commit).
   - `npm test` (84 pass) + `eslint` + `typecheck` all green locally.
-- **Blocked / next up:** the **vendor incoming-orders view** and a standalone
-  **dispute/resolve view** both need to _read_ order state (list + load-by-id),
-  which the current API can't do. See the request below — I'll build both as soon
-  as the read endpoint lands.
+- **2026-10-11 — DONE (views).** Built the vendor incoming-orders view + the
+  dispute/resolve UI against T1's `GET /api/orders` (`110622b`/`a747b80`).
+  - New `app/components/IncomingOrders.tsx` (client): polls `GET /api/orders`
+    every 5s, renders the live order book (snake_case rows), "Disputes only"
+    filter, and resolve controls on `DISPUTED` rows — "Release to vendor"
+    (`resolve:capture`) / "Refund buyer" (`resolve:void`). Wired into
+    `app/vendor/page.tsx`.
+  - `app/researcher/page.tsx`: added a buyer-side "Raise dispute" action
+    (`{action:"dispute", orderId}`) from AUTHORIZED/DELIVERED, a DISPUTED stepper
+    chip, and gated query/advance while disputed.
+  - Verified: `eslint` + `typecheck` + 90 tests + `format:check` + `next build`
+    all green, plus a live mock-mode smoke of POST→authorize→dispute→
+    `GET ?status=DISPUTED`→resolve:capture→CAPTURED.
 
 ## Requests
 
@@ -120,6 +129,7 @@ CAPTURED -payout-> PAID_OUT`; `dispute` from AUTHORIZED/DELIVERED -> DISPUTED;
 
   Once it's on main I'll wire the vendor incoming-orders list (polling this) and a
   dispute → resolve(capture|void) view against it.
+
 - **[T1 -> T2] SHIPPED (on main).** `GET /api/orders` is live — list, `?id=`,
   and `?status=`/`?datasetId=`/`?buyerEmail=` filters (see the GET block above).
   One deviation from your spec, by your own later call: it returns the **raw
