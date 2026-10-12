@@ -122,7 +122,6 @@ export default function ResearcherPage() {
   const [escrow, setEscrow] = useState<EscrowState>(null);
   const [voided, setVoided] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
-  const [authorizationId, setAuthorizationId] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [escrowNote, setEscrowNote] = useState<string | null>(null);
   const [approveUrl, setApproveUrl] = useState<string | null>(null);
@@ -138,7 +137,6 @@ export default function ResearcherPage() {
     setEscrow(null);
     setVoided(false);
     setOrderId(null);
-    setAuthorizationId(null);
     setEscrowNote(null);
     setApproveUrl(null);
     setResults(null);
@@ -212,23 +210,23 @@ export default function ResearcherPage() {
       setOrderId(data.orderId);
       if (typeof data.approveUrl === "string") setApproveUrl(data.approveUrl);
 
-      // Authorize the created order -> AUTHORIZED, returns the authorizationId.
+      // Authorize the created order -> AUTHORIZED. The server derives the `from`
+      // state and PayPal ids from the stored row, so we only send orderId.
       const auth = await fetch("/api/orders", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action: "authorize",
           orderId: data.orderId,
-          state: "MATCHED",
         }),
       });
       const adata = await auth.json().catch(() => ({}));
       if (auth.ok) {
-        if (typeof adata.authorizationId === "string")
-          setAuthorizationId(adata.authorizationId);
         setEscrow(adata.escrowState ?? "AUTHORIZED");
         const mock = data.mock || adata.mock ? " (mock mode)" : "";
-        setEscrowNote(`Order ${data.orderId} authorized — funds held in escrow.${mock}`);
+        setEscrowNote(
+          `Order ${data.orderId} authorized — funds held in escrow.${mock}`,
+        );
       } else {
         setEscrow("AUTHORIZED");
         setEscrowNote(
@@ -254,8 +252,6 @@ export default function ResearcherPage() {
         body: JSON.stringify({
           action,
           orderId,
-          authorizationId,
-          state: escrow,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -265,7 +261,9 @@ export default function ResearcherPage() {
         else setEscrowNote(null);
       } else {
         setEscrow(nextState);
-        setEscrowNote(`${action} mocked for demo (${data?.error ?? res.status}).`);
+        setEscrowNote(
+          `${action} mocked for demo (${data?.error ?? res.status}).`,
+        );
       }
     } catch {
       setEscrow(nextState);
@@ -285,8 +283,6 @@ export default function ResearcherPage() {
         body: JSON.stringify({
           action: "void",
           orderId,
-          authorizationId,
-          state: escrow,
         }),
       }).catch(() => undefined);
     } finally {
@@ -385,7 +381,9 @@ export default function ResearcherPage() {
               02
             </span>
             <h2 className="text-lg font-medium">Ranked matches</h2>
-            <span className="text-sm text-zinc-500">· click a row to select</span>
+            <span className="text-sm text-zinc-500">
+              · click a row to select
+            </span>
           </div>
           <div className="mt-4">
             <DataGrid<Match>
@@ -435,14 +433,18 @@ export default function ResearcherPage() {
                     disabled={busyAction !== null}
                     className={primaryBtn}
                   >
-                    {busyAction === "deliver" ? "Delivering…" : "Deliver dataset"}
+                    {busyAction === "deliver"
+                      ? "Delivering…"
+                      : "Deliver dataset"}
                   </button>
                   <button
                     onClick={voidEscrow}
                     disabled={busyAction !== null}
                     className={dangerBtn}
                   >
-                    {busyAction === "void" ? "Voiding…" : "Void (sample failed)"}
+                    {busyAction === "void"
+                      ? "Voiding…"
+                      : "Void (sample failed)"}
                   </button>
                 </>
               )}
@@ -476,7 +478,9 @@ export default function ResearcherPage() {
           <div className="mt-5">
             <EscrowStepper state={escrow} voided={voided} />
           </div>
-          {escrowNote && <p className="mt-4 text-sm text-zinc-500">{escrowNote}</p>}
+          {escrowNote && (
+            <p className="mt-4 text-sm text-zinc-500">{escrowNote}</p>
+          )}
           {approveUrl && (
             <a
               href={approveUrl}

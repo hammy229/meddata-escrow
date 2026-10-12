@@ -66,15 +66,25 @@ export default function DataGrid<T>({
         theme={dark ? darkTheme : lightTheme}
         rowData={rowData}
         columnDefs={columnDefs}
-        defaultColDef={{ flex: 1, minWidth: 100, resizable: true, sortable: true }}
+        defaultColDef={{
+          flex: 1,
+          minWidth: 100,
+          resizable: true,
+          sortable: true,
+        }}
         getRowId={getRowId ? (p) => getRowId(p.data) : undefined}
         rowClass={onRowClicked ? "cursor-pointer" : undefined}
         rowClassRules={
           getRowId && selectedRowId
-            ? { "dg-row-selected": (p) => !!p.data && getRowId(p.data) === selectedRowId }
+            ? {
+                "dg-row-selected": (p) =>
+                  !!p.data && getRowId(p.data) === selectedRowId,
+              }
             : undefined
         }
-        onRowClicked={onRowClicked ? (e) => e.data && onRowClicked(e.data) : undefined}
+        onRowClicked={
+          onRowClicked ? (e) => e.data && onRowClicked(e.data) : undefined
+        }
       />
     </div>
   );

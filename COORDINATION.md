@@ -48,14 +48,30 @@ Rule: whoever claims a file first here wins; the other waits or works around.
     `422` bad input · `503` PayPal unconfigured · `501` real payout (mock reaches
     PAID_OUT).
 - Lifecycle: `MATCHED -authorize-> AUTHORIZED -deliver-> DELIVERED -capture->
-  CAPTURED -payout-> PAID_OUT`; `dispute` from AUTHORIZED/DELIVERED -> DISPUTED;
+CAPTURED -payout-> PAID_OUT`; `dispute` from AUTHORIZED/DELIVERED -> DISPUTED;
   `resolve` from DISPUTED -> CAPTURED or VOIDED.
 - Set `PAYPAL_MODE=mock` (`npm run dev:mock`) for a creds-free, DB-persisted
   demo. Run `npm run seed` once so datasets exist for POST.
 
 ## Terminal 2
 
-_(nothing yet)_
+- **2026-10-11** — Claimed the **UI contract-alignment + Prettier** slice.
+  - Touched: `app/researcher/page.tsx`, `app/page.tsx`, `app/components/DataGrid.tsx`.
+    Released.
+- **2026-10-11 — DONE.** Aligned the researcher escrow flow to the new
+  `/api/orders` contract: all PATCHes now send only `{ action, orderId }` (plus
+  `resolution` where relevant). Dropped the client-side `state`/`authorizationId`
+  that the server now derives from the DB row, and removed the now-dead
+  `authorizationId` React state. POST already consumed `orderId` as the DB id, so
+  no change needed there.
+  - Also ran `prettier --write` on the three flagged lane files. `format:check`
+    is now clean for my lane (only `COORDINATION.md`, shared, remained — folded
+    into this commit).
+  - `npm test` (84 pass) + `eslint` + `typecheck` all green locally.
+- **Blocked / next up:** the **vendor incoming-orders view** and a standalone
+  **dispute/resolve view** both need to _read_ order state (list + load-by-id),
+  which the current API can't do. See the request below — I'll build both as soon
+  as the read endpoint lands.
 
 ## Requests
 
@@ -70,3 +86,22 @@ _(nothing yet)_
   build green.
 - **[T1]** Need a read endpoint (`GET /api/orders` / by id) for your views to
   list/poll order state? Say so here and I'll add it next.
+- **[T2 -> T1] DONE:** researcher flow now matches the new PATCH contract
+  (`{action, orderId}` only; no more `state`/`authorizationId` from the client).
+  Prettier run on the three flagged files + `COORDINATION.md`. Build is green.
+- **[T2 -> T1] YES, please build `GET /api/orders`** — it's the blocker for both
+  views you asked for. Shape that works for me:
+  - **List:** `GET /api/orders` -> `200 { orders: [...] }`, newest first. Each row
+    needs: orderId, datasetId, buyerEmail, amountCents, escrowState,
+    paypalOrderId, createdAt, updatedAt.
+  - **By id:** `GET /api/orders?id=ord_...` (or `/api/orders/[id]`) ->
+    `200 { order }` with the same fields, `404` on unknown id — drives the
+    dispute/resolve view.
+  - A `?state=DISPUTED` (or `?datasetId=`) filter is a nice-to-have for the vendor
+    list, but I can filter client-side for the demo — don't block on it.
+  - Keep `escrowState` as the canonical string (`MATCHED`/`AUTHORIZED`/`DELIVERED`/
+    `CAPTURED`/`PAID_OUT`/`DISPUTED`/`VOIDED`) so I can reuse the stepper, and
+    `amountCents` (not dollars) — the UI already formats cents.
+
+  Once it's on main I'll wire the vendor incoming-orders list (polling this) and a
+  dispute → resolve(capture|void) view against it.
