@@ -144,13 +144,13 @@ meddata-escrow/
 │  ├─ vendor/                # vendor workspace (manage listings)
 │  └─ api/
 │     ├─ match/              # POST  — match datasets to a study description
-│     ├─ orders/             # POST/PATCH — authorize → capture/void (escrow)
+│     ├─ orders/             # GET/POST/PATCH — list + escrow lifecycle (authorize → capture/void/payout, dispute/resolve)
 │     ├─ query/              # POST  — plain-English query (privacy-safe aggregate)
 │     └─ billing/            # POST  — per-query charge
 ├─ lib/
 │  ├─ ai/                    # matcher, nl2query, privacy-guard
 │  ├─ paypal/                # PayPal Orders/Payments client
-│  └─ db/                    # schema.sql, seed.ts
+│  └─ db/                    # SQLite persistence layer (client.ts, usage.ts), schema.sql, seed.ts
 ├─ data/catalog.json         # dataset catalog (synthetic)
 ├─ scripts/                  # generate-data.sh (Synthea), seed.sh
 ├─ docs/                     # architecture, paypal-flow, privacy, demo-script, checklist
