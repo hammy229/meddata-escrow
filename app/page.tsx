@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 // MedData Escrow landing page. Server component, no client JS.
-// Tailwind v4 + Geist, single emerald accent on zinc, auto dark mode.
+// Tailwind v4 + Hanken Grotesk, single emerald accent on zinc, auto dark mode.
 
 import Link from "next/link";
 
@@ -48,14 +48,25 @@ const TOOLS: Array<{ slug: string; label: string }> = [
 
 export default function Home() {
   return (
-    <div className="min-h-[100dvh] bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+    <div className="relative min-h-[100dvh] overflow-x-hidden bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+      {/* Ambient accent glow behind the hero */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[620px] bg-[radial-gradient(60%_60%_at_78%_-10%,rgba(16,185,129,0.14),transparent_70%)]"
+      />
+
       {/* Nav */}
-      <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-white/80 backdrop-blur dark:border-zinc-800/70 dark:bg-zinc-950/80">
+      <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-white/75 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-950/70">
         <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
-          <Link href="/" className="font-semibold tracking-tight">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2.5 font-semibold tracking-tight"
+          >
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-600 text-white shadow-sm shadow-emerald-600/30">
+              <ShieldCheck className="h-[18px] w-[18px]" />
+            </span>
             MedData
-            <span className="text-emerald-600 dark:text-emerald-400">
-              {" "}
+            <span className="font-normal text-zinc-500 dark:text-zinc-400">
               Escrow
             </span>
           </Link>
@@ -81,7 +92,7 @@ export default function Home() {
           </div>
           <Link
             href="/researcher"
-            className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500 active:translate-y-px"
+            className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm shadow-emerald-600/30 transition-all hover:bg-emerald-500 hover:shadow-md hover:shadow-emerald-600/30 active:translate-y-px"
           >
             Browse datasets
           </Link>
@@ -90,8 +101,12 @@ export default function Home() {
 
       {/* Hero */}
       <section className="mx-auto grid max-w-6xl items-center gap-12 px-5 pt-16 pb-20 lg:grid-cols-[1.05fr_1fr] lg:pt-24 lg:pb-28">
-        <div>
-          <h1 className="text-4xl font-semibold leading-[1.1] tracking-tight md:text-5xl lg:text-6xl">
+        <div className="reveal">
+          <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+            <ShieldCheck className="h-3.5 w-3.5" />
+            PayPal-protected data procurement
+          </span>
+          <h1 className="mt-5 text-4xl font-bold leading-[1.04] tracking-tight md:text-5xl lg:text-6xl">
             Research data you can trust, paid for only once it is delivered.
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-zinc-600 dark:text-zinc-400">
@@ -101,13 +116,14 @@ export default function Home() {
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link
               href="/researcher"
-              className="inline-flex h-12 items-center justify-center rounded-full bg-emerald-600 px-6 font-medium text-white transition-colors hover:bg-emerald-500 active:translate-y-px"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-emerald-600 px-6 font-medium text-white shadow-lg shadow-emerald-600/25 transition-all hover:bg-emerald-500 hover:shadow-xl hover:shadow-emerald-600/30 active:translate-y-px"
             >
               Browse datasets
+              <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
               href="/vendor"
-              className="inline-flex h-12 items-center justify-center rounded-full border border-zinc-300 px-6 font-medium text-zinc-900 transition-colors hover:border-zinc-400 hover:bg-zinc-50 active:translate-y-px dark:border-zinc-700 dark:text-zinc-100 dark:hover:border-zinc-600 dark:hover:bg-zinc-900"
+              className="inline-flex h-12 items-center justify-center rounded-full border border-zinc-300 bg-white px-6 font-medium text-zinc-900 shadow-sm transition-all hover:border-zinc-400 hover:bg-zinc-50 active:translate-y-px dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-600 dark:hover:bg-zinc-800"
             >
               List a dataset
             </Link>
@@ -115,8 +131,9 @@ export default function Home() {
         </div>
 
         {/* Escrow state pipeline (the real product states, not a mockup) */}
-        <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-800 dark:bg-zinc-900/60">
-          <p className="mb-5 text-xs font-medium uppercase tracking-wider text-zinc-500">
+        <div className="reveal rounded-2xl border border-zinc-200 bg-zinc-50/80 p-6 shadow-xl shadow-zinc-900/5 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60 dark:shadow-black/20 [animation-delay:120ms]">
+          <p className="mb-5 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+            <Lock className="h-3.5 w-3.5" />
             Escrow lifecycle
           </p>
           <ol className="space-y-2.5">
@@ -129,21 +146,26 @@ export default function Home() {
                   </span>
                   <span
                     className={[
-                      "flex-1 rounded-lg border px-4 py-2.5 font-mono text-sm",
+                      "flex flex-1 items-center justify-between rounded-lg border px-4 py-2.5 font-mono text-sm transition-colors",
                       held
                         ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300"
                         : "border-zinc-200 bg-white text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300",
                     ].join(" ")}
                   >
                     {state}
+                    {held && (
+                      <span className="held-dot h-2 w-2 rounded-full bg-emerald-500" />
+                    )}
                   </span>
                 </li>
               );
             })}
           </ol>
-          <p className="mt-5 text-sm text-zinc-500">
+          <p className="mt-5 text-sm leading-relaxed text-zinc-500">
             Funds are{" "}
-            <span className="text-emerald-600 dark:text-emerald-400">held</span>{" "}
+            <span className="font-medium text-emerald-600 dark:text-emerald-400">
+              held
+            </span>{" "}
             from authorization until delivery is confirmed. A failed sample
             voids the hold instead of capturing it.
           </p>
@@ -152,38 +174,43 @@ export default function Home() {
 
       {/* Built with */}
       <section className="border-y border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/40">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-10 gap-y-6 px-5 py-8">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-8 gap-y-5 px-5 py-8">
           <span className="text-xs font-medium uppercase tracking-wider text-zinc-500">
             Built with
           </span>
           {TOOLS.map((t) => (
-            <img
+            <span
               key={t.slug}
-              src={`https://cdn.simpleicons.org/${t.slug}/71717a`}
-              alt={t.label}
-              width={22}
-              height={22}
-              className="h-5 w-auto opacity-80"
-            />
+              className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3.5 py-1.5 text-sm text-zinc-600 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300"
+            >
+              <img
+                src={`https://cdn.simpleicons.org/${t.slug}`}
+                alt=""
+                width={16}
+                height={16}
+                className="h-4 w-4"
+              />
+              {t.label}
+            </span>
           ))}
         </div>
       </section>
 
       {/* How it works */}
       <section id="how" className="mx-auto max-w-6xl px-5 py-20 lg:py-28">
-        <h2 className="max-w-2xl text-3xl font-semibold tracking-tight md:text-4xl">
+        <h2 className="max-w-2xl text-3xl font-bold tracking-tight md:text-4xl">
           From a plain-English request to a paid-out vendor.
         </h2>
         <div className="mt-12 grid gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
           {STEPS.map((s) => (
             <div
               key={s.n}
-              className="border-t border-zinc-200 pt-5 dark:border-zinc-800"
+              className="group border-t border-zinc-200 pt-5 transition-colors hover:border-emerald-400 dark:border-zinc-800 dark:hover:border-emerald-500/60"
             >
               <div className="font-mono text-sm text-emerald-600 dark:text-emerald-400">
                 {s.n}
               </div>
-              <h3 className="mt-2 text-lg font-medium">{s.title}</h3>
+              <h3 className="mt-2 text-lg font-semibold">{s.title}</h3>
               <p className="mt-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
                 {s.body}
               </p>
@@ -196,7 +223,7 @@ export default function Home() {
       <section className="border-t border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/40">
         <div className="mx-auto grid max-w-6xl gap-12 px-5 py-20 lg:grid-cols-2 lg:py-28">
           <div>
-            <h2 className="text-3xl font-semibold tracking-tight md:text-4xl">
+            <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
               Neither side has to trust the other first.
             </h2>
             <p className="mt-5 max-w-lg text-zinc-600 dark:text-zinc-400">
@@ -205,7 +232,7 @@ export default function Home() {
               shipping. The buyer never pays for data that does not arrive.
             </p>
           </div>
-          <dl className="grid gap-px overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-200 dark:border-zinc-800 dark:bg-zinc-800">
+          <dl className="grid gap-px overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-200 shadow-lg shadow-zinc-900/5 dark:border-zinc-800 dark:bg-zinc-800 dark:shadow-black/20">
             {[
               {
                 t: "Authorize, then capture",
@@ -220,8 +247,14 @@ export default function Home() {
                 d: "Every state change verifies a signed PayPal webhook before it is trusted.",
               },
             ].map((row) => (
-              <div key={row.t} className="bg-white p-6 dark:bg-zinc-950">
-                <dt className="font-medium">{row.t}</dt>
+              <div
+                key={row.t}
+                className="bg-white p-6 transition-colors hover:bg-emerald-50/50 dark:bg-zinc-950 dark:hover:bg-emerald-500/5"
+              >
+                <dt className="flex items-center gap-2 font-semibold">
+                  <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  {row.t}
+                </dt>
                 <dd className="mt-1.5 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
                   {row.d}
                 </dd>
@@ -233,7 +266,7 @@ export default function Home() {
 
       {/* Two audiences */}
       <section className="mx-auto grid max-w-6xl gap-6 px-5 py-20 md:grid-cols-2 lg:py-28">
-        <div className="rounded-2xl border border-zinc-200 p-8 dark:border-zinc-800">
+        <div className="group rounded-2xl border border-zinc-200 p-8 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-600/5 dark:border-zinc-800 dark:hover:border-emerald-500/40">
           <h3 className="text-xl font-semibold">For researchers</h3>
           <p className="mt-3 text-zinc-600 dark:text-zinc-400">
             Describe a study, compare ranked matches, and buy access with
@@ -241,12 +274,13 @@ export default function Home() {
           </p>
           <Link
             href="/researcher"
-            className="mt-6 inline-flex font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+            className="mt-6 inline-flex items-center gap-1.5 font-medium text-emerald-700 hover:underline dark:text-emerald-400"
           >
-            Open the researcher workspace →
+            Open the researcher workspace
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>
-        <div className="rounded-2xl border border-zinc-200 p-8 dark:border-zinc-800">
+        <div className="group rounded-2xl border border-zinc-200 p-8 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-600/5 dark:border-zinc-800 dark:hover:border-emerald-500/40">
           <h3 className="text-xl font-semibold">For vendors</h3>
           <p className="mt-3 text-zinc-600 dark:text-zinc-400">
             List datasets, deliver on demand, and get paid out as soon as the
@@ -254,9 +288,10 @@ export default function Home() {
           </p>
           <Link
             href="/vendor"
-            className="mt-6 inline-flex font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+            className="mt-6 inline-flex items-center gap-1.5 font-medium text-emerald-700 hover:underline dark:text-emerald-400"
           >
-            Open the vendor workspace →
+            Open the vendor workspace
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>
       </section>
@@ -264,14 +299,15 @@ export default function Home() {
       {/* Final CTA */}
       <section className="border-t border-zinc-200 dark:border-zinc-800">
         <div className="mx-auto flex max-w-6xl flex-col items-start gap-6 px-5 py-20 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
+          <h2 className="text-2xl font-bold tracking-tight md:text-3xl">
             Start with a dataset request.
           </h2>
           <Link
             href="/researcher"
-            className="inline-flex h-12 items-center justify-center rounded-full bg-emerald-600 px-6 font-medium text-white transition-colors hover:bg-emerald-500 active:translate-y-px"
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-emerald-600 px-6 font-medium text-white shadow-lg shadow-emerald-600/25 transition-all hover:bg-emerald-500 hover:shadow-xl hover:shadow-emerald-600/30 active:translate-y-px"
           >
             Browse datasets
+            <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
       </section>
@@ -297,5 +333,77 @@ export default function Home() {
         </div>
       </footer>
     </div>
+  );
+}
+
+/* ---- Inline icons: one stroke weight, currentColor, no emoji ---- */
+function ShieldCheck({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M12 3 5 6v5.5c0 4 2.9 7.3 7 8.5 4.1-1.2 7-4.5 7-8.5V6l-7-3Z" />
+      <path d="m9 11.8 2.1 2.1L15.2 9.8" />
+    </svg>
+  );
+}
+
+function ArrowRight({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="M4 12h15" />
+      <path d="m13 6 6 6-6 6" />
+    </svg>
+  );
+}
+
+function Lock({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.7}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <rect x="4.5" y="10" width="15" height="10" rx="2.2" />
+      <path d="M8 10V7.5a4 4 0 0 1 8 0V10" />
+    </svg>
+  );
+}
+
+function Check({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden
+    >
+      <path d="m5 12.5 4.5 4.5L19 7" />
+    </svg>
   );
 }

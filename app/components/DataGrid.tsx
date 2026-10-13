@@ -19,8 +19,32 @@ import {
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-const lightTheme = themeQuartz.withPart(colorSchemeLight);
-const darkTheme = themeQuartz.withPart(colorSchemeDark);
+// Match the grid to the site: emerald accent, Hanken/JetBrains fonts, zinc
+// borders, generous row height, and a soft wrapper radius.
+const shared = {
+  accentColor: "#10b981",
+  fontFamily: "var(--font-sans)",
+  cellFontFamily: "var(--font-sans)",
+  headerFontWeight: 600,
+  rowHeight: 46,
+  headerHeight: 46,
+  wrapperBorderRadius: 12,
+  fontSize: 14,
+};
+
+const lightTheme = themeQuartz.withPart(colorSchemeLight).withParams({
+  ...shared,
+  borderColor: "#e4e4e7",
+  headerBackgroundColor: "#fafafa",
+  rowHoverColor: "color-mix(in srgb, #10b981 7%, transparent)",
+});
+const darkTheme = themeQuartz.withPart(colorSchemeDark).withParams({
+  ...shared,
+  backgroundColor: "#0c0c0f",
+  borderColor: "#27272a",
+  headerBackgroundColor: "#131316",
+  rowHoverColor: "color-mix(in srgb, #10b981 12%, transparent)",
+});
 
 // Subscribe to the OS color-scheme via useSyncExternalStore (SSR-safe: the
 // server snapshot is always light, then the client reconciles on hydration).
