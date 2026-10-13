@@ -3,12 +3,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Match } from "@/lib/types";
+import { LISTINGS, getListing } from "@/lib/listings";
+import { ShieldCheck, Search, ArrowRight, Database, Lock } from "./icons";
 
-const LISTING_META: Record<string, { title: string; price: string }> = {
-  l1: { title: "De-identified ICU vitals, 10k patients", price: "250.00" },
-  l2: { title: "Labeled chest X-ray imaging set", price: "500.00" },
-  l3: { title: "Type 2 diabetes longitudinal cohort", price: "400.00" },
-};
+const EXAMPLES = [
+  "ICU vital-sign time series for a sepsis early-warning model",
+  "Chest X-rays labeled for pneumonia detection",
+  "Longitudinal diabetes records for outcome prediction",
+];
 
 export default function Home() {
   const [request, setRequest] = useState("");
@@ -18,6 +20,7 @@ export default function Home() {
 
   async function search() {
     setLoading(true);
+    setMatches(null);
     const r = await fetch("/api/match", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -40,44 +43,140 @@ export default function Home() {
 
   return (
     <>
-      <h1>Find research data</h1>
+      <span className="eyebrow">
+        <ShieldCheck size={15} />
+        PayPal-escrowed data marketplace
+      </span>
+
+      <h1>
+        Find research data you can <span className="hl">actually trust.</span>
+      </h1>
       <p className="sub">
-        Describe what your study needs. Our AI ranks matching datasets; payment is held in
-        escrow until you confirm the data is what you expected.
+        Describe your study in plain English. Our AI ranks matching datasets, and your
+        payment stays in escrow until you&rsquo;ve confirmed the data is exactly what you
+        expected.
       </p>
 
-      <div className="card">
+      <div className="instrument">
         <textarea
-          placeholder="e.g. I need ICU vital sign time series for a sepsis early-warning model"
+          aria-label="Describe the data your study needs"
+          placeholder="e.g. I need ICU vital-sign time series for a sepsis early-warning model…"
           value={request}
           onChange={(e) => setRequest(e.target.value)}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && request.trim()) search();
+          }}
         />
-        <div className="spacer" />
-        <button onClick={search} disabled={loading || !request.trim()}>
-          {loading ? "Matching…" : "Find datasets"}
-        </button>
+        <div className="instrument-bar">
+          <span className="instrument-hint">
+            <Search size={15} />
+            Ranked by relevance · {LISTINGS.length} datasets in catalog
+          </span>
+          <button onClick={search} disabled={loading || !request.trim()}>
+            {loading ? "Matching…" : "Find datasets"}
+            {!loading && <ArrowRight size={17} />}
+          </button>
+        </div>
       </div>
 
-      {matches && (
-        <div className="card">
-          <h2>Ranked matches</h2>
-          {matches.length === 0 && <p className="notice">No datasets matched. Try different terms.</p>}
-          {matches.map((m) => {
-            const meta = LISTING_META[m.listing_id];
-            return (
-              <div className="match-row" key={m.listing_id}>
-                <div>
-                  <div className="price">{meta?.title ?? m.listing_id}</div>
-                  <div className="reason">{m.reason}</div>
-                </div>
-                <div className="row">
-                  <span className="price">${meta?.price}</span>
-                  <span className="score">{m.score}</span>
-                  <button onClick={() => buy(m.listing_id)}>Buy via escrow</button>
-                </div>
+      {!matches && !loading && (
+        <div className="chips">
+          {EXAMPLES.map((ex) => (
+            <button
+              type="button"
+              className="chip"
+              key={ex}
+              onClick={() => setRequest(ex)}
+            >
+              {ex}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {loading && (
+        <div className="card" style={{ marginTop: 28 }}>
+          <div className="section-label">Ranking datasets</div>
+          {[0, 1, 2].map((i) => (
+            <div className="skel-row" key={i}>
+              <div style={{ flex: 1 }}>
+                <div className="skel" style={{ height: 16, width: "60%" }} />
+                <div className="skel" style={{ height: 12, width: "80%", marginTop: 10 }} />
               </div>
-            );
-          })}
+              <div className="skel" style={{ height: 32, width: 88, marginLeft: 20 }} />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {matches && (
+        <div className="card fade-in" style={{ marginTop: 28 }}>
+          <div className="section-label">Ranked matches</div>
+
+          {matches.length === 0 && (
+            <div className="empty">
+              <span className="e-icon">
+                <Database size={22} />
+              </span>
+              <p className="notice">
+                No datasets matched that description. Try different terms &mdash; or one of
+                the examples above.
+              </p>
+            </div>
+          )}
+
+          <div className="ledger">
+            {matches.map((m, i) => {
+              const listing = getListing(m.listing_id);
+              const pct = Math.max(6, Math.min(100, m.score));
+              return (
+                <div
+                  className="match-row"
+                  key={m.listing_id}
+                  style={{ animationDelay: `${i * 70}ms` }}
+                >
+                  <div>
+                    <div className="match-head">
+                      <span className="match-icon">
+                        <Database size={18} />
+                      </span>
+                      <div>
+                        <div className="match-title">{listing?.title ?? m.listing_id}</div>
+                        <div className="match-reason">{m.reason}</div>
+                      </div>
+                    </div>
+                    {listing?.tags && (
+                      <div className="match-tags">
+                        {listing.tags.slice(0, 4).map((t) => (
+                          <span className="tag" key={t}>
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="match-side">
+                    <div className="relevance">
+                      <span className="score">
+                        <b>{m.score}</b>/100 match
+                      </span>
+                      <span className="meter">
+                        <span style={{ width: `${pct}%` }} />
+                      </span>
+                    </div>
+                    <div className="buy-row">
+                      <span className="price">${listing?.price ?? "—"}</span>
+                      <button onClick={() => buy(m.listing_id)}>
+                        <Lock size={15} />
+                        Buy via escrow
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </>

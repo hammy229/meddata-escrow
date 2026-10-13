@@ -2,14 +2,30 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { Order } from "@/lib/types";
+import {
+  ShieldCheck,
+  Lock,
+  LockOpen,
+  Download,
+  Check,
+  ArrowLeft,
+} from "../../icons";
 
-const STEPS: { key: Order["state"]; label: string }[] = [
-  { key: "PENDING_PAYMENT", label: "1. Payment" },
-  { key: "FUNDED", label: "2. In escrow" },
-  { key: "RELEASED", label: "3. Released" },
+const STEPS: { key: Order["state"]; label: string; sub: string }[] = [
+  { key: "PENDING_PAYMENT", label: "Payment", sub: "Pay into escrow" },
+  { key: "FUNDED", label: "In escrow", sub: "Data unlocked" },
+  { key: "RELEASED", label: "Released", sub: "Seller paid" },
 ];
 
 const ORDER = ["PENDING_PAYMENT", "FUNDED", "RELEASED"];
+
+const STATE_LABEL: Record<string, string> = {
+  PENDING_PAYMENT: "Awaiting payment",
+  FUNDED: "Held in escrow",
+  RELEASED: "Released",
+  REFUNDED: "Refunded",
+  CANCELLED: "Cancelled",
+};
 
 export default function OrderPage({ params }: { params: { id: string } }) {
   const [order, setOrder] = useState<Order | null>(null);
@@ -29,7 +45,6 @@ export default function OrderPage({ params }: { params: { id: string } }) {
   async function approveAndPay() {
     setBusy(true);
     setErr(null);
-    // Mock PayPal approval: capture + fund in one call.
     const r = await fetch(`/api/orders/${params.id}/capture`, { method: "POST" });
     const data = await r.json();
     if (!r.ok) setErr(data.error);
@@ -54,86 +69,151 @@ export default function OrderPage({ params }: { params: { id: string } }) {
     setBusy(false);
   }
 
-  if (!order) return <p className="notice">Loading order…</p>;
+  if (!order) {
+    return (
+      <>
+        <div className="section-label">Order</div>
+        <div className="card">
+          <div className="skel" style={{ height: 20, width: "40%" }} />
+          <div className="skel" style={{ height: 14, width: "70%", marginTop: 14 }} />
+        </div>
+      </>
+    );
+  }
 
   const idx = ORDER.indexOf(order.state);
 
   return (
     <>
-      <h1>Order status</h1>
-      <p className="sub">
-        Order <code className="mono">{order.order_id.slice(0, 12)}</code> ·{" "}
-        <span className={`state-pill state-${order.state}`}>{order.state.replace("_", " ")}</span>
-      </p>
+      <div className="flow-head">
+        <div>
+          <h1 style={{ fontSize: 32, marginBottom: 8 }}>Escrow order</h1>
+          <span className="order-id">#{order.order_id.slice(0, 12)}</span>
+        </div>
+        <span className={`state-pill state-${order.state}`}>
+          <span className="dot" />
+          {STATE_LABEL[order.state] ?? order.state.replace("_", " ")}
+        </span>
+      </div>
 
-      <div className="steps">
+      <div className="timeline">
         {STEPS.map((s, i) => (
           <div
             key={s.key}
             className={`step ${i < idx ? "done" : ""} ${i === idx ? "active" : ""}`}
           >
-            {s.label}
+            <span className="marker">{i < idx ? <Check size={13} /> : i + 1}</span>
+            <div className="st-label">{s.label}</div>
+            <div className="st-sub">{s.sub}</div>
           </div>
         ))}
       </div>
 
       <div className="card">
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <span className="price">Amount held in escrow</span>
-          <span className="price">${order.amount}</span>
+        <div className="amount-row">
+          <span className="label">
+            <span className="lock-chip">
+              {order.state === "RELEASED" ? <LockOpen size={17} /> : <Lock size={17} />}
+            </span>
+            {order.state === "RELEASED" ? "Released to seller" : "Amount held in escrow"}
+          </span>
+          <span className="big">${order.amount}</span>
         </div>
       </div>
 
       {order.state === "PENDING_PAYMENT" && (
-        <div className="card">
-          <h2>Pay into escrow</h2>
-          <p className="notice">
-            Your payment is captured by PayPal and held. The seller is not paid until you confirm
-            the dataset. In sandbox mode this is where the real PayPal button renders.
-          </p>
+        <div className="card fade-in">
+          <div className="panel-head">
+            <span className="p-icon">
+              <ShieldCheck size={20} />
+            </span>
+            <div>
+              <h2>Pay into escrow</h2>
+              <p className="notice">
+                PayPal captures your payment and holds it. The seller isn&rsquo;t paid until{" "}
+                <strong>you</strong> confirm the dataset. In sandbox mode the real PayPal
+                button renders here.
+              </p>
+            </div>
+          </div>
           <div className="spacer" />
           <button className="paypal" onClick={approveAndPay} disabled={busy}>
-            {busy ? "Processing…" : "Pay with PayPal (mock)"}
+            {busy ? (
+              "Processing…"
+            ) : (
+              <>
+                Pay with{" "}
+                <b>
+                  <i className="pp-a">Pay</i>
+                  <i className="pp-b">Pal</i>
+                </b>
+              </>
+            )}
           </button>
         </div>
       )}
 
       {order.state === "FUNDED" && (
-        <div className="card">
-          <h2>Data unlocked</h2>
-          <p className="notice">
-            Escrow is funded, so the dataset download is now available. Review it, then release
-            payment to the seller.
-          </p>
-          <div className="spacer" />
-          <div className="row">
-            {!downloadLink ? (
-              <button onClick={getDownload}>Get download link</button>
-            ) : (
-              <a className="link" href={downloadLink} target="_blank" rel="noreferrer">
-                {downloadLink}
-              </a>
-            )}
-            <button className="secondary" onClick={confirm} disabled={busy}>
-              Confirm & release payment
-            </button>
+        <div className="card fade-in">
+          <div className="panel-head">
+            <span className="p-icon">
+              <Download size={20} />
+            </span>
+            <div>
+              <h2>Data unlocked</h2>
+              <p className="notice">
+                Escrow is funded, so the dataset is available to download. Review it, then
+                release payment to the seller.
+              </p>
+            </div>
           </div>
+          <div className="spacer" />
+          {downloadLink ? (
+            <a className="dl-link" href={downloadLink} target="_blank" rel="noreferrer">
+              {downloadLink}
+            </a>
+          ) : (
+            <button className="secondary" onClick={getDownload}>
+              <Download size={16} />
+              Get download link
+            </button>
+          )}
+          <div className="spacer" />
+          <button onClick={confirm} disabled={busy}>
+            <Check size={16} />
+            {busy ? "Releasing…" : "Confirm & release payment"}
+          </button>
         </div>
       )}
 
       {order.state === "RELEASED" && (
-        <div className="card">
-          <h2>Complete</h2>
-          <p className="notice">
-            Payment released to the seller and the transaction is closed. This is your end-to-end
-            proof the escrow flow works.
-          </p>
+        <div className="card fade-in">
+          <div className="panel-head ok">
+            <span className="p-icon">
+              <Check size={20} />
+            </span>
+            <div>
+              <h2>Transaction complete</h2>
+              <p className="notice">
+                Payment has been released to the seller and the order is closed &mdash; your
+                end-to-end proof that the escrow flow works.
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
-      {err && <p className="error">{err}</p>}
-      <div className="spacer" />
-      <a className="link" href="/">← Back to search</a>
+      {err && (
+        <p className="error">
+          <Lock size={15} />
+          {err}
+        </p>
+      )}
+
+      <a className="back-link" href="/">
+        <ArrowLeft size={16} />
+        Back to search
+      </a>
     </>
   );
 }
