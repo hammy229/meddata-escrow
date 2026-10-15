@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 // MedData Escrow landing page. Server component, no client JS.
-// Tailwind v4 + Hanken Grotesk, single emerald accent on zinc, auto dark mode.
+// Tailwind v4 + Hanken Grotesk, single PayPal-blue accent on zinc, auto dark mode.
 
 import Link from "next/link";
 
@@ -60,7 +60,7 @@ export default function Home() {
       {/* Ambient accent glow + faint grid behind the hero */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[620px] bg-[radial-gradient(60%_60%_at_78%_-10%,rgba(16,185,129,0.14),transparent_70%)]"
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[620px] bg-[radial-gradient(60%_60%_at_78%_-10%,rgba(0,112,224,0.15),transparent_70%)]"
       />
       <div
         aria-hidden
@@ -74,7 +74,7 @@ export default function Home() {
             href="/"
             className="inline-flex items-center gap-2.5 font-semibold tracking-tight"
           >
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-600 text-white shadow-sm shadow-emerald-600/30">
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-pp-600 text-white shadow-sm shadow-pp-600/30">
               <ShieldCheck className="h-[18px] w-[18px]" />
             </span>
             MedData
@@ -104,7 +104,7 @@ export default function Home() {
           </div>
           <Link
             href="/researcher"
-            className="rounded-full bg-emerald-600 px-4 py-2 text-sm font-medium text-white shadow-sm shadow-emerald-600/30 transition-all hover:bg-emerald-500 hover:shadow-md hover:shadow-emerald-600/30 active:translate-y-px"
+            className="rounded-full bg-pp-600 px-4 py-2 text-sm font-medium text-white shadow-sm shadow-pp-600/30 transition-all hover:bg-pp-500 hover:shadow-md hover:shadow-pp-600/30 active:translate-y-px"
           >
             Browse datasets
           </Link>
@@ -114,13 +114,13 @@ export default function Home() {
       {/* Hero */}
       <section className="mx-auto grid max-w-6xl items-center gap-12 px-5 pt-16 pb-20 lg:grid-cols-[1.05fr_1fr] lg:pt-24 lg:pb-28">
         <div className="reveal">
-          <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300">
+          <span className="inline-flex items-center gap-2 rounded-full border border-pp-200 bg-pp-50 px-3 py-1 text-xs font-medium text-pp-700 dark:border-pp-500/30 dark:bg-pp-500/10 dark:text-pp-300">
             <ShieldCheck className="h-3.5 w-3.5" />
             PayPal-protected data procurement
           </span>
           <h1 className="mt-5 text-[2.75rem] font-bold leading-[1.02] tracking-[-0.03em] md:text-[3.5rem] lg:text-[4rem]">
             Research data you can trust,{" "}
-            <span className="text-emerald-600 dark:text-emerald-400">
+            <span className="text-pp-600 dark:text-pp-400">
               paid for only once it is delivered.
             </span>
           </h1>
@@ -131,7 +131,7 @@ export default function Home() {
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link
               href="/researcher"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-emerald-600 px-6 font-medium text-white shadow-lg shadow-emerald-600/25 transition-all hover:bg-emerald-500 hover:shadow-xl hover:shadow-emerald-600/30 active:translate-y-px"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-pp-600 px-6 font-medium text-white shadow-lg shadow-pp-600/25 transition-all hover:bg-pp-500 hover:shadow-xl hover:shadow-pp-600/30 active:translate-y-px"
             >
               Browse datasets
               <ArrowRight className="h-4 w-4" />
@@ -151,7 +151,7 @@ export default function Home() {
               "Void on a failed sample",
             ].map((fact) => (
               <div key={fact} className="flex items-center gap-2">
-                <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <Check className="h-4 w-4 text-pp-600 dark:text-pp-400" />
                 <dt className="text-zinc-600 dark:text-zinc-400">{fact}</dt>
               </div>
             ))}
@@ -167,8 +167,8 @@ export default function Home() {
             <span className="font-mono text-xs tracking-wide text-zinc-400">
               ESCROW · ORDER #MD-4821
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 font-mono text-[0.7rem] font-medium text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300">
-              <span className="held-dot h-1.5 w-1.5 rounded-full bg-emerald-500" />
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-pp-300 bg-pp-50 px-2.5 py-1 font-mono text-[0.7rem] font-medium text-pp-700 dark:border-pp-500/40 dark:bg-pp-500/10 dark:text-pp-300">
+              <span className="held-dot h-1.5 w-1.5 rounded-full bg-pp-500" />
               FUNDS HELD
             </span>
           </div>
@@ -190,9 +190,9 @@ export default function Home() {
               <span>Vendor, on delivery</span>
             </div>
             <div className="mt-2 flex items-center gap-2">
-              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
-              <span className="h-[3px] flex-1 rounded-full bg-gradient-to-r from-emerald-500 to-emerald-500/25 dark:from-emerald-400 dark:to-emerald-400/20" />
-              <span className="held-dot h-2.5 w-2.5 shrink-0 rounded-full border-2 border-emerald-400 bg-white dark:bg-zinc-950" />
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-pp-500" />
+              <span className="h-[3px] flex-1 rounded-full bg-gradient-to-r from-pp-500 to-pp-500/25 dark:from-pp-400 dark:to-pp-400/20" />
+              <span className="held-dot h-2.5 w-2.5 shrink-0 rounded-full border-2 border-pp-400 bg-white dark:bg-zinc-950" />
             </div>
             <p className="mt-3 text-xs leading-relaxed text-zinc-500">
               Held in PayPal from authorization. Captured only when the buyer
@@ -218,9 +218,9 @@ export default function Home() {
                       className={[
                         "rounded-md px-2.5 py-1 font-mono text-xs",
                         current
-                          ? "bg-emerald-600 text-white"
+                          ? "bg-pp-600 text-white"
                           : row.held
-                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+                            ? "bg-pp-50 text-pp-700 dark:bg-pp-500/10 dark:text-pp-300"
                             : "text-zinc-500 dark:text-zinc-400",
                       ].join(" ")}
                     >
@@ -280,14 +280,14 @@ export default function Home() {
           {/* connecting spine behind the nodes */}
           <span
             aria-hidden
-            className="absolute left-[15px] top-2 bottom-8 w-px bg-gradient-to-b from-emerald-300 via-zinc-200 to-transparent dark:from-emerald-500/50 dark:via-zinc-800"
+            className="absolute left-[15px] top-2 bottom-8 w-px bg-gradient-to-b from-pp-300 via-zinc-200 to-transparent dark:from-pp-500/50 dark:via-zinc-800"
           />
           {STEPS.map((s) => (
             <li
               key={s.n}
               className="relative grid grid-cols-[32px_1fr] gap-x-5 pb-10 last:pb-0"
             >
-              <span className="z-10 grid h-8 w-8 place-items-center rounded-full border border-emerald-300 bg-white font-mono text-xs font-medium text-emerald-700 shadow-sm dark:border-emerald-500/40 dark:bg-zinc-950 dark:text-emerald-300">
+              <span className="z-10 grid h-8 w-8 place-items-center rounded-full border border-pp-300 bg-white font-mono text-xs font-medium text-pp-700 shadow-sm dark:border-pp-500/40 dark:bg-zinc-950 dark:text-pp-300">
                 {s.n}
               </span>
               <div className="pt-1">
@@ -331,10 +331,10 @@ export default function Home() {
             ].map((row) => (
               <div
                 key={row.t}
-                className="bg-white p-6 transition-colors hover:bg-emerald-50/50 dark:bg-zinc-950 dark:hover:bg-emerald-500/5"
+                className="bg-white p-6 transition-colors hover:bg-pp-50/50 dark:bg-zinc-950 dark:hover:bg-pp-500/5"
               >
                 <dt className="flex items-center gap-2 font-semibold">
-                  <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <Check className="h-4 w-4 text-pp-600 dark:text-pp-400" />
                   {row.t}
                 </dt>
                 <dd className="mt-1.5 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
@@ -348,7 +348,7 @@ export default function Home() {
 
       {/* Two audiences */}
       <section className="mx-auto grid max-w-6xl gap-6 px-5 py-20 md:grid-cols-2 lg:py-28">
-        <div className="group rounded-2xl border border-zinc-200 p-8 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-600/5 dark:border-zinc-800 dark:hover:border-emerald-500/40">
+        <div className="group rounded-2xl border border-zinc-200 p-8 shadow-sm transition-all hover:-translate-y-0.5 hover:border-pp-300 hover:shadow-lg hover:shadow-pp-600/5 dark:border-zinc-800 dark:hover:border-pp-500/40">
           <h3 className="text-xl font-semibold">For researchers</h3>
           <p className="mt-3 text-zinc-600 dark:text-zinc-400">
             Describe a study, compare ranked matches, and buy access with
@@ -356,13 +356,13 @@ export default function Home() {
           </p>
           <Link
             href="/researcher"
-            className="mt-6 inline-flex items-center gap-1.5 font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+            className="mt-6 inline-flex items-center gap-1.5 font-medium text-pp-700 hover:underline dark:text-pp-400"
           >
             Open the researcher workspace
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
         </div>
-        <div className="group rounded-2xl border border-zinc-200 p-8 shadow-sm transition-all hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-lg hover:shadow-emerald-600/5 dark:border-zinc-800 dark:hover:border-emerald-500/40">
+        <div className="group rounded-2xl border border-zinc-200 p-8 shadow-sm transition-all hover:-translate-y-0.5 hover:border-pp-300 hover:shadow-lg hover:shadow-pp-600/5 dark:border-zinc-800 dark:hover:border-pp-500/40">
           <h3 className="text-xl font-semibold">For vendors</h3>
           <p className="mt-3 text-zinc-600 dark:text-zinc-400">
             List datasets, deliver on demand, and get paid out as soon as the
@@ -370,7 +370,7 @@ export default function Home() {
           </p>
           <Link
             href="/vendor"
-            className="mt-6 inline-flex items-center gap-1.5 font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+            className="mt-6 inline-flex items-center gap-1.5 font-medium text-pp-700 hover:underline dark:text-pp-400"
           >
             Open the vendor workspace
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
@@ -378,9 +378,9 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Final CTA — a confident emerald band to close */}
+      {/* Final CTA — a confident PayPal-blue band to close */}
       <section className="px-5 py-16 lg:py-24">
-        <div className="relative mx-auto max-w-6xl overflow-hidden rounded-3xl bg-emerald-600 px-8 py-16 shadow-xl shadow-emerald-600/25 sm:px-12 lg:py-20">
+        <div className="relative mx-auto max-w-6xl overflow-hidden rounded-3xl bg-gradient-to-br from-pp-600 to-pp-900 px-8 py-16 shadow-xl shadow-pp-900/25 sm:px-12 lg:py-20">
           {/* layered radial sheen for depth, not a flat fill */}
           <div
             aria-hidden
@@ -395,14 +395,14 @@ export default function Home() {
               <h2 className="text-3xl font-bold tracking-tight text-white md:text-4xl">
                 Start with a dataset request.
               </h2>
-              <p className="mt-3 max-w-md text-emerald-50/90">
+              <p className="mt-3 max-w-md text-pp-50/90">
                 Describe your study and let the escrow do the trusting — free to
                 try, no keys, no card.
               </p>
             </div>
             <Link
               href="/researcher"
-              className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-full bg-white px-7 font-semibold text-emerald-700 shadow-lg shadow-emerald-900/20 transition-all hover:bg-emerald-50 active:translate-y-px"
+              className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-full bg-white px-7 font-semibold text-pp-700 shadow-lg shadow-pp-900/20 transition-all hover:bg-pp-50 active:translate-y-px"
             >
               Browse datasets
               <ArrowRight className="h-4 w-4" />
