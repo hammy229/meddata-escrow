@@ -2,6 +2,24 @@
 
 All notable changes to MedData Escrow. Newest first.
 
+## 2026-10-15 — Landing page: a held escrow order, front and center
+
+Elevated the marketing home around the one idea that makes the product
+different — funds are **held** until delivery is confirmed — while keeping the
+shipped emerald identity.
+
+### Added
+
+- **Signature hero visual** — the plain lifecycle list became a bespoke "held
+  order" card: order id + `FUNDS HELD` pill, the dataset and amount in tabular
+  mono, a buyer → vendor held-funds track, and the `MATCHED..PAID_OUT` ledger
+  with each state's plain meaning (`AUTHORIZED` shown current). Reuses the
+  existing `.reveal` / `.held-dot` motion — no new keyframes.
+- **Landing screenshots** (`docs/screenshots/`) — thumbnail, light, dark, and
+  mobile captures, surfaced at the top of the README.
+- **Share metadata** — OpenGraph + Twitter `summary_large_image` with
+  `/og.png`, title template, and `metadataBase` from `NEXT_PUBLIC_SITE_URL`.
+
 ## 2026-10-11 — Escrow persistence + dispute/resolve + read API
 
 Backend/escrow core is now DB-backed end to end, and the full dispute flow is in.
