@@ -2,6 +2,19 @@
 
 All notable changes to MedData Escrow. Newest first.
 
+## 2026-10-15 — PayPal-blue rebrand
+
+Recolored the whole product from emerald to a **PayPal-blue** system for the
+PayPal AI Hackathon — primary `#0070e0`, navy `#003087`.
+
+### Changed
+
+- Added a `pp-50..950` PayPal-blue ramp to the Tailwind theme and repointed the
+  accent/ring/soft tokens (light + dark) and AG Grid selection to it.
+- Recolored the landing, researcher and vendor workspaces, the incoming-orders
+  view, and the AG Grid accent; the closing CTA band is now a
+  `pp-600 → pp-900` (PayPal navy) gradient.
+
 ## 2026-10-15 — Landing page: a held escrow order, front and center
 
 Elevated the marketing home around the one idea that makes the product
