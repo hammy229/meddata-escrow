@@ -19,10 +19,38 @@ const mono = JetBrains_Mono({
   display: "swap",
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
 export const metadata: Metadata = {
-  title: "MedData Escrow",
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default:
+      "MedData Escrow — research data, paid for only once it is delivered",
+    template: "%s · MedData Escrow",
+  },
   description:
-    "AI procurement + escrow marketplace for medical research data, settled with PayPal.",
+    "AI procurement + escrow marketplace for medical research data. Payment is held in PayPal and released only when the delivery is confirmed.",
+  openGraph: {
+    title: "MedData Escrow",
+    description:
+      "Research data you can trust, paid for only once it is delivered. AI matching, settled through PayPal escrow.",
+    type: "website",
+    images: [
+      {
+        url: "/og.png",
+        width: 1280,
+        height: 640,
+        alt: "MedData Escrow landing page — a held escrow order and its lifecycle",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "MedData Escrow",
+    description:
+      "Research data you can trust, paid for only once it is delivered.",
+    images: ["/og.png"],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
