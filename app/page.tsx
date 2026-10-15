@@ -4,7 +4,15 @@
 
 import Link from "next/link";
 
-const FLOW = ["MATCHED", "AUTHORIZED", "DELIVERED", "CAPTURED", "PAID_OUT"];
+// The real product states, in order, each with a one-line plain meaning.
+// AUTHORIZED is the "current" state the hero order is frozen at.
+const FLOW: Array<{ state: string; held: boolean; note: string }> = [
+  { state: "MATCHED", held: false, note: "AI ranked this dataset to the study" },
+  { state: "AUTHORIZED", held: true, note: "PayPal holds the funds — none captured" },
+  { state: "DELIVERED", held: true, note: "Secure download link ships to the buyer" },
+  { state: "CAPTURED", held: false, note: "Buyer confirms — the held funds release" },
+  { state: "PAID_OUT", held: false, note: "Vendor is paid; a failed sample voids" },
+];
 
 const STEPS: Array<{ n: string; title: string; body: string }> = [
   {
@@ -130,45 +138,82 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Escrow state pipeline (the real product states, not a mockup) */}
-        <div className="reveal rounded-2xl border border-zinc-200 bg-zinc-50/80 p-6 shadow-xl shadow-zinc-900/5 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60 dark:shadow-black/20 [animation-delay:120ms]">
-          <p className="mb-5 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
-            <Lock className="h-3.5 w-3.5" />
-            Escrow lifecycle
-          </p>
-          <ol className="space-y-2.5">
-            {FLOW.map((state, i) => {
-              const held = state === "AUTHORIZED" || state === "DELIVERED";
-              return (
-                <li key={state} className="flex items-center gap-3">
-                  <span className="w-5 text-right font-mono text-xs text-zinc-400">
-                    {i + 1}
-                  </span>
-                  <span
-                    className={[
-                      "flex flex-1 items-center justify-between rounded-lg border px-4 py-2.5 font-mono text-sm transition-colors",
-                      held
-                        ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300"
-                        : "border-zinc-200 bg-white text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300",
-                    ].join(" ")}
-                  >
-                    {state}
-                    {held && (
-                      <span className="held-dot h-2 w-2 rounded-full bg-emerald-500" />
-                    )}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
-          <p className="mt-5 text-sm leading-relaxed text-zinc-500">
-            Funds are{" "}
-            <span className="font-medium text-emerald-600 dark:text-emerald-400">
-              held
-            </span>{" "}
-            from authorization until delivery is confirmed. A failed sample
-            voids the hold instead of capturing it.
-          </p>
+        {/* Signature visual: a real escrow order frozen in its held state —
+            amount, a buyer -> vendor held-funds track, and the live lifecycle.
+            The actual product states, not a decorative mockup. */}
+        <div className="reveal overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50/80 shadow-xl shadow-zinc-900/5 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60 dark:shadow-black/20 [animation-delay:120ms]">
+          {/* order header */}
+          <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
+            <span className="font-mono text-xs tracking-wide text-zinc-400">
+              ESCROW · ORDER #MD-4821
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-1 font-mono text-[0.7rem] font-medium text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300">
+              <span className="held-dot h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              FUNDS HELD
+            </span>
+          </div>
+
+          {/* amount + dataset */}
+          <div className="px-6 pt-6">
+            <p className="text-sm text-zinc-500">
+              De-identified cardiology cohort
+            </p>
+            <p className="mt-1 font-mono text-4xl font-semibold tabular-nums tracking-tight">
+              $4,200<span className="text-2xl text-zinc-400">.00</span>
+            </p>
+          </div>
+
+          {/* held-funds track: authorized ——(held)——→ released on delivery */}
+          <div className="px-6 pt-6">
+            <div className="flex items-center justify-between text-xs text-zinc-400">
+              <span>Buyer authorized</span>
+              <span>Vendor, on delivery</span>
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
+              <span className="h-[3px] flex-1 rounded-full bg-gradient-to-r from-emerald-500 to-emerald-500/25 dark:from-emerald-400 dark:to-emerald-400/20" />
+              <span className="held-dot h-2.5 w-2.5 shrink-0 rounded-full border-2 border-emerald-400 bg-white dark:bg-zinc-950" />
+            </div>
+            <p className="mt-3 text-xs leading-relaxed text-zinc-500">
+              Held in PayPal from authorization. Captured only when the buyer
+              confirms the sample — a failed sample voids the hold.
+            </p>
+          </div>
+
+          {/* lifecycle ledger */}
+          <div className="mt-6 border-t border-zinc-200 bg-white/60 px-6 py-5 dark:border-zinc-800 dark:bg-zinc-950/40">
+            <p className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+              <Lock className="h-3.5 w-3.5" />
+              Escrow lifecycle
+            </p>
+            <ol className="space-y-1">
+              {FLOW.map((row, i) => {
+                const current = row.state === "AUTHORIZED";
+                return (
+                  <li key={row.state} className="flex items-center gap-3 py-1">
+                    <span className="w-4 text-right font-mono text-[0.7rem] tabular-nums text-zinc-400">
+                      {i + 1}
+                    </span>
+                    <span
+                      className={[
+                        "rounded-md px-2.5 py-1 font-mono text-xs",
+                        current
+                          ? "bg-emerald-600 text-white"
+                          : row.held
+                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+                            : "text-zinc-500 dark:text-zinc-400",
+                      ].join(" ")}
+                    >
+                      {row.state}
+                    </span>
+                    <span className="truncate text-xs text-zinc-400 dark:text-zinc-500">
+                      {row.note}
+                    </span>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
         </div>
       </section>
 
