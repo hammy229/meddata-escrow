@@ -19,10 +19,10 @@ import {
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-// Match the grid to the site: emerald accent, Hanken/JetBrains fonts, zinc
+// Match the grid to the site: PayPal-blue accent, Hanken/JetBrains fonts, zinc
 // borders, generous row height, and a soft wrapper radius.
 const shared = {
-  accentColor: "#10b981",
+  accentColor: "#0070e0",
   fontFamily: "var(--font-sans)",
   cellFontFamily: "var(--font-sans)",
   headerFontWeight: 600,
@@ -36,14 +36,14 @@ const lightTheme = themeQuartz.withPart(colorSchemeLight).withParams({
   ...shared,
   borderColor: "#e4e4e7",
   headerBackgroundColor: "#fafafa",
-  rowHoverColor: "color-mix(in srgb, #10b981 7%, transparent)",
+  rowHoverColor: "color-mix(in srgb, #0070e0 7%, transparent)",
 });
 const darkTheme = themeQuartz.withPart(colorSchemeDark).withParams({
   ...shared,
   backgroundColor: "#0c0c0f",
   borderColor: "#27272a",
   headerBackgroundColor: "#131316",
-  rowHoverColor: "color-mix(in srgb, #10b981 12%, transparent)",
+  rowHoverColor: "color-mix(in srgb, #0070e0 12%, transparent)",
 });
 
 // Subscribe to the OS color-scheme via useSyncExternalStore (SSR-safe: the
