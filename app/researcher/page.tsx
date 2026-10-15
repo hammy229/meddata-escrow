@@ -91,9 +91,9 @@ function EscrowStepper({
             className={[
               "rounded-full border px-3 py-1 font-mono text-xs transition-colors",
               reached && held
-                ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300"
+                ? "border-pp-300 bg-pp-50 text-pp-800 dark:border-pp-500/40 dark:bg-pp-500/10 dark:text-pp-300"
                 : reached
-                  ? "border-emerald-600 bg-emerald-600 text-white dark:border-emerald-500 dark:bg-emerald-500"
+                  ? "border-pp-600 bg-pp-600 text-white dark:border-pp-500 dark:bg-pp-500"
                   : "border-zinc-200 bg-white text-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-600",
             ].join(" ")}
           >
@@ -116,16 +116,16 @@ function EscrowStepper({
 }
 
 const primaryBtn =
-  "inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm shadow-emerald-600/30 transition-all hover:bg-emerald-500 hover:shadow-md hover:shadow-emerald-600/30 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none";
+  "inline-flex items-center gap-2 rounded-full bg-pp-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm shadow-pp-600/30 transition-all hover:bg-pp-500 hover:shadow-md hover:shadow-pp-600/30 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none";
 const dangerBtn =
   "inline-flex items-center gap-2 rounded-full border border-rose-300 px-5 py-2.5 text-sm font-medium text-rose-700 transition-all hover:bg-rose-50 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/10";
 
 const sectionCard =
   "rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm shadow-zinc-900/5 dark:border-zinc-800 dark:bg-zinc-900/40 dark:shadow-black/20";
 const inputBase =
-  "w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-sm outline-none transition-colors focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/15 dark:border-zinc-700 dark:bg-zinc-950";
+  "w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-sm outline-none transition-colors focus:border-pp-500 focus:ring-4 focus:ring-pp-500/15 dark:border-zinc-700 dark:bg-zinc-950";
 const stepBadge =
-  "grid h-7 w-7 place-items-center rounded-lg bg-emerald-50 font-mono text-xs font-semibold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400";
+  "grid h-7 w-7 place-items-center rounded-lg bg-pp-50 font-mono text-xs font-semibold text-pp-700 dark:bg-pp-500/10 dark:text-pp-400";
 
 export default function ResearcherPage() {
   const [description, setDescription] = useState("");
@@ -534,7 +534,7 @@ export default function ResearcherPage() {
                 </button>
               )}
               {escrow === "PAID_OUT" && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-pp-300 bg-pp-50 px-4 py-2 text-sm font-medium text-pp-800 dark:border-pp-500/40 dark:bg-pp-500/10 dark:text-pp-300">
                   <Check className="h-4 w-4" />
                   Vendor paid out
                 </span>
@@ -552,7 +552,7 @@ export default function ResearcherPage() {
               href={approveUrl}
               target="_blank"
               rel="noreferrer"
-              className="mt-2 inline-flex text-sm font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+              className="mt-2 inline-flex text-sm font-medium text-pp-700 hover:underline dark:text-pp-400"
             >
               Open PayPal approval →
             </a>
