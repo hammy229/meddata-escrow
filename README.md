@@ -27,6 +27,14 @@ Medical-school researchers waste weeks sourcing data: they can't inspect quality
 
 > ⚕️ **All data is synthetic**, generated with [Synthea](https://github.com/synthetichealth/synthea). **No real patient data** is used anywhere.
 
+## Screens
+
+| Landing (light) | Landing (dark) |
+| --- | --- |
+| ![Landing page, light theme](docs/screenshots/home-light.png) | ![Landing page, dark theme](docs/screenshots/home-dark.png) |
+
+<img src="docs/screenshots/home-mobile.png" alt="Landing page on mobile" width="320" />
+
 ## How it works (6-step flow)
 
 1. **Describe** — A researcher describes their study in plain English.
