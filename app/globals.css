@@ -3,11 +3,11 @@
 :root {
   --background: #ffffff;
   --foreground: #18181b;
-  /* Emerald accent ramp, used by hand-authored surfaces below. */
-  --accent: #059669;
-  --accent-strong: #047857;
-  --accent-soft: #ecfdf5;
-  --ring: #10b981;
+  /* PayPal-blue accent ramp, used by hand-authored surfaces below. */
+  --accent: #0070e0;
+  --accent-strong: #005bbd;
+  --accent-soft: #e9f3ff;
+  --ring: #2280e6;
 }
 
 @theme inline {
@@ -15,16 +15,29 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-mono), ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* PayPal-blue ramp — the product's accent across every surface. */
+  --color-pp-50: #e9f3ff;
+  --color-pp-100: #d3e6fe;
+  --color-pp-200: #b2d4fc;
+  --color-pp-300: #86bbf7;
+  --color-pp-400: #529bf0;
+  --color-pp-500: #2280e6;
+  --color-pp-600: #0070e0;
+  --color-pp-700: #005bbd;
+  --color-pp-800: #014a9c;
+  --color-pp-900: #003087;
+  --color-pp-950: #012169;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #09090b;
     --foreground: #ededed;
-    --accent: #34d399;
-    --accent-strong: #10b981;
-    --accent-soft: rgba(16, 185, 129, 0.12);
-    --ring: #34d399;
+    --accent: #529bf0;
+    --accent-strong: #2280e6;
+    --accent-soft: rgba(0, 112, 224, 0.16);
+    --ring: #529bf0;
   }
 }
 
@@ -159,5 +172,5 @@ a {
   cursor: pointer;
 }
 .ag-row.dg-row-selected {
-  background-color: color-mix(in srgb, #10b981 16%, transparent);
+  background-color: color-mix(in srgb, #0070e0 16%, transparent);
 }
