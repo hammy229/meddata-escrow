@@ -57,10 +57,14 @@ const TOOLS: Array<{ slug: string; label: string }> = [
 export default function Home() {
   return (
     <div className="relative min-h-[100dvh] overflow-x-hidden bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      {/* Ambient accent glow behind the hero */}
+      {/* Ambient accent glow + faint grid behind the hero */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[620px] bg-[radial-gradient(60%_60%_at_78%_-10%,rgba(16,185,129,0.14),transparent_70%)]"
+      />
+      <div
+        aria-hidden
+        className="hero-grid pointer-events-none absolute inset-x-0 top-0 -z-10 h-[620px]"
       />
 
       {/* Nav */}
@@ -114,8 +118,11 @@ export default function Home() {
             <ShieldCheck className="h-3.5 w-3.5" />
             PayPal-protected data procurement
           </span>
-          <h1 className="mt-5 text-4xl font-bold leading-[1.04] tracking-tight md:text-5xl lg:text-6xl">
-            Research data you can trust, paid for only once it is delivered.
+          <h1 className="mt-5 text-[2.75rem] font-bold leading-[1.02] tracking-[-0.03em] md:text-[3.5rem] lg:text-[4rem]">
+            Research data you can trust,{" "}
+            <span className="text-emerald-600 dark:text-emerald-400">
+              paid for only once it is delivered.
+            </span>
           </h1>
           <p className="mt-6 max-w-xl text-lg leading-relaxed text-zinc-600 dark:text-zinc-400">
             MedData Escrow matches your study to vetted datasets and holds
@@ -136,6 +143,19 @@ export default function Home() {
               List a dataset
             </Link>
           </div>
+          {/* proof row — the escrow guarantees in one line, no vanity metrics */}
+          <dl className="mt-9 flex flex-wrap gap-x-7 gap-y-3 text-sm">
+            {[
+              "Funds held, not captured",
+              "48-hour confirmation window",
+              "Void on a failed sample",
+            ].map((fact) => (
+              <div key={fact} className="flex items-center gap-2">
+                <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <dt className="text-zinc-600 dark:text-zinc-400">{fact}</dt>
+              </div>
+            ))}
+          </dl>
         </div>
 
         {/* Signature visual: a real escrow order frozen in its held state —
@@ -241,27 +261,44 @@ export default function Home() {
         </div>
       </section>
 
-      {/* How it works */}
-      <section id="how" className="mx-auto max-w-6xl px-5 py-20 lg:py-28">
-        <h2 className="max-w-2xl text-3xl font-bold tracking-tight md:text-4xl">
-          From a plain-English request to a paid-out vendor.
-        </h2>
-        <div className="mt-12 grid gap-x-10 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
-          {STEPS.map((s) => (
-            <div
-              key={s.n}
-              className="group border-t border-zinc-200 pt-5 transition-colors hover:border-emerald-400 dark:border-zinc-800 dark:hover:border-emerald-500/60"
-            >
-              <div className="font-mono text-sm text-emerald-600 dark:text-emerald-400">
-                {s.n}
-              </div>
-              <h3 className="mt-2 text-lg font-semibold">{s.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-                {s.body}
-              </p>
-            </div>
-          ))}
+      {/* How it works — a lifecycle timeline that rhymes with the hero ledger */}
+      <section
+        id="how"
+        className="mx-auto grid max-w-6xl gap-12 px-5 py-20 lg:grid-cols-[0.85fr_1.15fr] lg:py-28"
+      >
+        <div className="lg:sticky lg:top-24 lg:self-start">
+          <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
+            From a plain-English request to a paid-out vendor.
+          </h2>
+          <p className="mt-5 max-w-sm text-zinc-600 dark:text-zinc-400">
+            Six states, one honest rule: the money moves last. Each step is a
+            real transition in the escrow machine.
+          </p>
         </div>
+
+        <ol className="relative">
+          {/* connecting spine behind the nodes */}
+          <span
+            aria-hidden
+            className="absolute left-[15px] top-2 bottom-8 w-px bg-gradient-to-b from-emerald-300 via-zinc-200 to-transparent dark:from-emerald-500/50 dark:via-zinc-800"
+          />
+          {STEPS.map((s) => (
+            <li
+              key={s.n}
+              className="relative grid grid-cols-[32px_1fr] gap-x-5 pb-10 last:pb-0"
+            >
+              <span className="z-10 grid h-8 w-8 place-items-center rounded-full border border-emerald-300 bg-white font-mono text-xs font-medium text-emerald-700 shadow-sm dark:border-emerald-500/40 dark:bg-zinc-950 dark:text-emerald-300">
+                {s.n}
+              </span>
+              <div className="pt-1">
+                <h3 className="text-lg font-semibold">{s.title}</h3>
+                <p className="mt-1.5 max-w-md text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+                  {s.body}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ol>
       </section>
 
       {/* Trust / why escrow */}
@@ -341,19 +378,36 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Final CTA */}
-      <section className="border-t border-zinc-200 dark:border-zinc-800">
-        <div className="mx-auto flex max-w-6xl flex-col items-start gap-6 px-5 py-20 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-2xl font-bold tracking-tight md:text-3xl">
-            Start with a dataset request.
-          </h2>
-          <Link
-            href="/researcher"
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-emerald-600 px-6 font-medium text-white shadow-lg shadow-emerald-600/25 transition-all hover:bg-emerald-500 hover:shadow-xl hover:shadow-emerald-600/30 active:translate-y-px"
-          >
-            Browse datasets
-            <ArrowRight className="h-4 w-4" />
-          </Link>
+      {/* Final CTA — a confident emerald band to close */}
+      <section className="px-5 py-16 lg:py-24">
+        <div className="relative mx-auto max-w-6xl overflow-hidden rounded-3xl bg-emerald-600 px-8 py-16 shadow-xl shadow-emerald-600/25 sm:px-12 lg:py-20">
+          {/* layered radial sheen for depth, not a flat fill */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_120%_at_85%_-10%,rgba(255,255,255,0.22),transparent_60%)]"
+          />
+          <ShieldCheck
+            aria-hidden
+            className="pointer-events-none absolute -right-8 -bottom-10 h-56 w-56 text-white/10"
+          />
+          <div className="relative flex flex-col items-start gap-7 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-3xl font-bold tracking-tight text-white md:text-4xl">
+                Start with a dataset request.
+              </h2>
+              <p className="mt-3 max-w-md text-emerald-50/90">
+                Describe your study and let the escrow do the trusting — free to
+                try, no keys, no card.
+              </p>
+            </div>
+            <Link
+              href="/researcher"
+              className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-full bg-white px-7 font-semibold text-emerald-700 shadow-lg shadow-emerald-900/20 transition-all hover:bg-emerald-50 active:translate-y-px"
+            >
+              Browse datasets
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
         </div>
       </section>
 
