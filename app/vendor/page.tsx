@@ -71,7 +71,7 @@ export default function VendorPage() {
           <p className="text-xs uppercase tracking-wider text-zinc-500">
             Average price
           </p>
-          <p className="mt-1 font-mono text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
+          <p className="mt-1 font-mono text-2xl font-bold tracking-tight text-pp-600 dark:text-pp-400">
             ${(avgPriceCents / 100).toFixed(2)}
           </p>
         </div>
@@ -79,7 +79,7 @@ export default function VendorPage() {
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm shadow-zinc-900/5 dark:border-zinc-800 dark:bg-zinc-900/40 dark:shadow-black/20">
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
-          <Database className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+          <Database className="h-5 w-5 text-pp-600 dark:text-pp-400" />
           Catalog
         </h2>
         <VendorCatalog rows={rows} />

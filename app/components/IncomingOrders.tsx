@@ -30,13 +30,13 @@ const STATE_BADGE: Record<string, string> = {
   MATCHED:
     "border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400",
   AUTHORIZED:
-    "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300",
+    "border-pp-300 bg-pp-50 text-pp-800 dark:border-pp-500/40 dark:bg-pp-500/10 dark:text-pp-300",
   DELIVERED:
-    "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/10 dark:text-emerald-300",
+    "border-pp-300 bg-pp-50 text-pp-800 dark:border-pp-500/40 dark:bg-pp-500/10 dark:text-pp-300",
   CAPTURED:
-    "border-emerald-600 bg-emerald-600 text-white dark:border-emerald-500 dark:bg-emerald-500",
+    "border-pp-600 bg-pp-600 text-white dark:border-pp-500 dark:bg-pp-500",
   PAID_OUT:
-    "border-emerald-600 bg-emerald-600 text-white dark:border-emerald-500 dark:bg-emerald-500",
+    "border-pp-600 bg-pp-600 text-white dark:border-pp-500 dark:bg-pp-500",
   DISPUTED:
     "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300",
   VOIDED:
@@ -154,7 +154,7 @@ export default function IncomingOrders() {
             type="checkbox"
             checked={disputesOnly}
             onChange={(e) => setDisputesOnly(e.target.checked)}
-            className="h-4 w-4 accent-emerald-600"
+            className="h-4 w-4 accent-pp-600"
           />
           Disputes only
         </label>
@@ -216,7 +216,7 @@ export default function IncomingOrders() {
                         <button
                           onClick={() => resolve(o.id, "capture")}
                           disabled={busyId !== null}
-                          className={`${resolveBtn} bg-emerald-600 text-white hover:bg-emerald-500`}
+                          className={`${resolveBtn} bg-pp-600 text-white hover:bg-pp-500`}
                         >
                           {busyId === o.id ? "Resolving…" : "Release to vendor"}
                         </button>
