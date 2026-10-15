@@ -20,6 +20,13 @@ shipped emerald identity.
 - **Share metadata** — OpenGraph + Twitter `summary_large_image` with
   `/og.png`, title template, and `metadataBase` from `NEXT_PUBLIC_SITE_URL`.
 
+### Changed
+
+- **Landing craft pass** (emerald identity kept): bolder hero with the promise
+  set in emerald and a proof row; a faint masked grid backdrop; "How it works"
+  reworked from an equal-card grid into a two-column lifecycle timeline; and a
+  confident emerald closing band in place of the plain CTA row.
+
 ## 2026-10-11 — Escrow persistence + dispute/resolve + read API
 
 Backend/escrow core is now DB-backed end to end, and the full dispute flow is in.
