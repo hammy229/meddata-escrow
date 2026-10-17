@@ -53,12 +53,16 @@ CREATE TABLE IF NOT EXISTS query_usage (
 CREATE TABLE IF NOT EXISTS order_events (
   id          TEXT PRIMARY KEY,
   order_id    TEXT NOT NULL REFERENCES orders(id),
+  -- Monotonic per-order position (0 = genesis). Ordering key for the timeline:
+  -- created_at is only second-resolution, so same-second transitions would sort
+  -- ambiguously; seq keeps them in the exact order they happened.
+  seq         INTEGER NOT NULL,
   event       TEXT NOT NULL,
   from_state  TEXT,
   to_state    TEXT NOT NULL,
   created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Read an order's timeline oldest-first.
+-- Read an order's timeline oldest-first (by seq).
 CREATE INDEX IF NOT EXISTS idx_order_events_order
-  ON order_events (order_id, created_at, id);
+  ON order_events (order_id, seq);

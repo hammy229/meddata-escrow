@@ -10,6 +10,7 @@ import {
   getOrder,
   advanceOrder,
   listOrders,
+  listOrderEvents,
 } from "./client";
 import { InvalidTransitionError } from "../escrow/state-machine";
 
@@ -169,5 +170,61 @@ test("listOrders filters by status, datasetId, and buyerEmail", () => {
     ["ord_2"],
   );
   assert.equal(listOrders(db, { status: "PAID_OUT" }).length, 0);
+  db.close();
+});
+
+test("records a genesis CREATE event when an order is created", () => {
+  const db = freshDb();
+  const order = createOrder(db, {
+    datasetId: "ds_x",
+    buyerEmail: "buyer@example.com",
+    amountCents: 100,
+  });
+  assert.deepEqual(
+    listOrderEvents(db, order.id).map((e) => [e.event, e.from_state, e.to_state]),
+    [["CREATE", null, "MATCHED"]],
+  );
+  db.close();
+});
+
+test("appends an audit row for every transition, oldest first", () => {
+  const db = freshDb();
+  const order = createOrder(db, {
+    datasetId: "ds_x",
+    buyerEmail: "buyer@example.com",
+    amountCents: 100,
+  });
+  advanceOrder(db, order.id, "AUTHORIZE");
+  advanceOrder(db, order.id, "DELIVER");
+  advanceOrder(db, order.id, "CAPTURE");
+
+  assert.deepEqual(
+    listOrderEvents(db, order.id).map((e) => [e.event, e.from_state, e.to_state]),
+    [
+      ["CREATE", null, "MATCHED"],
+      ["AUTHORIZE", "MATCHED", "AUTHORIZED"],
+      ["DELIVER", "AUTHORIZED", "DELIVERED"],
+      ["CAPTURE", "DELIVERED", "CAPTURED"],
+    ],
+  );
+  db.close();
+});
+
+test("an illegal advance writes no audit row", () => {
+  const db = freshDb();
+  const order = createOrder(db, {
+    datasetId: "ds_x",
+    buyerEmail: "buyer@example.com",
+    amountCents: 100,
+  });
+  // CAPTURE is illegal from MATCHED — transition throws before any write.
+  assert.throws(
+    () => advanceOrder(db, order.id, "CAPTURE"),
+    InvalidTransitionError,
+  );
+  assert.deepEqual(
+    listOrderEvents(db, order.id).map((e) => e.event),
+    ["CREATE"],
+  );
   db.close();
 });

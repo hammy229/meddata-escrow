@@ -36,6 +36,22 @@ export interface OrderRow {
   updated_at: string | null;
 }
 
+/**
+ * A persisted order-event row (snake_case columns, as stored). One row per
+ * lifecycle transition, append-only. `from_state` is null for the genesis
+ * (CREATE) row; `event` is "CREATE" there, otherwise the EscrowEvent.
+ */
+export interface OrderEventRow {
+  id: string;
+  order_id: string;
+  /** Monotonic per-order position (0 = genesis); the timeline's ordering key. */
+  seq: number;
+  event: string;
+  from_state: EscrowState | null;
+  to_state: EscrowState;
+  created_at: string;
+}
+
 /** Fields accepted when creating an order. */
 export interface NewOrder {
   datasetId: string;
@@ -70,6 +86,8 @@ export function migrate(db: DatabaseSync): void {
   // writes set it explicitly (createOrder/advanceOrder) and fresh DBs get the
   // CURRENT_TIMESTAMP default from schema.sql.
   ensureColumn(db, "orders", "updated_at", "TEXT");
+  // order_events.seq was added after the table shipped; back-fill for dev DBs.
+  ensureColumn(db, "order_events", "seq", "INTEGER");
 }
 
 /** Add `table.column` if it is missing (idempotent schema back-fill). */
@@ -117,6 +135,8 @@ export function createOrder(db: DatabaseSync, input: NewOrder): OrderRow {
     status,
     input.amountCents,
   );
+  // Genesis audit row: from_state null, event CREATE, to_state the initial state.
+  insertOrderEvent(db, id, "CREATE", null, status);
   return requireOrder(db, id);
 }
 
@@ -222,6 +242,8 @@ export function advanceOrder(
   db.prepare(`UPDATE orders SET ${sets.join(", ")} WHERE id = ?`).run(
     ...values,
   );
+  // Audit the transition after the state write so history mirrors the status.
+  insertOrderEvent(db, id, event, current.status, next);
   return requireOrder(db, id);
 }
 
@@ -236,6 +258,39 @@ export function withDb<T>(fn: (db: DatabaseSync) => T, url?: string): T {
   } finally {
     db.close();
   }
+}
+
+/**
+ * Append an immutable audit row for an order transition. Called inside
+ * createOrder (genesis) and advanceOrder (every transition) so the history can
+ * never drift from the order's current status.
+ */
+function insertOrderEvent(
+  db: DatabaseSync,
+  orderId: string,
+  event: string,
+  from: EscrowState | null,
+  to: EscrowState,
+): void {
+  // seq is the count of prior events for this order (0 = genesis). Per-order
+  // transitions are serialized by the request flow, so the count is stable.
+  const { n } = db
+    .prepare(`SELECT COUNT(*) AS n FROM order_events WHERE order_id = ?`)
+    .get(orderId) as { n: number };
+  db.prepare(
+    `INSERT INTO order_events (id, order_id, seq, event, from_state, to_state)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(`evt_${randomUUID()}`, orderId, n, event, from, to);
+}
+
+/** Read an order's event history, oldest first (by seq). */
+export function listOrderEvents(
+  db: DatabaseSync,
+  orderId: string,
+): OrderEventRow[] {
+  return db
+    .prepare(`SELECT * FROM order_events WHERE order_id = ? ORDER BY seq ASC`)
+    .all(orderId) as OrderEventRow[];
 }
 
 function requireOrder(db: DatabaseSync, id: string): OrderRow {
