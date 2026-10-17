@@ -33,6 +33,7 @@ import {
   getDataset,
   advanceOrder,
   listOrders,
+  listOrderEvents,
   type OrderPatch,
   type OrderFilter,
 } from "../../../lib/db/client";
@@ -84,9 +85,18 @@ export async function GET(request: Request) {
   const id = params.get("id");
   try {
     if (id !== null) {
-      const order = withDb((db) => getOrder(db, id));
-      if (!order) return bad(`unknown orderId: ${id}`, 404);
-      return Response.json({ order });
+      // `?events` (any value) also returns the order's audit timeline. Order
+      // and events are read in one DB open so they are a consistent snapshot.
+      const includeEvents = params.get("events") !== null;
+      const result = withDb((db) => {
+        const order = getOrder(db, id);
+        if (!order) return null;
+        return includeEvents
+          ? { order, events: listOrderEvents(db, id) }
+          : { order };
+      });
+      if (!result) return bad(`unknown orderId: ${id}`, 404);
+      return Response.json(result);
     }
     const status = params.get("status");
     if (status !== null && !isEscrowState(status))

@@ -14,6 +14,7 @@ import {
   openDb,
   createOrder,
   getOrder,
+  advanceOrder,
   type OrderRow,
 } from "../../../lib/db/client";
 
@@ -426,5 +427,39 @@ test(
   withEnv(async () => {
     const res = await GET(getReq("?status=REFUNDED"));
     assert.equal(res.status, 422);
+  }),
+);
+
+test(
+  "GET ?id=..&events= returns the order's audit timeline",
+  withEnv(async ({ url }) => {
+    const order = seedOrder(url, { id: "ord_tl" });
+    const db = openDb(url);
+    advanceOrder(db, order.id, "AUTHORIZE");
+    advanceOrder(db, order.id, "DELIVER");
+    db.close();
+
+    const res = await GET(getReq(`?id=${order.id}&events=1`));
+    assert.equal(res.status, 200);
+    const json = (await res.json()) as {
+      order: { status: string };
+      events: Array<{ event: string }>;
+    };
+    assert.equal(json.order.status, "DELIVERED");
+    assert.deepEqual(
+      json.events.map((e) => e.event),
+      ["CREATE", "AUTHORIZE", "DELIVER"],
+    );
+  }),
+);
+
+test(
+  "GET ?id= omits events unless they are requested",
+  withEnv(async ({ url }) => {
+    const order = seedOrder(url, { id: "ord_plain" });
+    const res = await GET(getReq(`?id=${order.id}`));
+    assert.equal(res.status, 200);
+    const json = (await res.json()) as { events?: unknown };
+    assert.equal(json.events, undefined);
   }),
 );
