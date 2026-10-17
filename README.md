@@ -66,7 +66,13 @@ Researcher UI ─▶ /api/match   ─▶ lib/ai/matcher          (rank vendor da
              ─▶ /api/billing ─▶ lib/paypal/client        (per-query charge)
 Vendor UI    ─▶ manage catalog (data/catalog.json → DB via lib/db)
 Data layer   ─▶ lib/db/schema.sql  (SQLite local · Postgres in prod)
+             ─▶ order_events        (append-only audit trail, one row per transition)
 ```
+
+Every escrow transition is recorded in an append-only `order_events` trail,
+written inside `createOrder`/`advanceOrder` so the history can never drift from
+an order's status. Read a single order's timeline (oldest-first) with
+`GET /api/orders?id=<orderId>&events=1`.
 
 ## Quick start
 
@@ -154,7 +160,7 @@ meddata-escrow/
 │  ├─ vendor/                # vendor workspace (manage listings)
 │  └─ api/
 │     ├─ match/              # POST  — match datasets to a study description
-│     ├─ orders/             # GET/POST/PATCH — list + escrow lifecycle (authorize → capture/void/payout, dispute/resolve)
+│     ├─ orders/             # GET/POST/PATCH — list + escrow lifecycle (authorize → capture/void/payout, dispute/resolve); GET ?events= returns the audit timeline
 │     ├─ query/              # POST  — plain-English query (privacy-safe aggregate)
 │     └─ billing/            # POST  — per-query charge
 ├─ lib/
