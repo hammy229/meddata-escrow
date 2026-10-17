@@ -72,7 +72,8 @@ Data layer   ─▶ lib/db/schema.sql  (SQLite local · Postgres in prod)
 Every escrow transition is recorded in an append-only `order_events` trail,
 written inside `createOrder`/`advanceOrder` so the history can never drift from
 an order's status. Read a single order's timeline (oldest-first) with
-`GET /api/orders?id=<orderId>&events=1`.
+`GET /api/orders?id=<orderId>&events=1`. A `dispute` or `resolve` PATCH can
+include a `note` (e.g. the dispute reason), recorded on that transition's event.
 
 ## Quick start
 
