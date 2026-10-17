@@ -181,7 +181,11 @@ test("records a genesis CREATE event when an order is created", () => {
     amountCents: 100,
   });
   assert.deepEqual(
-    listOrderEvents(db, order.id).map((e) => [e.event, e.from_state, e.to_state]),
+    listOrderEvents(db, order.id).map((e) => [
+      e.event,
+      e.from_state,
+      e.to_state,
+    ]),
     [["CREATE", null, "MATCHED"]],
   );
   db.close();
@@ -199,7 +203,11 @@ test("appends an audit row for every transition, oldest first", () => {
   advanceOrder(db, order.id, "CAPTURE");
 
   assert.deepEqual(
-    listOrderEvents(db, order.id).map((e) => [e.event, e.from_state, e.to_state]),
+    listOrderEvents(db, order.id).map((e) => [
+      e.event,
+      e.from_state,
+      e.to_state,
+    ]),
     [
       ["CREATE", null, "MATCHED"],
       ["AUTHORIZE", "MATCHED", "AUTHORIZED"],
