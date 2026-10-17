@@ -463,3 +463,30 @@ test(
     assert.equal(json.events, undefined);
   }),
 );
+
+test(
+  "PATCH dispute records the reason on the audit event",
+  withEnv(async ({ url }) => {
+    const order = seedOrder(url, { id: "ord_disp", status: "AUTHORIZED" });
+    const res = await PATCH(
+      req(
+        {
+          action: "dispute",
+          orderId: order.id,
+          note: "dataset was incomplete",
+        },
+        "PATCH",
+      ),
+    );
+    assert.equal(res.status, 200);
+
+    const events = await GET(getReq(`?id=${order.id}&events=1`));
+    const json = (await events.json()) as {
+      events: Array<{ event: string; note: string | null }>;
+    };
+    assert.equal(
+      json.events.find((e) => e.event === "DISPUTE")?.note,
+      "dataset was incomplete",
+    );
+  }),
+);

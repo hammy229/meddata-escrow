@@ -5,9 +5,11 @@
 //         -> create an Orders v2 order (intent=AUTHORIZE) AND an `orders` row
 //            (status MATCHED). Returns the DB `orderId`, the `paypalOrderId`,
 //            and the approve URL.
-//   PATCH { orderId, action, resolution?, requestId? }
+//   PATCH { orderId, action, resolution?, requestId?, note? }
 //         action: authorize | deliver | capture | payout | void | dispute
 //                 | resolve  (resolve needs resolution: "capture" | "void")
+//         note:   optional free-text context recorded on the audit event —
+//                 a dispute reason on dispute, a resolution note on resolve.
 //         -> advance the escrow. The stored row is the source of truth: `from`
 //            state and the PayPal ids come from the DB, not the caller. The
 //            state-machine transition is validated BEFORE any PayPal call, so an
@@ -247,8 +249,14 @@ export async function PATCH(request: Request) {
 
   // Persist the advance (optionally patching PayPal ids) once the money move
   // below has succeeded.
+  // Optional free-text context (dispute reason / resolution note), trimmed and
+  // capped so a caller can't store an unbounded blob on the audit row.
+  const note =
+    typeof body?.note === "string" && body.note.trim() !== ""
+      ? body.note.trim().slice(0, 500)
+      : undefined;
   const advance = (patch?: OrderPatch) =>
-    withDb((db) => advanceOrder(db, orderId, event, patch));
+    withDb((db) => advanceOrder(db, orderId, event, patch, note));
 
   // DELIVER and DISPUTE are internal state changes — no PayPal, in either mode.
   if (event === "DELIVER" || event === "DISPUTE") {
