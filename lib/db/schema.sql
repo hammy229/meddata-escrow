@@ -45,3 +45,20 @@ CREATE TABLE IF NOT EXISTS query_usage (
   charge_cents INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Immutable audit trail of escrow lifecycle transitions. One row per state
+-- change (plus a genesis CREATE row), written inside advanceOrder/createOrder
+-- so the history can never drift from the order's current status. `from_state`
+-- is NULL only for the genesis row. Append-only — rows are never updated.
+CREATE TABLE IF NOT EXISTS order_events (
+  id          TEXT PRIMARY KEY,
+  order_id    TEXT NOT NULL REFERENCES orders(id),
+  event       TEXT NOT NULL,
+  from_state  TEXT,
+  to_state    TEXT NOT NULL,
+  created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Read an order's timeline oldest-first.
+CREATE INDEX IF NOT EXISTS idx_order_events_order
+  ON order_events (order_id, created_at, id);
