@@ -49,6 +49,8 @@ export interface OrderEventRow {
   event: string;
   from_state: EscrowState | null;
   to_state: EscrowState;
+  /** Free-text context (dispute reason / resolution note); null when routine. */
+  note: string | null;
   created_at: string;
 }
 
@@ -88,6 +90,8 @@ export function migrate(db: DatabaseSync): void {
   ensureColumn(db, "orders", "updated_at", "TEXT");
   // order_events.seq was added after the table shipped; back-fill for dev DBs.
   ensureColumn(db, "order_events", "seq", "INTEGER");
+  // order_events.note (dispute reason / resolution note) likewise back-filled.
+  ensureColumn(db, "order_events", "note", "TEXT");
 }
 
 /** Add `table.column` if it is missing (idempotent schema back-fill). */
@@ -221,6 +225,7 @@ export function advanceOrder(
   id: string,
   event: EscrowEvent,
   patch?: OrderPatch,
+  note?: string,
 ): OrderRow {
   const current = requireOrder(db, id);
   const next = transition(current.status, event); // throws => no write below
@@ -243,7 +248,7 @@ export function advanceOrder(
     ...values,
   );
   // Audit the transition after the state write so history mirrors the status.
-  insertOrderEvent(db, id, event, current.status, next);
+  insertOrderEvent(db, id, event, current.status, next, note);
   return requireOrder(db, id);
 }
 
@@ -271,6 +276,7 @@ function insertOrderEvent(
   event: string,
   from: EscrowState | null,
   to: EscrowState,
+  note?: string,
 ): void {
   // seq is the count of prior events for this order (0 = genesis). Per-order
   // transitions are serialized by the request flow, so the count is stable.
@@ -278,9 +284,9 @@ function insertOrderEvent(
     .prepare(`SELECT COUNT(*) AS n FROM order_events WHERE order_id = ?`)
     .get(orderId) as { n: number };
   db.prepare(
-    `INSERT INTO order_events (id, order_id, seq, event, from_state, to_state)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(`evt_${randomUUID()}`, orderId, n, event, from, to);
+    `INSERT INTO order_events (id, order_id, seq, event, from_state, to_state, note)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(`evt_${randomUUID()}`, orderId, n, event, from, to, note ?? null);
 }
 
 /** Read an order's event history, oldest first (by seq). */

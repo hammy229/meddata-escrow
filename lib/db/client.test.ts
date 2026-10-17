@@ -236,3 +236,30 @@ test("an illegal advance writes no audit row", () => {
   );
   db.close();
 });
+
+test("stores an optional note on a transition (e.g. a dispute reason)", () => {
+  const db = freshDb();
+  const order = createOrder(db, {
+    datasetId: "ds_x",
+    buyerEmail: "buyer@example.com",
+    amountCents: 100,
+  });
+  advanceOrder(db, order.id, "AUTHORIZE");
+  advanceOrder(
+    db,
+    order.id,
+    "DISPUTE",
+    undefined,
+    "dataset rows were truncated",
+  );
+
+  const events = listOrderEvents(db, order.id);
+  assert.equal(
+    events.find((e) => e.event === "DISPUTE")?.note,
+    "dataset rows were truncated",
+  );
+  // The genesis row and routine transitions carry no note.
+  assert.equal(events.find((e) => e.event === "CREATE")?.note, null);
+  assert.equal(events.find((e) => e.event === "AUTHORIZE")?.note, null);
+  db.close();
+});

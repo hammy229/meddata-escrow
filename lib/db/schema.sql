@@ -60,6 +60,9 @@ CREATE TABLE IF NOT EXISTS order_events (
   event       TEXT NOT NULL,
   from_state  TEXT,
   to_state    TEXT NOT NULL,
+  -- Optional free-text context for a transition: a dispute reason on DISPUTE,
+  -- a resolution note on RESOLVE_*. NULL for routine automated transitions.
+  note        TEXT,
   created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
