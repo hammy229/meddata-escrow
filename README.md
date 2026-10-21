@@ -134,17 +134,20 @@ Production build: `npm run build && npm start`.
 
 ### Environment variables
 
-| Variable                       | Required | Description                                                                            |
-| ------------------------------ | :------: | -------------------------------------------------------------------------------------- |
-| `PAYPAL_CLIENT_ID`             |    ✅    | PayPal **sandbox** app client ID                                                       |
-| `PAYPAL_CLIENT_SECRET`         |    ✅    | PayPal **sandbox** app secret                                                          |
-| `PAYPAL_API_BASE`              |    ✅    | PayPal API base (`https://api-m.sandbox.paypal.com`)                                   |
-| `NEXT_PUBLIC_PAYPAL_CLIENT_ID` |    ✅    | Client ID exposed to the browser for the PayPal JS SDK                                 |
-| `LLM_API_KEY`                  |    ✅    | Hosted LLM API key                                                                     |
-| `LLM_API_BASE`                 |    ✅    | LLM API base URL                                                                       |
-| `LLM_MODEL`                    |    ✅    | LLM model name                                                                         |
-| `DATABASE_URL`                 |    ✅    | `file:./data/dev.sqlite` locally; `file:./data/demo.sqlite` on Render (seeded at boot) |
-| `NEXT_PUBLIC_APP_URL`          |    ✅    | Public base URL of the app                                                             |
+| Variable                  | Required | Description                                                                            |
+| ------------------------- | :------: | -------------------------------------------------------------------------------------- |
+| `PAYPAL_MODE`             |    —     | `mock` runs the whole escrow arc with no PayPal keys; unset = real sandbox calls       |
+| `PAYPAL_CLIENT_ID`        | sandbox  | PayPal **sandbox** app client ID                                                       |
+| `PAYPAL_CLIENT_SECRET`    | sandbox  | PayPal **sandbox** app secret                                                          |
+| `PAYPAL_API_BASE`         |    —     | PayPal API base (default `https://api-m.sandbox.paypal.com`)                           |
+| `PAYPAL_WEBHOOK_ID`       | webhooks | Webhook id used to verify inbound PayPal webhooks                                      |
+| `LLM_PROVIDER`            |    —     | `bedrock` enables Claude on Amazon Bedrock; unset = deterministic fallbacks            |
+| `AWS_REGION`              | Bedrock  | Bedrock region (default `us-east-1`); credentials from the AWS chain                   |
+| `LLM_MODEL`               |    —     | Bedrock model id override (default `anthropic.claude-opus-5-5`)                        |
+| `DATABASE_URL`            |    ✅    | `file:./data/dev.sqlite` locally; `file:./data/demo.sqlite` on Render (seeded at boot) |
+| `OUTBOUND_WEBHOOK_URL`    |    —     | Receives signed escrow events (e.g. a Zapier Catch Hook)                               |
+| `OUTBOUND_WEBHOOK_SECRET` |    —     | HMAC secret for `X-MedData-Signature` on outbound events                               |
+| `NEXT_PUBLIC_SITE_URL`    |    —     | Absolute site URL for share metadata                                                   |
 
 > 🔒 Never commit secrets. Only `.env.example` (with empty placeholders) is tracked.
 
@@ -152,7 +155,7 @@ Production build: `npm run build && npm start`.
 
 1. Sign in at the [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/).
 2. Go to **Apps & Credentials → Sandbox** and **Create App**.
-3. Copy the **Client ID** and **Secret** into `.env.local` (`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `NEXT_PUBLIC_PAYPAL_CLIENT_ID`).
+3. Copy the **Client ID** and **Secret** into `.env.local` (`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`) and remove `PAYPAL_MODE=mock`.
 4. Keep `PAYPAL_API_BASE=https://api-m.sandbox.paypal.com`.
 5. Use the dashboard's **Sandbox → Accounts** to get a test buyer login for the demo.
 
