@@ -3,12 +3,17 @@
 // aggregates (e.g. small-cell suppression, minimum group sizes) and never
 // row-level records. Raw records never leave the vendor.
 //
-// MOCK (conservative stand-in for the real privacy layer): deterministic,
-// string- and shape-based checks with no network and no model call. The real
-// version would combine a schema-aware policy engine with an LLM review; the
-// signatures and the allow/deny contract here match so the swap is local.
-// When in doubt this mock DENIES — false positives are safe, false negatives
-// leak PHI.
+// The base layer is deterministic, string- and shape-based checks with no
+// network (a conservative stand-in for a schema-aware policy engine). When the
+// LLM is enabled, checkQuestion also asks Claude on Bedrock for a second
+// opinion on re-identification risk — and that opinion can only TIGHTEN the
+// verdict: final allowed = deterministic allowed AND Claude allowed. A Claude
+// error leaves the deterministic verdict in place. When in doubt this guard
+// DENIES — false positives are safe, false negatives leak PHI.
+import * as z from "zod/v4";
+
+import { llmEnabled, structured } from "../llm/client";
+import type { AiOptions } from "./options";
 
 export interface PrivacyVerdict {
   allowed: boolean;
@@ -88,8 +93,59 @@ const ROW_LEVEL_PHRASES: { re: RegExp; label: string }[] = [
  */
 export async function checkQuestion(
   question: string,
-  _datasetId: string,
+  datasetId: string,
+  opts: AiOptions = {},
 ): Promise<PrivacyVerdict> {
+  const verdict = screenQuestion(question);
+  // A deterministic denial is final; Claude is only consulted to add one.
+  if (!verdict.allowed || !(opts.useLlm ?? llmEnabled())) return verdict;
+  try {
+    const review = await reviewQuestion(question, opts);
+    if (!review.allowed) {
+      return {
+        allowed: false,
+        reasons: [`Privacy review: ${review.reason}`],
+      };
+    }
+  } catch (err) {
+    console.warn(
+      `privacy-guard: LLM review failed for ${datasetId}, using rule verdict (${(err as Error).message})`,
+    );
+  }
+  return verdict;
+}
+
+const Review = z.object({ allowed: z.boolean(), reason: z.string() });
+export type QuestionReview = z.infer<typeof Review>;
+
+const REVIEW_SYSTEM =
+  "You screen questions a researcher wants answered from a medical dataset. " +
+  "Only aggregate statistics over groups are permitted. Deny (allowed=false) " +
+  "if the question asks for row-level records, tries to infer facts about " +
+  "a specific or identifiable individual, or narrows to a likely tiny group " +
+  "via quasi-identifier combinations (e.g. rare diagnosis + small region + " +
+  "exact age or date). Allow ordinary cohort-level counts, averages, and " +
+  "breakdowns. reason: one short sentence a researcher can act on.";
+
+/**
+ * Claude's second-opinion screen for re-identification risk. Throws on any
+ * LLM failure; callers treat that as "no extra opinion".
+ */
+export async function reviewQuestion(
+  question: string,
+  opts: Pick<AiOptions, "client"> = {},
+): Promise<QuestionReview> {
+  const raw = await structured({
+    system: REVIEW_SYSTEM,
+    prompt: `Question: ${question}`,
+    schema: Review,
+    client: opts.client,
+  });
+  return Review.parse(raw);
+}
+
+// The deterministic intent screen behind checkQuestion.
+function screenQuestion(question: string): PrivacyVerdict {
   const reasons: string[] = [];
   const q = question.toLowerCase();
 
