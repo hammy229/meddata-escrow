@@ -16,8 +16,17 @@ import MatchesGrid, {
   type MatchSource,
 } from "../components/MatchesGrid";
 import OrderTimeline from "../components/OrderTimeline";
+import SampleCheckCard, {
+  type SampleCheck,
+} from "../components/SampleCheckCard";
 import QuerySpend from "../components/QuerySpend";
-import { ArrowLeft, Check, AlertTriangle, Search } from "../components/icons";
+import {
+  ArrowLeft,
+  Check,
+  AlertTriangle,
+  Search,
+  ShieldCheck,
+} from "../components/icons";
 
 // One aggregate result row: `{ group, count }`, `{ group, avg_age }`, or a
 // single scalar like `{ avg_bmi }` — the keys follow the compiled query.
@@ -105,6 +114,11 @@ const primaryBtn =
 const dangerBtn =
   "inline-flex items-center gap-2 rounded-full border border-rose-300 px-5 py-2.5 text-sm font-medium text-rose-700 transition-all hover:bg-rose-50 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/10";
 
+const secondaryBtn =
+  "inline-flex items-center gap-2 rounded-full border border-zinc-300 px-5 py-2.5 text-sm font-medium text-zinc-700 transition-all hover:bg-zinc-50 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900";
+const warnBtn =
+  "inline-flex items-center gap-2 rounded-full border border-amber-400 px-5 py-2.5 text-sm font-medium text-amber-800 transition-all hover:bg-amber-50 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-500/50 dark:text-amber-300 dark:hover:bg-amber-500/10";
+
 const sectionCard =
   "rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm shadow-zinc-900/5 dark:border-zinc-800 dark:bg-zinc-900/40 dark:shadow-black/20";
 const inputBase =
@@ -119,6 +133,15 @@ export default function ResearcherPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [matchSource, setMatchSource] = useState<MatchSource>("keyword");
   const [selected, setSelected] = useState<Match | null>(null);
+
+  // Pre-purchase sample quality + privacy check for the selected match.
+  // Tagged with its dataset so a late response for a previously selected
+  // match is never shown against the current one.
+  const [sampleCheck, setSampleCheck] = useState<
+    (SampleCheck & { datasetId: string }) | null
+  >(null);
+  const [checking, setChecking] = useState(false);
+  const [checkError, setCheckError] = useState<string | null>(null);
 
   const [escrow, setEscrow] = useState<EscrowState>(null);
   const [voided, setVoided] = useState(false);
@@ -141,6 +164,8 @@ export default function ResearcherPage() {
   const [spendKey, setSpendKey] = useState(0);
 
   function resetEscrow() {
+    setSampleCheck(null);
+    setCheckError(null);
     setEscrow(null);
     setVoided(false);
     setDisputed(false);
@@ -188,6 +213,42 @@ export default function ResearcherPage() {
     setSelected(m);
     resetEscrow();
     setEscrow("MATCHED");
+  }
+
+  // Check the vendor's sample against the study before paying. The verdict is
+  // advisory: a failed check warns but never blocks the purchase.
+  async function runSampleCheck() {
+    if (!selected) return;
+    const datasetId = selected.datasetId;
+    setChecking(true);
+    setCheckError(null);
+    try {
+      const res = await fetch("/api/match", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          sampleCheck: datasetId,
+          description: description.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      const sc = data?.sampleCheck;
+      if (!res.ok || !sc || typeof sc.passed !== "boolean") {
+        setCheckError(data?.error ?? `Sample check failed (${res.status}).`);
+        return;
+      }
+      setSampleCheck({
+        datasetId,
+        passed: sc.passed,
+        score: typeof sc.score === "number" ? sc.score : 0,
+        findings: Array.isArray(sc.findings) ? sc.findings : [],
+        source: sc.source === "llm" ? "llm" : "rules",
+      });
+    } catch {
+      setCheckError("Could not reach the sample check service.");
+    } finally {
+      setChecking(false);
+    }
   }
 
   // Buy = create the order then authorize it, so the escrow reaches AUTHORIZED
@@ -380,6 +441,11 @@ export default function ResearcherPage() {
     }
   }
 
+  const check =
+    sampleCheck && selected && sampleCheck.datasetId === selected.datasetId
+      ? sampleCheck
+      : null;
+
   const delivered =
     escrow === "DELIVERED" || escrow === "CAPTURED" || escrow === "PAID_OUT";
 
@@ -468,15 +534,30 @@ export default function ResearcherPage() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {escrow === "MATCHED" && !voided && !check && (
+                <button
+                  onClick={runSampleCheck}
+                  disabled={checking || busyAction !== null}
+                  className={primaryBtn}
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  {checking ? "Checking sample…" : "Check sample"}
+                </button>
+              )}
               {escrow === "MATCHED" && !voided && (
                 <button
                   onClick={buyEscrow}
-                  disabled={busyAction !== null}
-                  className={primaryBtn}
+                  disabled={busyAction !== null || checking}
+                  className={
+                    !check ? secondaryBtn : check.passed ? primaryBtn : warnBtn
+                  }
                 >
+                  {check && !check.passed && (
+                    <AlertTriangle className="h-4 w-4" />
+                  )}
                   {busyAction === "buy"
                     ? "Authorizing…"
-                    : `Buy (escrow) · ${usd(selected.priceCents)}`}
+                    : `${check && !check.passed ? "Buy anyway" : "Buy (escrow)"} · ${usd(selected.priceCents)}`}
                 </button>
               )}
               {escrow === "AUTHORIZED" && !voided && !disputed && (
@@ -551,6 +632,29 @@ export default function ResearcherPage() {
               )}
             </div>
           </div>
+          {escrow === "MATCHED" && !check && !checkError && (
+            <p className="mt-3 text-sm text-zinc-500">
+              Check the vendor&apos;s sample for quality and privacy issues
+              before you pay.
+            </p>
+          )}
+          {checkError && (
+            <p
+              role="alert"
+              className="mt-4 inline-flex items-center gap-1.5 text-sm text-amber-700 dark:text-amber-400"
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              {checkError}
+            </p>
+          )}
+          {check && (
+            <div className="mt-4">
+              <SampleCheckCard
+                check={check}
+                warnBeforeBuy={escrow === "MATCHED"}
+              />
+            </div>
+          )}
           <div className="mt-5">
             <EscrowStepper state={escrow} voided={voided} disputed={disputed} />
           </div>
