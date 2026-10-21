@@ -11,6 +11,7 @@ import { useState } from "react";
 import Link from "next/link";
 import type { ColDef } from "ag-grid-community";
 import DataGrid from "../components/DataGrid";
+import OrderTimeline from "../components/OrderTimeline";
 import { ArrowLeft, Check, AlertTriangle, Search } from "../components/icons";
 
 interface Match {
@@ -141,6 +142,8 @@ export default function ResearcherPage() {
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [escrowNote, setEscrowNote] = useState<string | null>(null);
   const [approveUrl, setApproveUrl] = useState<string | null>(null);
+  // Bumped after every PATCH so the audit timeline refetches live.
+  const [timelineKey, setTimelineKey] = useState(0);
 
   const [question, setQuestion] = useState("");
   const [querying, setQuerying] = useState(false);
@@ -256,6 +259,7 @@ export default function ResearcherPage() {
       setEscrowNote("Escrow authorize mocked for demo (service offline).");
     } finally {
       setBusyAction(null);
+      setTimelineKey((k) => k + 1);
     }
   }
 
@@ -288,6 +292,7 @@ export default function ResearcherPage() {
       setEscrowNote(`${action} mocked for demo (service offline).`);
     } finally {
       setBusyAction(null);
+      setTimelineKey((k) => k + 1);
     }
   }
 
@@ -307,6 +312,7 @@ export default function ResearcherPage() {
       setVoided(true);
       setEscrowNote("Authorization voided — the buyer was not charged.");
       setBusyAction(null);
+      setTimelineKey((k) => k + 1);
     }
   }
 
@@ -335,6 +341,7 @@ export default function ResearcherPage() {
       setEscrowNote("Dispute raised for demo (service offline).");
     } finally {
       setBusyAction(null);
+      setTimelineKey((k) => k + 1);
     }
   }
 
@@ -556,6 +563,16 @@ export default function ResearcherPage() {
             >
               Open PayPal approval →
             </a>
+          )}
+          {orderId && (
+            <div className="mt-6 border-t border-zinc-200 pt-5 dark:border-zinc-800">
+              <h3 className="mb-3 text-sm font-semibold">Audit trail</h3>
+              <OrderTimeline
+                key={orderId}
+                orderId={orderId}
+                refreshKey={timelineKey}
+              />
+            </div>
           )}
         </section>
       )}
