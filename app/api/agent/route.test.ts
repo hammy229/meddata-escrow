@@ -1,9 +1,10 @@
 // POST /api/agent against an isolated temp DB seeded from the catalog, in
 // PAYPAL_MODE=mock with the LLM off (scripted planner) — no network.
+// Also covers the agent_runs audit trail behind GET ?runId=.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { POST } from "./route";
+import { GET, POST } from "./route";
 import { withAgentDb } from "../../../lib/agent/test-db";
 import { getOrder, withDb } from "../../../lib/db/client";
 
@@ -76,6 +77,66 @@ test(
       const res = await post(body);
       assert.equal(res.status, 422, JSON.stringify(body));
       assert.equal(typeof (await res.json()).error, "string");
+    }
+  }),
+);
+
+test(
+  "POST maps an unexpected failure to a generic 500",
+  withAgentDb(async () => {
+    // Point the DB at a directory that does not exist: the tools report the
+    // failure to the planner, but saving the run's audit record throws.
+    process.env.DATABASE_URL = "file:/nonexistent-dir/agent.sqlite";
+    const origError = console.error;
+    console.error = () => {};
+    try {
+      const res = await post({ study: STUDY, budgetCents: 5000 });
+      assert.equal(res.status, 500);
+      assert.deepEqual(await res.json(), { error: "internal error" });
+    } finally {
+      console.error = origError;
+    }
+  }),
+);
+
+function get(query: string) {
+  return GET(new Request(`http://localhost/api/agent${query}`));
+}
+
+test(
+  "every POSTed run is saved and readable via GET ?runId=",
+  withAgentDb(async () => {
+    const posted = await (
+      await post({ study: STUDY, budgetCents: 5000 })
+    ).json();
+    const res = await get(`?runId=${posted.runId}`);
+    assert.equal(res.status, 200);
+    const stored = await res.json();
+    assert.equal(stored.runId, posted.runId);
+    assert.equal(stored.study, STUDY);
+    assert.equal(stored.budgetCents, 5000);
+    assert.equal(stored.source, "scripted");
+    assert.equal(stored.orderId, posted.order.orderId);
+    assert.deepEqual(stored.steps, posted.steps);
+    assert.deepEqual(stored.recommendation, posted.recommendation);
+    assert.equal(typeof stored.createdAt, "string");
+
+    const noOrder = await (
+      await post({ study: STUDY, budgetCents: 100 })
+    ).json();
+    const stored2 = await (await get(`?runId=${noOrder.runId}`)).json();
+    assert.equal(stored2.orderId, null);
+  }),
+);
+
+test(
+  "GET is 404 for an unknown runId and 422 without one",
+  withAgentDb(async () => {
+    const missing = await get("?runId=run_nope");
+    assert.equal(missing.status, 404);
+    assert.equal(typeof (await missing.json()).error, "string");
+    for (const q of ["", "?runId=", "?runId=%20"]) {
+      assert.equal((await get(q)).status, 422, q);
     }
   }),
 );

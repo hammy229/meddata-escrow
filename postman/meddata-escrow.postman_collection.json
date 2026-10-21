@@ -802,6 +802,28 @@
       "description": "AI procurement agent that plans a purchase end to end.",
       "item": [
         {
+          "name": "Read a stored agent run (audit trail)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/agent?runId=run_7e8f9a0b-1c2d-4e5f-8a9b-0c1d2e3f4a5b",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agent"],
+              "query": [
+                {
+                  "key": "runId",
+                  "value": "run_7e8f9a0b-1c2d-4e5f-8a9b-0c1d2e3f4a5b",
+                  "disabled": false,
+                  "description": "The `runId` returned by POST /api/agent."
+                }
+              ]
+            },
+            "description": "Every POST /api/agent run is saved before the response is sent: the\nstudy, budget, planner, the escrow order it opened (if any), the full\ntool-call trace including refusals, and the agent's reasoning.\n"
+          },
+          "response": []
+        },
+        {
           "name": "Run the AI procurement agent",
           "request": {
             "method": "POST",

@@ -663,6 +663,55 @@ paths:
                     }
 
   /api/agent:
+    get:
+      tags: [Agent]
+      operationId: getAgentRun
+      summary: Read a stored agent run (audit trail)
+      description: |
+        Every POST /api/agent run is saved before the response is sent: the
+        study, budget, planner, the escrow order it opened (if any), the full
+        tool-call trace including refusals, and the agent's reasoning.
+      parameters:
+        - name: runId
+          in: query
+          required: true
+          description: The `runId` returned by POST /api/agent.
+          schema:
+            {
+              type: string,
+              examples: [run_7e8f9a0b-1c2d-4e5f-8a9b-0c1d2e3f4a5b],
+            }
+      responses:
+        "200":
+          description: The stored run.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentRun"
+              examples:
+                run:
+                  value:
+                    runId: run_7e8f9a0b-1c2d-4e5f-8a9b-0c1d2e3f4a5b
+                    study: Outcomes of statin therapy in adults with coronary heart disease
+                    budgetCents: 6000
+                    source: scripted
+                    orderId: ord_3f9c2a1e
+                    steps:
+                      - tool: search_datasets
+                        input:
+                          { study: statin therapy in coronary heart disease }
+                        output: { matches: 2 }
+                        at: "2026-10-21T18:02:11.000Z"
+                    recommendation:
+                      datasetId: ds_cardio_synthea_v1
+                      reasoning: Best match within budget; sample check passed
+                    createdAt: "2026-10-21 18:02:12"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
     post:
       tags: [Agent]
       operationId: runProcurementAgent
@@ -1249,6 +1298,40 @@ components:
             escrowState: { $ref: "#/components/schemas/EscrowState" }
             amountCents: { type: integer }
         source: { type: string, enum: [llm, scripted] }
+    AgentRun:
+      type: object
+      description: A persisted agent run (agent_runs audit table).
+      required:
+        [
+          runId,
+          study,
+          budgetCents,
+          source,
+          orderId,
+          steps,
+          recommendation,
+          createdAt,
+        ]
+      properties:
+        runId: { type: string }
+        study: { type: string }
+        budgetCents: { type: integer }
+        source: { type: string, enum: [llm, scripted] }
+        orderId:
+          type: [string, "null"]
+          description: The escrow order the run opened, or null.
+        steps:
+          type: array
+          items: { $ref: "#/components/schemas/AgentStep" }
+        recommendation:
+          type: [object, "null"]
+          required: [datasetId, reasoning]
+          properties:
+            datasetId: { type: [string, "null"] }
+            reasoning: { type: string }
+        createdAt:
+          type: string
+          description: SQLite CURRENT_TIMESTAMP (UTC, "YYYY-MM-DD HH:MM:SS").
     PaypalWebhookEvent:
       type: object
       required: [id, event_type, resource]
