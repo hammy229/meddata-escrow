@@ -377,7 +377,10 @@ export default function ResearcherPage() {
         setQueryReasons(Array.isArray(data?.reasons) ? data.reasons : []);
         return;
       }
-      setCompiled(typeof data.compiled === "string" ? data.compiled : null);
+      // The API returns { sql, params }; show the SQL the vendor actually ran.
+      setCompiled(
+        typeof data.compiled?.sql === "string" ? data.compiled.sql : null,
+      );
       setResults(Array.isArray(data.result) ? data.result : []);
       // The server meters each answered query against the order.
       setQueryCharge(
