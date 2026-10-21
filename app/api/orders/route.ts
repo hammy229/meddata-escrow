@@ -40,6 +40,7 @@ import {
   advanceOrder,
   listOrders,
   listOrderEvents,
+  summarizeOrders,
   type OrderPatch,
   type OrderFilter,
 } from "../../../lib/db/client";
@@ -86,10 +87,22 @@ function errorResponse(err: unknown): Response {
 //   GET /api/orders            -> { orders: OrderRow[] }   (newest first)
 //   GET /api/orders?status=DISPUTED&datasetId=..&buyerEmail=..  (AND filters)
 //   GET /api/orders?id=ord_..  -> { order: OrderRow }  (404 if unknown)
+//   GET /api/orders?summary=1[&datasetId=..]
+//       -> { summary: OrderSummary }  vendor earnings roll-up: countsByStatus
+//          (every EscrowState, zero-filled) plus heldCents (AUTHORIZED +
+//          DELIVERED + DISPUTED — funds in escrow), capturedCents (CAPTURED +
+//          PAID_OUT), paidOutCents (PAID_OUT), releasedCents (VOIDED).
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams;
   const id = params.get("id");
   try {
+    // `?summary` (any value, like `?events`) returns the aggregate instead of
+    // rows; `datasetId` scopes it to one listing.
+    if (params.get("summary") !== null) {
+      const datasetId = params.get("datasetId") || undefined;
+      const summary = withDb((db) => summarizeOrders(db, { datasetId }));
+      return Response.json({ summary });
+    }
     if (id !== null) {
       // `?events` (any value) also returns the order's audit timeline. Order
       // and events are read in one DB open so they are a consistent snapshot.

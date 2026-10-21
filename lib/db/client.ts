@@ -16,6 +16,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   transition,
+  ESCROW_STATES,
   type EscrowState,
   type EscrowEvent,
 } from "../escrow/state-machine";
@@ -183,6 +184,65 @@ export function listOrders(
   return db
     .prepare(`SELECT * FROM orders ${clause} ORDER BY created_at DESC, id DESC`)
     .all(...values) as OrderRow[];
+}
+
+/**
+ * Vendor earnings roll-up across orders. Every EscrowState is present in
+ * `countsByStatus` (zero-filled) so the UI never has to guess at missing keys.
+ */
+export interface OrderSummary {
+  countsByStatus: Record<EscrowState, number>;
+  /** Funds authorized but not yet captured: AUTHORIZED + DELIVERED + DISPUTED. */
+  heldCents: number;
+  /** Funds captured from the buyer: CAPTURED + PAID_OUT. */
+  capturedCents: number;
+  /** Captured funds already paid out to the vendor: PAID_OUT. */
+  paidOutCents: number;
+  /** Authorizations released back to the buyer: VOIDED. */
+  releasedCents: number;
+}
+
+const HELD_STATES: readonly EscrowState[] = [
+  "AUTHORIZED",
+  "DELIVERED",
+  "DISPUTED",
+];
+const CAPTURED_STATES: readonly EscrowState[] = ["CAPTURED", "PAID_OUT"];
+
+/**
+ * Aggregate order counts and amounts by escrow state in one GROUP BY, then
+ * fold them into the earnings buckets. Optionally scoped to one dataset.
+ */
+export function summarizeOrders(
+  db: DatabaseSync,
+  filter: { datasetId?: string } = {},
+): OrderSummary {
+  const clause = filter.datasetId ? "WHERE dataset_id = ?" : "";
+  const values = filter.datasetId ? [filter.datasetId] : [];
+  const rows = db
+    .prepare(
+      `SELECT status, COUNT(*) AS n, COALESCE(SUM(amount_cents), 0) AS cents
+       FROM orders ${clause} GROUP BY status`,
+    )
+    .all(...values) as { status: EscrowState; n: number; cents: number }[];
+
+  const countsByStatus = Object.fromEntries(
+    ESCROW_STATES.map((s) => [s, 0]),
+  ) as Record<EscrowState, number>;
+  const cents = { ...countsByStatus };
+  for (const r of rows) {
+    countsByStatus[r.status] = r.n;
+    cents[r.status] = r.cents;
+  }
+  const sum = (states: readonly EscrowState[]) =>
+    states.reduce((t, s) => t + cents[s], 0);
+  return {
+    countsByStatus,
+    heldCents: sum(HELD_STATES),
+    capturedCents: sum(CAPTURED_STATES),
+    paidOutCents: cents.PAID_OUT,
+    releasedCents: cents.VOIDED,
+  };
 }
 
 /** A persisted dataset row (snake_case columns, as stored). */

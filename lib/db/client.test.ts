@@ -11,8 +11,13 @@ import {
   advanceOrder,
   listOrders,
   listOrderEvents,
+  summarizeOrders,
 } from "./client";
-import { InvalidTransitionError } from "../escrow/state-machine";
+import {
+  InvalidTransitionError,
+  ESCROW_STATES,
+  type EscrowState,
+} from "../escrow/state-machine";
 
 // Fresh in-memory DB with the parent vendor/dataset rows that orders
 // reference (foreign keys are enforced), so tests exercise realistic inserts.
@@ -261,5 +266,57 @@ test("stores an optional note on a transition (e.g. a dispute reason)", () => {
   // The genesis row and routine transitions carry no note.
   assert.equal(events.find((e) => e.event === "CREATE")?.note, null);
   assert.equal(events.find((e) => e.event === "AUTHORIZE")?.note, null);
+  db.close();
+});
+
+test("summarizeOrders on an empty DB zero-fills every state and bucket", () => {
+  const db = freshDb();
+  const s = summarizeOrders(db);
+  assert.deepEqual(
+    Object.keys(s.countsByStatus).sort(),
+    [...ESCROW_STATES].sort(),
+  );
+  assert.ok(Object.values(s.countsByStatus).every((n) => n === 0));
+  assert.equal(s.heldCents, 0);
+  assert.equal(s.capturedCents, 0);
+  assert.equal(s.paidOutCents, 0);
+  assert.equal(s.releasedCents, 0);
+  db.close();
+});
+
+test("summarizeOrders buckets amounts by escrow state, optionally per dataset", () => {
+  const db = freshDb();
+  const add = (status: EscrowState, amountCents: number, datasetId = "ds_x") =>
+    createOrder(db, {
+      datasetId,
+      buyerEmail: "b@example.com",
+      amountCents,
+      status,
+    });
+  add("MATCHED", 1);
+  add("AUTHORIZED", 10);
+  add("DELIVERED", 20);
+  add("DISPUTED", 40);
+  add("CAPTURED", 100);
+  add("CAPTURED", 200);
+  add("PAID_OUT", 1000);
+  add("VOIDED", 5000);
+  add("CANCELLED", 7);
+  add("PAID_OUT", 4900, "ds_cardio_synthea_v1");
+
+  const all = summarizeOrders(db);
+  assert.equal(all.countsByStatus.CAPTURED, 2);
+  assert.equal(all.countsByStatus.PAID_OUT, 2);
+  assert.equal(all.countsByStatus.MATCHED, 1);
+  assert.equal(all.heldCents, 10 + 20 + 40);
+  assert.equal(all.capturedCents, 100 + 200 + 1000 + 4900);
+  assert.equal(all.paidOutCents, 1000 + 4900);
+  assert.equal(all.releasedCents, 5000);
+
+  const cardio = summarizeOrders(db, { datasetId: "ds_cardio_synthea_v1" });
+  assert.equal(cardio.countsByStatus.PAID_OUT, 1);
+  assert.equal(cardio.countsByStatus.CAPTURED, 0);
+  assert.equal(cardio.capturedCents, 4900);
+  assert.equal(cardio.heldCents, 0);
   db.close();
 });

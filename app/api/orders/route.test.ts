@@ -541,6 +541,55 @@ test(
 );
 
 test(
+  "GET ?summary=1 returns zero-filled counts and the earnings buckets",
+  withEnv(async ({ url }) => {
+    seedOrder(url, { id: "ord_m" }); // MATCHED, 4900
+    seedOrder(url, { id: "ord_a", status: "AUTHORIZED", amountCents: 1000 });
+    seedOrder(url, { id: "ord_c", status: "CAPTURED", amountCents: 2000 });
+    seedOrder(url, { id: "ord_p", status: "PAID_OUT", amountCents: 3000 });
+    seedOrder(url, { id: "ord_v", status: "VOIDED", amountCents: 500 });
+
+    const res = await GET(getReq("?summary=1"));
+    assert.equal(res.status, 200);
+    const json = (await res.json()) as {
+      summary: Record<string, unknown> & {
+        countsByStatus: Record<string, number>;
+      };
+      orders?: unknown;
+    };
+    assert.equal(json.orders, undefined);
+    assert.deepEqual(json.summary.countsByStatus, {
+      MATCHED: 1,
+      AUTHORIZED: 1,
+      DELIVERED: 0,
+      CAPTURED: 1,
+      PAID_OUT: 1,
+      DISPUTED: 0,
+      VOIDED: 1,
+      CANCELLED: 0,
+    });
+    assert.equal(json.summary.heldCents, 1000);
+    assert.equal(json.summary.capturedCents, 5000);
+    assert.equal(json.summary.paidOutCents, 3000);
+    assert.equal(json.summary.releasedCents, 500);
+  }),
+);
+
+test(
+  "GET ?summary=1&datasetId= scopes the summary to one dataset",
+  withEnv(async ({ url }) => {
+    seedOrder(url, { id: "ord_c", status: "CAPTURED", amountCents: 2000 });
+    const res = await GET(getReq("?summary=1&datasetId=ds_other"));
+    assert.equal(res.status, 200);
+    const json = (await res.json()) as {
+      summary: { capturedCents: number; countsByStatus: { CAPTURED: number } };
+    };
+    assert.equal(json.summary.capturedCents, 0);
+    assert.equal(json.summary.countsByStatus.CAPTURED, 0);
+  }),
+);
+
+test(
   "PATCH dispute records the reason on the audit event",
   withEnv(async ({ url }) => {
     const order = seedOrder(url, { id: "ord_disp", status: "AUTHORIZED" });
