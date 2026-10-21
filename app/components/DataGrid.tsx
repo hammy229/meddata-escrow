@@ -5,9 +5,10 @@
 // AG Grid 33+ requires explicit module registration and uses the Theming API
 // instead of imported CSS. We register the community bundle once and pick a
 // light/dark Quartz theme that follows the OS `prefers-color-scheme`, so the
-// grid matches the site's automatic dark mode.
-import { useSyncExternalStore } from "react";
-import { AgGridReact } from "ag-grid-react";
+// grid matches the site's automatic dark mode. Richer grids pass extra grid
+// options through `options` and reach the API through `gridRef`.
+import { useSyncExternalStore, type Ref } from "react";
+import { AgGridReact, type AgGridReactProps } from "ag-grid-react";
 import {
   AllCommunityModule,
   ModuleRegistry,
@@ -17,6 +18,9 @@ import {
   type ColDef,
 } from "ag-grid-community";
 
+// AllCommunityModule covers everything the app's grids use: quick filter,
+// text/number/date filters, row selection, pagination, pinned rows, tooltips,
+// CSV export and grid state. No Enterprise modules.
 ModuleRegistry.registerModules([AllCommunityModule]);
 
 // Match the grid to the site: PayPal-blue accent, Hanken/JetBrains fonts, zinc
@@ -37,6 +41,7 @@ const lightTheme = themeQuartz.withPart(colorSchemeLight).withParams({
   borderColor: "#e4e4e7",
   headerBackgroundColor: "#fafafa",
   rowHoverColor: "color-mix(in srgb, #0070e0 7%, transparent)",
+  selectedRowBackgroundColor: "color-mix(in srgb, #0070e0 14%, transparent)",
 });
 const darkTheme = themeQuartz.withPart(colorSchemeDark).withParams({
   ...shared,
@@ -44,6 +49,7 @@ const darkTheme = themeQuartz.withPart(colorSchemeDark).withParams({
   borderColor: "#27272a",
   headerBackgroundColor: "#131316",
   rowHoverColor: "color-mix(in srgb, #0070e0 12%, transparent)",
+  selectedRowBackgroundColor: "color-mix(in srgb, #0070e0 24%, transparent)",
 });
 
 // Subscribe to the OS color-scheme via useSyncExternalStore (SSR-safe: the
@@ -65,13 +71,21 @@ function usePrefersDark(): boolean {
 export interface DataGridProps<T> {
   rowData: T[];
   columnDefs: ColDef<T>[];
-  /** Fired with the clicked row's data (used to pick a dataset match). */
+  /** Fired with the clicked row's data. */
   onRowClicked?: (row: T) => void;
-  /** Stable row id accessor; enables selection highlighting across renders. */
+  /** Stable row id accessor; keeps row identity (and selection) across renders. */
   getRowId?: (row: T) => string;
   /** id of the currently selected row, for highlight styling. */
   selectedRowId?: string;
-  height?: number;
+  /** Pixel height, or any CSS length. */
+  height?: number | string;
+  /** Ref to the grid, for imperative calls such as `api.exportDataAsCsv()`. */
+  gridRef?: Ref<AgGridReact<T>>;
+  /**
+   * Extra AG Grid options (quick filter, row selection, pagination, events…),
+   * spread last so they override the wrapper's defaults.
+   */
+  options?: Omit<AgGridReactProps<T>, "rowData" | "columnDefs" | "theme">;
 }
 
 export default function DataGrid<T>({
@@ -81,12 +95,15 @@ export default function DataGrid<T>({
   getRowId,
   selectedRowId,
   height = 320,
+  gridRef,
+  options,
 }: DataGridProps<T>) {
   const dark = usePrefersDark();
 
   return (
     <div style={{ height, width: "100%" }}>
       <AgGridReact<T>
+        ref={gridRef}
         theme={dark ? darkTheme : lightTheme}
         rowData={rowData}
         columnDefs={columnDefs}
@@ -96,6 +113,7 @@ export default function DataGrid<T>({
           resizable: true,
           sortable: true,
         }}
+        tooltipShowDelay={250}
         getRowId={getRowId ? (p) => getRowId(p.data) : undefined}
         rowClass={onRowClicked ? "cursor-pointer" : undefined}
         rowClassRules={
@@ -109,6 +127,7 @@ export default function DataGrid<T>({
         onRowClicked={
           onRowClicked ? (e) => e.data && onRowClicked(e.data) : undefined
         }
+        {...options}
       />
     </div>
   );

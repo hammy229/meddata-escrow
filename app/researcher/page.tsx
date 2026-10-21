@@ -11,17 +11,13 @@ import { useState } from "react";
 import Link from "next/link";
 import type { ColDef } from "ag-grid-community";
 import DataGrid from "../components/DataGrid";
+import MatchesGrid, {
+  type Match,
+  type MatchSource,
+} from "../components/MatchesGrid";
 import OrderTimeline from "../components/OrderTimeline";
 import QuerySpend from "../components/QuerySpend";
 import { ArrowLeft, Check, AlertTriangle, Search } from "../components/icons";
-
-interface Match {
-  datasetId: string;
-  score: number;
-  rationale: string;
-  title: string;
-  priceCents: number;
-}
 
 // One aggregate result row: `{ group, count }`, `{ group, avg_age }`, or a
 // single scalar like `{ avg_bmi }` — the keys follow the compiled query.
@@ -48,23 +44,6 @@ const ADVANCE: Record<string, Exclude<EscrowState, null>> = {
 function usd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
-
-const matchColumns: ColDef<Match>[] = [
-  { field: "title", headerName: "Dataset", flex: 2, minWidth: 220 },
-  {
-    field: "score",
-    headerName: "Match",
-    maxWidth: 110,
-    valueFormatter: (p) => (typeof p.value === "number" ? String(p.value) : ""),
-  },
-  { field: "rationale", headerName: "Why it matched", flex: 2, minWidth: 220 },
-  {
-    field: "priceCents",
-    headerName: "Price",
-    maxWidth: 120,
-    valueFormatter: (p) => (typeof p.value === "number" ? usd(p.value) : ""),
-  },
-];
 
 // Result columns follow the returned row's keys, so a grouped average shows
 // its mean column instead of an empty "Count".
@@ -138,6 +117,7 @@ export default function ResearcherPage() {
   const [matching, setMatching] = useState(false);
   const [matchError, setMatchError] = useState<string | null>(null);
   const [matches, setMatches] = useState<Match[]>([]);
+  const [matchSource, setMatchSource] = useState<MatchSource>("keyword");
   const [selected, setSelected] = useState<Match | null>(null);
 
   const [escrow, setEscrow] = useState<EscrowState>(null);
@@ -195,6 +175,7 @@ export default function ResearcherPage() {
         return;
       }
       setMatches(Array.isArray(data.matches) ? data.matches : []);
+      setMatchSource(data.source === "llm" ? "llm" : "keyword");
     } catch {
       setMatchError("Could not reach the matching service.");
       setMatches([]);
@@ -459,17 +440,14 @@ export default function ResearcherPage() {
             <span className={stepBadge}>02</span>
             <h2 className="text-lg font-semibold">Ranked matches</h2>
             <span className="text-sm text-zinc-500">
-              · click a row to select
+              · click a row (or focus it and press Space) to select
             </span>
           </div>
           <div className="mt-4">
-            <DataGrid<Match>
-              rowData={matches}
-              columnDefs={matchColumns}
-              getRowId={(r) => r.datasetId}
-              selectedRowId={selected?.datasetId}
-              onRowClicked={selectMatch}
-              height={Math.min(80 + matches.length * 44, 360)}
+            <MatchesGrid
+              matches={matches}
+              source={matchSource}
+              onSelect={selectMatch}
             />
           </div>
         </section>
