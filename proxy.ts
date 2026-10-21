@@ -2,6 +2,7 @@
 // Kept thin: all decisions live in pure, tested helpers under lib/http/.
 import { NextResponse, type NextRequest } from "next/server";
 
+import { checkBodySize } from "./lib/http/body-limit";
 import {
   clientIp,
   createRateLimiter,
@@ -14,6 +15,14 @@ const limiter = createRateLimiter();
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  const tooBig = checkBodySize(request.method, pathname, request.headers);
+  if (tooBig) {
+    return NextResponse.json(
+      { error: tooBig.error },
+      { status: tooBig.status },
+    );
+  }
 
   const rule = rateLimitRuleFor(request.method, pathname);
   if (rule) {
