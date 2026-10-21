@@ -10,6 +10,8 @@ import { rmSync } from "node:fs";
 
 import { POST } from "./route";
 import { openDb, createOrder } from "../../../lib/db/client";
+import { listUsage, PER_QUERY_FEE_CENTS } from "../../../lib/db/usage";
+import type { EscrowState } from "../../../lib/escrow/state-machine";
 
 function tmpDbPath() {
   return join(tmpdir(), `meddata-billing-${randomUUID()}.sqlite`);
@@ -24,8 +26,9 @@ function req(body: unknown) {
 }
 
 // Open the temp DB, insert the vendor/dataset parents orders require, create
-// one order, and close. The route reopens the same file via DATABASE_URL.
-function seed(path: string): void {
+// one order (DELIVERED by default — billable), and close. The route reopens the
+// same file via DATABASE_URL.
+function seed(path: string, status: EscrowState = "DELIVERED"): void {
   const db = openDb(path);
   db.prepare(`INSERT INTO vendors (id, name) VALUES (?, ?)`).run(
     "vnd_demo_health",
@@ -39,6 +42,7 @@ function seed(path: string): void {
     datasetId: "ds_x",
     buyerEmail: "b@example.com",
     amountCents: 100,
+    status,
   });
   db.close();
 }
@@ -55,7 +59,7 @@ async function withDbEnv(path: string, fn: () => Promise<void>) {
   }
 }
 
-test("records usage for a known order (201), defaulting the fee", async () => {
+test("records usage for a known order (201) at the server fee", async () => {
   const path = tmpDbPath();
   await withDbEnv(path, async () => {
     seed(path);
@@ -66,12 +70,13 @@ test("records usage for a known order (201), defaulting the fee", async () => {
     const json = await res.json();
     assert.equal(json.orderId, "ord_test");
     assert.equal(json.charged, true);
-    assert.equal(json.chargeCents, 50); // default per-query fee
+    assert.equal(json.chargeCents, PER_QUERY_FEE_CENTS);
+    assert.equal(PER_QUERY_FEE_CENTS, 50);
     assert.match(json.usageId, /^qu_/);
   });
 });
 
-test("honors an explicit chargeCents", async () => {
+test("a chargeCents equal to the server fee is accepted", async () => {
   const path = tmpDbPath();
   await withDbEnv(path, async () => {
     seed(path);
@@ -79,13 +84,67 @@ test("honors an explicit chargeCents", async () => {
       req({
         orderId: "ord_test",
         question: "count by region",
-        chargeCents: 125,
+        chargeCents: PER_QUERY_FEE_CENTS,
       }),
     );
     assert.equal(res.status, 201);
-    const json = await res.json();
-    assert.equal(json.chargeCents, 125);
+    assert.equal((await res.json()).chargeCents, PER_QUERY_FEE_CENTS);
   });
+});
+
+test("a client-chosen chargeCents (e.g. 0 = free) is 422 and records nothing", async () => {
+  const path = tmpDbPath();
+  await withDbEnv(path, async () => {
+    seed(path);
+    for (const chargeCents of [0, 125, "50"]) {
+      const res = await POST(
+        req({ orderId: "ord_test", question: "count by region", chargeCents }),
+      );
+      assert.equal(
+        res.status,
+        422,
+        `chargeCents=${JSON.stringify(chargeCents)}`,
+      );
+    }
+    const db = openDb(path);
+    assert.equal(listUsage(db, "ord_test").length, 0);
+    db.close();
+  });
+});
+
+test("orders without data access are 409 and record nothing", async () => {
+  for (const status of [
+    "MATCHED",
+    "AUTHORIZED",
+    "DISPUTED",
+    "VOIDED",
+    "CANCELLED",
+  ] as EscrowState[]) {
+    const path = tmpDbPath();
+    await withDbEnv(path, async () => {
+      seed(path, status);
+      const res = await POST(
+        req({ orderId: "ord_test", question: "count by sex" }),
+      );
+      assert.equal(res.status, 409, status);
+      const db = openDb(path);
+      assert.equal(listUsage(db, "ord_test").length, 0);
+      db.close();
+    });
+  }
+});
+
+test("CAPTURED and PAID_OUT orders are billable", async () => {
+  for (const status of ["CAPTURED", "PAID_OUT"] as EscrowState[]) {
+    const path = tmpDbPath();
+    await withDbEnv(path, async () => {
+      seed(path, status);
+      const res = await POST(
+        req({ orderId: "ord_test", question: "count by sex" }),
+      );
+      assert.equal(res.status, 201, status);
+    });
+  }
 });
 
 test("unknown orderId -> 422 (not 500)", async () => {

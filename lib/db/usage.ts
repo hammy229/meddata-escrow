@@ -13,6 +13,12 @@ import { getOrder, withDb } from "./client";
 // reach for it here — e.g. app/api/billing/route.ts — keep working unchanged.
 export { withDb };
 
+/**
+ * The fixed per-query fee (cents), set by the server. Clients never choose what
+ * a query costs — /api/billing always records this amount.
+ */
+export const PER_QUERY_FEE_CENTS = 50;
+
 /** A persisted usage row (snake_case columns, as stored). */
 export interface UsageRow {
   id: string;
