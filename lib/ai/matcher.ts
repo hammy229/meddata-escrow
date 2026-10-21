@@ -11,6 +11,7 @@ import { readFileSync } from "node:fs";
 import * as z from "zod/v4";
 
 import { llmEnabled, structured, type LlmClient } from "../llm/client";
+import type { AiOptions } from "./options";
 
 export interface DatasetMatch {
   datasetId: string;
@@ -28,13 +29,7 @@ export interface CatalogEntry {
   recordCount: number;
 }
 
-/** Shared options for the lib/ai features that can call Claude. */
-export interface AiOptions {
-  /** Inject a client (tests). Defaults to the shared Bedrock client. */
-  client?: LlmClient;
-  /** Force the LLM path on/off. Defaults to llmEnabled(). */
-  useLlm?: boolean;
-}
+export type { AiOptions };
 
 const CATALOG_URL = new URL("../../data/catalog.json", import.meta.url);
 

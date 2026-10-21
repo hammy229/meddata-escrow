@@ -2,24 +2,35 @@
 // Converts a researcher's plain-English question into a safe, parameterized
 // query against a purchased dataset's schema.
 //
-// MOCK (stub for a hosted LLM): deterministic keyword-intent parsing that only
-// ever emits AGGREGATE SQL (COUNT / AVG / MIN / MAX / grouped counts) against a
-// generic `records` table scoped by dataset. There is no network and no model
-// call, so the flow runs locally. The real version will prompt a schema-aware
-// LLM, validate the plan against the dataset's columns, and parameterize — but
-// the async signature and the aggregate-only / parameterized output contract
-// are identical so the swap is local.
+// Two stages:
+//   1. question -> QueryPlan  { op, field, groupBy }. When the LLM is enabled,
+//      Claude on Bedrock picks the plan, constrained by a schema whose fields
+//      are enums of the whitelists below. Otherwise (or if the call fails) a
+//      deterministic keyword-intent parser picks it.
+//   2. QueryPlan -> SQL via compilePlan, a pure function shared by both paths.
+//      It re-validates the plan and only ever emits AGGREGATE SQL (COUNT / AVG
+//      / MIN / MAX / grouped COUNT or AVG) against a generic `records` table
+//      scoped by a bound dataset parameter.
+//
+// The LLM never writes SQL text: it can only choose among whitelisted enum
+// values, so nothing it says can be concatenated into a query.
+import * as z from "zod/v4";
 
-export interface CompiledQuery {
-  sql: string;
-  params: unknown[];
-}
+import { llmEnabled, structured } from "../llm/client";
+import type { AiOptions } from "./options";
 
-// Columns a mock aggregate is allowed to reference. The real version would pull
+// Columns an aggregate is allowed to reference. The real version would pull
 // this from the dataset schema; here we whitelist a few generic numeric/group
 // fields so an unrecognized field name can never reach the SQL string.
-const NUMERIC_FIELDS = ["age", "value", "cost", "los", "bmi", "score"] as const;
-const GROUP_FIELDS = [
+export const NUMERIC_FIELDS = [
+  "age",
+  "value",
+  "cost",
+  "los",
+  "bmi",
+  "score",
+] as const;
+export const GROUP_FIELDS = [
   "sex",
   "region",
   "age_group",
@@ -29,14 +40,64 @@ const GROUP_FIELDS = [
 
 const DEFAULT_NUMERIC_FIELD = "value";
 
-// Pick the first whitelisted field mentioned in the question, else a default.
+export const QueryPlan = z.object({
+  op: z.enum(["count", "avg", "min", "max"]),
+  field: z.enum(NUMERIC_FIELDS).nullable(),
+  groupBy: z.enum(GROUP_FIELDS).nullable(),
+});
+export type QueryPlan = z.infer<typeof QueryPlan>;
+
+export interface CompiledQuery {
+  sql: string;
+  params: unknown[];
+  /** The validated plan the SQL was compiled from. */
+  plan?: QueryPlan;
+  /** One-sentence, researcher-facing description of the plan (LLM path). */
+  explanation?: string;
+  /** Which planner chose the plan. */
+  source?: "llm" | "keyword";
+}
+
+/**
+ * Compile a plan to parameterized aggregate SQL. Pure and deterministic. The
+ * plan is re-validated against the whitelists first, so a caller can never get
+ * an arbitrary identifier into `sql`; the dataset id is always a bound param.
+ *
+ * MIN/MAX are never grouped: the extreme of a small group can single out one
+ * person's value, so a groupBy on those ops is ignored.
+ */
+export function compilePlan(plan: QueryPlan, datasetId: string): CompiledQuery {
+  const { op, field, groupBy } = QueryPlan.parse(plan);
+  const params: unknown[] = [datasetId];
+  const where = "FROM records WHERE dataset_id = ?";
+
+  if (op === "count") {
+    const sql = groupBy
+      ? `SELECT ${groupBy} AS "group", COUNT(*) AS count ${where} GROUP BY ${groupBy}`
+      : `SELECT COUNT(*) AS count ${where}`;
+    return { sql, params, plan: { op, field: null, groupBy } };
+  }
+
+  const f = field ?? DEFAULT_NUMERIC_FIELD;
+  if (op === "avg") {
+    const sql = groupBy
+      ? `SELECT ${groupBy} AS "group", AVG(${f}) AS avg_${f} ${where} GROUP BY ${groupBy}`
+      : `SELECT AVG(${f}) AS avg_${f} ${where}`;
+    return { sql, params, plan: { op, field: f, groupBy } };
+  }
+
+  const fn = op.toUpperCase();
+  const sql = `SELECT ${fn}(${f}) AS ${op}_${f} ${where}`;
+  return { sql, params, plan: { op, field: f, groupBy: null } };
+}
+
+// Pick the first whitelisted field mentioned in the question, else null.
 // Whitelisting (never interpolating the raw phrase) is what keeps an unknown or
 // malicious column name out of the emitted SQL.
-function pickField(
+function pickField<T extends string>(
   question: string,
-  allowed: readonly string[],
-  fallback: string,
-): string {
+  allowed: readonly T[],
+): T | null {
   const q = question.toLowerCase();
   for (const field of allowed) {
     // Match the field name (or its spaced form "age_group" -> "age group") on
@@ -46,76 +107,76 @@ function pickField(
       return field;
     }
   }
-  return fallback;
+  return null;
 }
 
 // Detect an optional "by <group>" / "per <group>" / "grouped by <group>"
 // request and return a whitelisted group column, or null.
-function detectGroupBy(question: string): string | null {
+function detectGroupBy(question: string): QueryPlan["groupBy"] {
   const q = question.toLowerCase();
   if (!/\b(by|per|grouped by|group by|broken down by)\b/.test(q)) {
     return null;
   }
-  for (const field of GROUP_FIELDS) {
-    const spaced = field.replace(/_/g, "[ _]");
-    if (new RegExp(`\\b${spaced}\\b`).test(q)) {
-      return field;
-    }
-  }
-  return null;
+  return pickField(question, GROUP_FIELDS);
 }
+
+/** Deterministic keyword-intent planner (the no-LLM path). */
+export function keywordPlan(question: string): QueryPlan {
+  const q = question.toLowerCase();
+  const field = () => pickField(question, NUMERIC_FIELDS);
+
+  if (/\b(average|avg|mean)\b/.test(q)) {
+    return { op: "avg", field: field(), groupBy: detectGroupBy(question) };
+  }
+  if (/\b(min|minimum|lowest|smallest|youngest)\b/.test(q)) {
+    return { op: "min", field: field(), groupBy: null };
+  }
+  if (/\b(max|maximum|highest|largest|oldest)\b/.test(q)) {
+    return { op: "max", field: field(), groupBy: null };
+  }
+  // Count / how many, optionally grouped. Also the SAFE FALLBACK: anything
+  // unrecognized collapses to a plain count, which can never expose a row.
+  return { op: "count", field: null, groupBy: detectGroupBy(question) };
+}
+
+const LlmPlan = QueryPlan.extend({ explanation: z.string() });
+
+const PLAN_SYSTEM =
+  "You translate a researcher's question about a medical dataset into an " +
+  "aggregate query plan. Choose op (count, avg, min, max), a numeric field " +
+  "for avg/min/max (null for count), and an optional groupBy (count/avg " +
+  "only). Use only the allowed enum values; if the question needs a column " +
+  "that is not offered, pick the closest aggregate or a plain count. " +
+  "explanation: one plain sentence describing what will be computed.";
 
 export async function nl2query(
   question: string,
   datasetId: string,
+  opts: AiOptions = {},
 ): Promise<CompiledQuery> {
-  // NOTE: real implementation — prompt the LLM with the dataset schema, have it
-  // return a structured aggregate plan, validate every field against the schema,
-  // then compile to parameterized SQL here. The checks below are the mock stand-in.
-  const q = question.toLowerCase();
-
-  // The dataset id is the ONLY user-influenced value bound into the query, and
-  // it is always a bound parameter, never interpolated. Group columns and
-  // aggregate fields come from fixed whitelists above, so no free-text from the
-  // question is ever concatenated into `sql` — this is the injection-safety point.
-  const params: unknown[] = [datasetId];
-  const groupBy = detectGroupBy(question);
-
-  // Intent: average / mean of a numeric field -> AVG(<field>)
-  if (/\b(average|avg|mean)\b/.test(q)) {
-    const field = pickField(question, NUMERIC_FIELDS, DEFAULT_NUMERIC_FIELD);
-    const select = groupBy
-      ? `SELECT ${groupBy} AS "group", AVG(${field}) AS avg_${field}`
-      : `SELECT AVG(${field}) AS avg_${field}`;
-    const sql = groupBy
-      ? `${select} FROM records WHERE dataset_id = ? GROUP BY ${groupBy}`
-      : `${select} FROM records WHERE dataset_id = ?`;
-    return { sql, params };
+  if (opts.useLlm ?? llmEnabled()) {
+    try {
+      const raw = await structured({
+        system: PLAN_SYSTEM,
+        prompt: `Question: ${question}`,
+        schema: LlmPlan,
+        client: opts.client,
+      });
+      // Re-validate locally: the enums are the injection boundary.
+      const { explanation, ...plan } = LlmPlan.parse(raw);
+      return {
+        ...compilePlan(plan, datasetId),
+        explanation,
+        source: "llm",
+      };
+    } catch (err) {
+      console.warn(
+        `nl2query: LLM plan failed, using keyword parser (${(err as Error).message})`,
+      );
+    }
   }
-
-  // Intent: minimum of a numeric field -> MIN(<field>)
-  if (/\b(min|minimum|lowest|smallest|youngest)\b/.test(q)) {
-    const field = pickField(question, NUMERIC_FIELDS, DEFAULT_NUMERIC_FIELD);
-    const sql = `SELECT MIN(${field}) AS min_${field} FROM records WHERE dataset_id = ?`;
-    return { sql, params };
-  }
-
-  // Intent: maximum of a numeric field -> MAX(<field>)
-  if (/\b(max|maximum|highest|largest|oldest)\b/.test(q)) {
-    const field = pickField(question, NUMERIC_FIELDS, DEFAULT_NUMERIC_FIELD);
-    const sql = `SELECT MAX(${field}) AS max_${field} FROM records WHERE dataset_id = ?`;
-    return { sql, params };
-  }
-
-  // Intent: count / how many -> COUNT(*), optionally grouped.
-  // Also the SAFE FALLBACK: anything unrecognized collapses to a plain count,
-  // which can never expose a row. We never emit SELECT * or row-level columns.
-  if (groupBy) {
-    const sql =
-      `SELECT ${groupBy} AS "group", COUNT(*) AS count ` +
-      `FROM records WHERE dataset_id = ? GROUP BY ${groupBy}`;
-    return { sql, params };
-  }
-  const sql = `SELECT COUNT(*) AS count FROM records WHERE dataset_id = ?`;
-  return { sql, params };
+  return {
+    ...compilePlan(keywordPlan(question), datasetId),
+    source: "keyword",
+  };
 }
