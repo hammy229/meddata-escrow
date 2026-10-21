@@ -16,6 +16,7 @@ import {
 } from "./service";
 import { openDb, createOrder, getOrder, type OrderRow } from "../db/client";
 import { createPayPalClient, type PayPalClient } from "../paypal/client";
+import type { EscrowTransition } from "../events/outbound";
 
 const DATASET_ID = "ds_service_test";
 
@@ -330,6 +331,55 @@ test(
         getOrder(openDb(url), order.id)?.payout_batch_id,
         res.payoutBatchId,
       );
+    },
+    { mock: true },
+  ),
+);
+
+test(
+  "announces creation and every successful transition (not failed ones)",
+  withDbEnv(
+    async () => {
+      const seen: EscrowTransition[] = [];
+      const deps: EscrowDeps = { emit: (t) => seen.push(t) };
+      const { orderId } = await createEscrowOrder(
+        { datasetId: DATASET_ID },
+        deps,
+      );
+      await advanceEscrowOrder({ orderId, action: "authorize" }, deps);
+      await assert.rejects(
+        advanceEscrowOrder({ orderId, action: "payout" }, deps),
+      );
+      assert.deepEqual(
+        seen.map(({ event, from, to }) => ({ event, from, to })),
+        [
+          { event: "CREATE", from: null, to: "MATCHED" },
+          { event: "AUTHORIZE", from: "MATCHED", to: "AUTHORIZED" },
+        ],
+      );
+      assert.equal(seen[0].orderId, orderId);
+      assert.equal(seen[0].amountCents, 4900);
+      assert.equal(seen[0].datasetId, DATASET_ID);
+    },
+    { mock: true },
+  ),
+);
+
+test(
+  "a throwing announcer never breaks the transition",
+  withDbEnv(
+    async ({ url }) => {
+      const order = seedOrder(url, { status: "AUTHORIZED" });
+      const deps: EscrowDeps = {
+        emit: () => {
+          throw new Error("receiver down");
+        },
+      };
+      const res = await advanceEscrowOrder(
+        { orderId: order.id, action: "deliver" },
+        deps,
+      );
+      assert.equal(res.escrowState, "DELIVERED");
     },
     { mock: true },
   ),

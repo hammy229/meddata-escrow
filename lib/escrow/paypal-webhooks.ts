@@ -25,6 +25,7 @@ import {
   type OrderRow,
 } from "../db/client";
 import { can, type EscrowEvent, type EscrowState } from "./state-machine";
+import { announce, type EscrowDeps } from "./service";
 
 /** The subset of a PayPal webhook payload we read. */
 interface PayPalWebhookEvent {
@@ -235,7 +236,16 @@ export function applyPayPalWebhookEvent(
   });
 }
 
-/** Apply one verified event against the default DB (DATABASE_URL). */
-export function processPayPalWebhookEvent(payload: unknown): WebhookOutcome {
-  return withDb((db) => applyPayPalWebhookEvent(db, payload));
+/**
+ * Apply one verified event against the default DB (DATABASE_URL); an applied
+ * transition is announced (outbound webhook) after it commits.
+ */
+export function processPayPalWebhookEvent(
+  payload: unknown,
+  deps: EscrowDeps = {},
+): WebhookOutcome {
+  const outcome = withDb((db) => applyPayPalWebhookEvent(db, payload));
+  if (outcome.kind === "applied")
+    announce(deps, outcome.order, outcome.event, outcome.from);
+  return outcome;
 }

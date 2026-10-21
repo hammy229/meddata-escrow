@@ -19,6 +19,10 @@
 // `code`, so callers can map them without parsing messages. Anything else that
 // escapes (e.g. the DB is unreachable) is unexpected.
 //
+// Every persisted creation/transition is announced via a signed, fire-and-
+// forget outbound webhook (lib/events/outbound; no-op unless
+// OUTBOUND_WEBHOOK_URL is set).
+//
 // MOCK MODE (PAYPAL_MODE=mock): no PayPal client, no network, mock ids — but
 // rows are still persisted, so the demo has real, queryable orders.
 import {
@@ -44,6 +48,10 @@ import {
 } from "../db/client";
 import { mockId, isMockMode } from "../mock/ids";
 import { vendorPayoutCents } from "./fees";
+import {
+  emitEscrowTransition,
+  type EscrowTransition,
+} from "../events/outbound";
 import { randomUUID } from "node:crypto";
 
 /** Buyer identity when the caller omits it (local demo — no auth layer yet). */
@@ -94,6 +102,38 @@ export class EscrowError extends Error {
 export interface EscrowDeps {
   /** Factory for the real PayPal client; defaults to payPalClientFromEnv. */
   paypal?: () => PayPalClient;
+  /**
+   * Called after every persisted creation/transition; defaults to the
+   * fire-and-forget signed outbound webhook (lib/events/outbound).
+   */
+  emit?: (transition: EscrowTransition) => void;
+}
+
+/**
+ * Announce a persisted creation/transition. Fire-and-forget: never awaited,
+ * never throws into the caller (the money already moved; a lost notification
+ * must not turn into an error).
+ */
+export function announce(
+  deps: EscrowDeps,
+  row: OrderRow,
+  event: EscrowEvent | "CREATE",
+  from: EscrowState | null,
+): void {
+  const transition: EscrowTransition = {
+    orderId: row.id,
+    event,
+    from,
+    to: row.status,
+    amountCents: row.amount_cents,
+    datasetId: row.dataset_id,
+  };
+  try {
+    if (deps.emit) deps.emit(transition);
+    else void emitEscrowTransition(transition);
+  } catch (err) {
+    console.error("escrow transition announce failed:", err);
+  }
 }
 
 export interface CreateEscrowOrderInput {
@@ -231,6 +271,7 @@ export async function createEscrowOrder(
         status: "MATCHED",
       }),
     );
+    announce(deps, order, "CREATE", null);
     return {
       orderId: order.id,
       paypalOrderId,
@@ -264,6 +305,7 @@ export async function createEscrowOrder(
         status: "MATCHED",
       }),
     );
+    announce(deps, order, "CREATE", null);
     return {
       orderId: order.id,
       paypalOrderId: ppOrder.orderId,
@@ -324,9 +366,12 @@ export async function advanceEscrowOrder(
       ? input.note.trim().slice(0, MAX_NOTE)
       : undefined;
   // Persist the advance (optionally patching PayPal ids) once the money move
-  // has succeeded.
-  const advance = (patch?: OrderPatch) =>
-    withDb((db) => advanceOrder(db, orderId, event, patch, note));
+  // has succeeded, then announce it.
+  const advance = (patch?: OrderPatch) => {
+    const row = withDb((db) => advanceOrder(db, orderId, event, patch, note));
+    announce(deps, row, event, order.status);
+    return row;
+  };
   const done = (
     row: OrderRow,
     extra: Omit<AdvanceEscrowOrderResult, "order" | "escrowState"> = {},
