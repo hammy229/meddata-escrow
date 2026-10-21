@@ -83,6 +83,19 @@ export function can(state: EscrowState, event: EscrowEvent): boolean {
   return TRANSITIONS[state][event] !== undefined;
 }
 
+// States in which the buyer has paid for (and received) the dataset, so it may
+// be queried. DISPUTED is excluded: access is frozen until the dispute resolves.
+const DATA_ACCESS_STATES: ReadonlySet<EscrowState> = new Set<EscrowState>([
+  "DELIVERED",
+  "CAPTURED",
+  "PAID_OUT",
+]);
+
+/** Whether an order in `state` entitles the buyer to query its dataset. */
+export function grantsDataAccess(state: EscrowState): boolean {
+  return DATA_ACCESS_STATES.has(state);
+}
+
 /** Whether `state` is terminal (no outgoing transitions). */
 export function isTerminal(state: EscrowState): boolean {
   return TERMINAL_STATES.has(state);

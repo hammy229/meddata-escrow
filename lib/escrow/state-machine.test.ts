@@ -8,6 +8,7 @@ import {
   can,
   isTerminal,
   isEscrowState,
+  grantsDataAccess,
   ESCROW_STATES,
   InvalidTransitionError,
   type EscrowState,
@@ -114,4 +115,19 @@ test("isEscrowState accepts known states and rejects anything else", () => {
   assert.equal(isEscrowState(""), false);
   assert.equal(isEscrowState(42), false);
   assert.equal(isEscrowState(undefined), false);
+});
+
+test("grantsDataAccess only for delivered-and-later, non-disputed states", () => {
+  for (const state of ["DELIVERED", "CAPTURED", "PAID_OUT"] as EscrowState[]) {
+    assert.equal(grantsDataAccess(state), true, state);
+  }
+  for (const state of [
+    "MATCHED",
+    "AUTHORIZED",
+    "DISPUTED",
+    "VOIDED",
+    "CANCELLED",
+  ] as EscrowState[]) {
+    assert.equal(grantsDataAccess(state), false, state);
+  }
 });
