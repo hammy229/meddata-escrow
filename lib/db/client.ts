@@ -280,6 +280,57 @@ export interface OrderPatch {
   payoutBatchId?: string | null;
 }
 
+/**
+ * Find the order a PayPal object refers to. Each id is matched against every
+ * PayPal reference we store (order id, authorization id, payout batch id), so
+ * a webhook can pass whatever ids its resource carries. Empty/undefined ids
+ * are skipped; returns undefined when nothing matches.
+ */
+export function findOrderByPayPalRef(
+  db: DatabaseSync,
+  ids: ReadonlyArray<string | null | undefined>,
+): OrderRow | undefined {
+  const refs = [...new Set(ids.filter((i): i is string => !!i))];
+  if (refs.length === 0) return undefined;
+  const marks = refs.map(() => "?").join(", ");
+  return db
+    .prepare(
+      `SELECT * FROM orders
+       WHERE authorization_id IN (${marks})
+          OR paypal_order_id IN (${marks})
+          OR payout_batch_id IN (${marks})
+       ORDER BY created_at DESC, id DESC
+       LIMIT 1`,
+    )
+    .get(...refs, ...refs, ...refs) as OrderRow | undefined;
+}
+
+/** A processed PayPal webhook delivery (dedupe ledger row). */
+export interface WebhookEventRecord {
+  id: string;
+  eventType: string;
+  resourceId?: string | null;
+  orderId?: string | null;
+}
+
+/**
+ * Record a PayPal webhook event as processed. Returns false — and writes
+ * nothing — when the event id was already recorded (a replay).
+ */
+export function recordWebhookEvent(
+  db: DatabaseSync,
+  rec: WebhookEventRecord,
+): boolean {
+  const { changes } = db
+    .prepare(
+      `INSERT INTO paypal_webhook_events (id, event_type, resource_id, order_id)
+       VALUES (?, ?, ?, ?)
+       ON CONFLICT(id) DO NOTHING`,
+    )
+    .run(rec.id, rec.eventType, rec.resourceId ?? null, rec.orderId ?? null);
+  return Number(changes) > 0;
+}
+
 /** A persisted vendor row (snake_case columns, as stored). */
 export interface VendorRow {
   id: string;

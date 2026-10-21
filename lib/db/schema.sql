@@ -72,6 +72,18 @@ CREATE TABLE IF NOT EXISTS order_events (
   created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- PayPal webhook deliveries we have processed, keyed by PayPal's event id.
+-- PayPal retries deliveries until it gets a 2xx, so the same event can arrive
+-- more than once; a row here means "already handled" and a replay is a no-op.
+-- Written in the same transaction as any state change the event caused.
+CREATE TABLE IF NOT EXISTS paypal_webhook_events (
+  id           TEXT PRIMARY KEY,           -- PayPal event id (WH-...)
+  event_type   TEXT NOT NULL,              -- e.g. PAYMENT.CAPTURE.COMPLETED
+  resource_id  TEXT,                       -- resource.id (auth/capture/...)
+  order_id     TEXT REFERENCES orders(id), -- NULL when no order matched
+  processed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Read an order's timeline oldest-first (by seq).
 CREATE INDEX IF NOT EXISTS idx_order_events_order
   ON order_events (order_id, seq);

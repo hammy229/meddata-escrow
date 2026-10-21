@@ -14,6 +14,8 @@ import {
   summarizeOrders,
   getVendor,
   migrate,
+  findOrderByPayPalRef,
+  recordWebhookEvent,
 } from "./client";
 import { DatabaseSync } from "node:sqlite";
 import {
@@ -321,6 +323,26 @@ test("summarizeOrders buckets amounts by escrow state, optionally per dataset", 
   assert.equal(cardio.countsByStatus.CAPTURED, 0);
   assert.equal(cardio.capturedCents, 4900);
   assert.equal(cardio.heldCents, 0);
+  db.close();
+});
+
+test("findOrderByPayPalRef matches any stored PayPal id; recordWebhookEvent dedupes", () => {
+  const db = freshDb();
+  const order = createOrder(db, {
+    datasetId: "ds_x",
+    buyerEmail: "b@example.com",
+    amountCents: 100,
+    paypalOrderId: "PP-1",
+    authorizationId: "AUTH-1",
+  });
+  assert.equal(findOrderByPayPalRef(db, ["AUTH-1"])?.id, order.id);
+  assert.equal(findOrderByPayPalRef(db, [undefined, "PP-1"])?.id, order.id);
+  assert.equal(findOrderByPayPalRef(db, ["nope"]), undefined);
+  assert.equal(findOrderByPayPalRef(db, []), undefined);
+
+  const rec = { id: "WH-1", eventType: "X", orderId: order.id };
+  assert.equal(recordWebhookEvent(db, rec), true);
+  assert.equal(recordWebhookEvent(db, rec), false);
   db.close();
 });
 
