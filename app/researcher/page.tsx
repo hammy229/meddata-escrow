@@ -9,13 +9,15 @@
 // this file only calls them.
 import { useState } from "react";
 import Link from "next/link";
-import type { ColDef } from "ag-grid-community";
-import DataGrid from "../components/DataGrid";
 import MatchesGrid, {
   type Match,
   type MatchSource,
 } from "../components/MatchesGrid";
 import OrderTimeline from "../components/OrderTimeline";
+import QueryResult, {
+  type AggregateRow,
+  type CompiledQuery,
+} from "../components/QueryResult";
 import SampleCheckCard, {
   type SampleCheck,
 } from "../components/SampleCheckCard";
@@ -27,10 +29,6 @@ import {
   Search,
   ShieldCheck,
 } from "../components/icons";
-
-// One aggregate result row: `{ group, count }`, `{ group, avg_age }`, or a
-// single scalar like `{ avg_bmi }` — the keys follow the compiled query.
-type AggregateRow = Record<string, string | number>;
 
 // The escrow lifecycle, in order. The UI advances through these as the flow
 // progresses; VOIDED is a terminal off-ramp handled separately.
@@ -52,16 +50,6 @@ const ADVANCE: Record<string, Exclude<EscrowState, null>> = {
 
 function usd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
-}
-
-// Result columns follow the returned row's keys, so a grouped average shows
-// its mean column instead of an empty "Count".
-function resultColumns(rows: AggregateRow[]): ColDef<AggregateRow>[] {
-  return Object.keys(rows[0] ?? {}).map((field) =>
-    field === "group"
-      ? { field, headerName: "Group", flex: 2 }
-      : { field, headerName: field, flex: 1, maxWidth: 160 },
-  );
 }
 
 function EscrowStepper({
@@ -157,7 +145,7 @@ export default function ResearcherPage() {
   const [querying, setQuerying] = useState(false);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [queryReasons, setQueryReasons] = useState<string[]>([]);
-  const [compiled, setCompiled] = useState<string | null>(null);
+  const [compiled, setCompiled] = useState<CompiledQuery | null>(null);
   const [results, setResults] = useState<AggregateRow[] | null>(null);
   const [queryCharge, setQueryCharge] = useState<number | null>(null);
   // Bumped after every answered query so the spend tally refetches.
@@ -422,9 +410,22 @@ export default function ResearcherPage() {
         setQueryReasons(Array.isArray(data?.reasons) ? data.reasons : []);
         return;
       }
-      // The API returns { sql, params }; show the SQL the vendor actually ran.
+      // Show the SQL the vendor actually ran, plus how it was planned.
+      const c = data.compiled;
       setCompiled(
-        typeof data.compiled?.sql === "string" ? data.compiled.sql : null,
+        typeof c?.sql === "string"
+          ? {
+              sql: c.sql,
+              plan:
+                c.plan && typeof c.plan.op === "string" ? c.plan : undefined,
+              explanation:
+                typeof c.explanation === "string" ? c.explanation : undefined,
+              source:
+                c.source === "llm" || c.source === "keyword"
+                  ? c.source
+                  : undefined,
+            }
+          : null,
       );
       setResults(Array.isArray(data.result) ? data.result : []);
       // The server meters each answered query against the order.
@@ -730,25 +731,15 @@ export default function ResearcherPage() {
             </div>
           )}
 
-          {compiled && (
-            <pre className="mt-4 overflow-x-auto rounded-xl border border-zinc-200 bg-zinc-50 p-4 font-mono text-xs text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-300">
-              {compiled}
-            </pre>
-          )}
-
-          {results && (
-            <div className="mt-4">
-              <DataGrid<AggregateRow>
-                rowData={results}
-                columnDefs={resultColumns(results)}
-                height={Math.min(80 + results.length * 44, 360)}
-              />
-              {queryCharge !== null && (
-                <p className="mt-2 text-xs text-zinc-500">
-                  Billed {usd(queryCharge)} to this order.
-                </p>
-              )}
-            </div>
+          <QueryResult
+            compiled={compiled}
+            rows={results}
+            fileStem={selected.datasetId}
+          />
+          {results && queryCharge !== null && (
+            <p className="mt-2 text-xs text-zinc-500">
+              Billed {usd(queryCharge)} to this order.
+            </p>
           )}
 
           {orderId && (
