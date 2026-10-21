@@ -501,7 +501,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "match"]
             },
-            "description": "Returns catalog datasets ranked by relevance to a plain-English study\ndescription, each enriched with its catalog title and listed price.\n\nPreview: the response gains `source` (`llm` when ranked by the model,\n`keyword` for the deterministic fallback), and the body may instead be\n`{ \"sampleCheck\": datasetId }` to run a sample-quality check on one\ndataset before buying.\n",
+            "description": "Returns catalog datasets ranked by relevance to a plain-English study\ndescription, each enriched with its catalog title and listed price.\n\nWhen `LLM_PROVIDER=bedrock`, Claude on Amazon Bedrock ranks the catalog;\notherwise (or if the model call fails) a deterministic keyword matcher\ndoes. `source` says which (`llm` | `keyword`), per response and per match.\n\nThe body may instead be `{ \"sampleCheck\": datasetId, \"description\"? }` to\nrun the pre-purchase sample quality check on one dataset. The check can\nonly tighten: the model's verdict is AND-ed with deterministic rules.\n",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"description\": \"Heart disease cohort with cardiology encounters\"\n}",

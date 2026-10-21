@@ -126,10 +126,13 @@ paths:
         Returns catalog datasets ranked by relevance to a plain-English study
         description, each enriched with its catalog title and listed price.
 
-        Preview: the response gains `source` (`llm` when ranked by the model,
-        `keyword` for the deterministic fallback), and the body may instead be
-        `{ "sampleCheck": datasetId }` to run a sample-quality check on one
-        dataset before buying.
+        When `LLM_PROVIDER=bedrock`, Claude on Amazon Bedrock ranks the catalog;
+        otherwise (or if the model call fails) a deterministic keyword matcher
+        does. `source` says which (`llm` | `keyword`), per response and per match.
+
+        The body may instead be `{ "sampleCheck": datasetId, "description"? }` to
+        run the pre-purchase sample quality check on one dataset. The check can
+        only tighten: the model's verdict is AND-ed with deterministic rules.
       requestBody:
         required: true
         content:
@@ -143,12 +146,13 @@ paths:
                 value:
                   description: Heart disease cohort with cardiology encounters
               sampleCheck:
-                summary: Sample check (preview)
+                summary: Sample check
                 value:
                   sampleCheck: ds_cardio_synthea_v1
+                  description: Heart disease cohort with cardiology encounters
       responses:
         "200":
-          description: Ranked matches (or a sample-check verdict, preview).
+          description: Ranked matches, or a sample-check verdict.
           content:
             application/json:
               schema:
@@ -171,15 +175,17 @@ paths:
                         priceCents: 5900
                     source: keyword
                 sampleCheck:
-                  summary: Sample check verdict (preview)
+                  summary: Sample check verdict
                   value:
                     sampleCheck:
                       passed: true
-                      score: 0.92
+                      score: 92
                       findings:
                         - All sampled records are synthetic (Synthea)
                         - No direct identifiers in sampled columns
-                      source: llm
+                      source: rules
+        "404":
+          $ref: "#/components/responses/NotFound"
         "422":
           $ref: "#/components/responses/ValidationError"
 
@@ -924,10 +930,16 @@ components:
           }
     SampleCheckRequest:
       type: object
-      x-status: preview
       required: [sampleCheck]
       properties:
-        sampleCheck: { type: string, description: Dataset id to sample-check. }
+        sampleCheck:
+          {
+            type: string,
+            minLength: 1,
+            description: Dataset id to sample-check.,
+          }
+        description:
+          { type: string, description: Optional study description for context. }
     DatasetMatch:
       type: object
       required: [datasetId, score, rationale, title, priceCents]
@@ -937,21 +949,20 @@ components:
         rationale: { type: string }
         title: { type: [string, "null"] }
         priceCents: { type: [integer, "null"] }
+        source: { type: string, enum: [llm, keyword] }
     MatchResponse:
       type: object
-      required: [matches]
+      required: [matches, source]
       properties:
         matches:
           type: array
           items: { $ref: "#/components/schemas/DatasetMatch" }
         source:
-          x-status: preview
           type: string
           enum: [llm, keyword]
           description: Whether the ranking came from the model or the keyword fallback.
     SampleCheckResponse:
       type: object
-      x-status: preview
       required: [sampleCheck]
       properties:
         sampleCheck:
@@ -959,11 +970,11 @@ components:
           required: [passed, score, findings, source]
           properties:
             passed: { type: boolean }
-            score: { type: number }
+            score: { type: number, minimum: 0, maximum: 100 }
             findings:
               type: array
               items: { type: string }
-            source: { type: string, enum: [llm, keyword] }
+            source: { type: string, enum: [llm, rules] }
     OrderListResponse:
       type: object
       required: [orders]
