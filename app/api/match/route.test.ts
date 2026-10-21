@@ -39,6 +39,29 @@ test("returns ranked, catalog-enriched matches (200)", async () => {
   assert.equal(json.source, "keyword");
 });
 
+test("sampleCheck returns the rules verdict for a catalog dataset (200)", async () => {
+  const res = await POST(
+    req({ sampleCheck: "ds_diabetes_synthea_v1", description: "HbA1c" }),
+  );
+  assert.equal(res.status, 200);
+  const { sampleCheck } = await res.json();
+  assert.equal(sampleCheck.passed, true);
+  assert.equal(sampleCheck.source, "rules");
+  assert.equal(typeof sampleCheck.score, "number");
+  assert.ok(Array.isArray(sampleCheck.findings));
+});
+
+test("sampleCheck for an unknown dataset -> 404", async () => {
+  const res = await POST(req({ sampleCheck: "ds_nope" }));
+  assert.equal(res.status, 404);
+  assert.equal(typeof (await res.json()).error, "string");
+});
+
+test("sampleCheck that is not a string -> 422", async () => {
+  const res = await POST(req({ sampleCheck: 42 }));
+  assert.equal(res.status, 422);
+});
+
 test("empty description -> 422 with { error }", async () => {
   const res = await POST(req({ description: "   " }));
   assert.equal(res.status, 422);
