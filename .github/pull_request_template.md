@@ -18,6 +18,8 @@
 - [ ] Uses [Conventional Commits](https://www.conventionalcommits.org/)
 - [ ] `npm run lint` passes
 - [ ] `npm run typecheck` passes
+- [ ] `npm test` passes
 - [ ] `npm run build` passes
 - [ ] No secrets committed (only `.env.example`)
 - [ ] All data remains synthetic (no real patient data)
+- [ ] Docs updated where behavior changed

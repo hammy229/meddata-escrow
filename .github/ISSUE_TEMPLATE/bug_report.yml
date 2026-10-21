@@ -1,0 +1,55 @@
+name: Bug report
+description: Report something that isn't working
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Never paste real patient data (PHI) or secrets** (API keys, tokens, `.env.local` contents).
+        This project uses synthetic data only. Report security issues privately via
+        [SECURITY.md](https://github.com/hammy229/meddata-escrow/blob/main/SECURITY.md), not here.
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: A clear description of what is going wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node version, branch or commit.
+      placeholder: |
+        - OS:
+        - Node version:
+        - Branch / commit:
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Logs or screenshots. Redact anything sensitive.
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I have not included real patient data (PHI) or secrets in this report.
+          required: true
