@@ -5,7 +5,8 @@
 meddata-escrow is a single Next.js (App Router) application. The UI (researcher
 and vendor workspaces) and the backend (Next.js API routes) live in one
 TypeScript codebase. AI logic sits in `lib/ai`, the PayPal integration in
-`lib/paypal`, and persistence in `lib/db` (SQLite locally, Postgres in prod).
+`lib/paypal`, and persistence in `lib/db` (SQLite via Node's built-in `node:sqlite`; SQL kept
+portable).
 
 ## Components
 
@@ -80,5 +81,7 @@ See [`../lib/db/schema.sql`](../lib/db/schema.sql): `vendors`, `datasets`,
 
 ## Deployment (Render)
 
-Defined in [`../render.yaml`](../render.yaml): a Node web service plus a managed
-Postgres instance. Secrets are set in the Render dashboard, never committed.
+Defined in [`../render.yaml`](../render.yaml): a Node 24 web service that seeds
+a SQLite demo database at boot and health-checks `/api/health`. It runs in
+`PAYPAL_MODE=mock` until PayPal sandbox secrets are added. Secrets are set in the
+Render dashboard, never committed.

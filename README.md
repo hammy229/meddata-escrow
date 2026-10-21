@@ -51,7 +51,7 @@ Medical-school researchers waste weeks sourcing data: they can't inspect quality
 | **PayPal** (Orders/Payments API, sandbox) | Escrow via authorize-then-capture; per-query billing (`lib/paypal/client.ts`, `app/api/orders`, `app/api/billing`) |
 | **LLM API** (hosted)                      | Dataset matching, natural-language → query translation, and privacy screening (`lib/ai/*`)                         |
 | **AG Grid**                               | Interactive dataset catalog and query-result tables in the researcher/vendor UIs                                   |
-| **Render**                                | One-click deploy of the web service (+ Postgres) via [`render.yaml`](./render.yaml)                                |
+| **Render**                                | One-click Blueprint deploy via [`render.yaml`](./render.yaml): seeded SQLite demo, `/api/health` check             |
 | **Postman**                               | API collection to exercise and demo every endpoint ([`postman/`](./postman))                                       |
 
 ## Architecture
@@ -65,7 +65,7 @@ Researcher UI ─▶ /api/match   ─▶ lib/ai/matcher          (rank vendor da
                               └▶ lib/ai/privacy-guard     (screen query + results)
              ─▶ /api/billing ─▶ lib/paypal/client        (per-query charge)
 Vendor UI    ─▶ manage catalog (data/catalog.json → DB via lib/db)
-Data layer   ─▶ lib/db/schema.sql  (SQLite local · Postgres in prod)
+Data layer   ─▶ lib/db/schema.sql  (SQLite via node:sqlite; portable SQL)
              ─▶ order_events        (append-only audit trail, one row per transition)
 ```
 
@@ -134,17 +134,17 @@ Production build: `npm run build && npm start`.
 
 ### Environment variables
 
-| Variable                       | Required | Description                                            |
-| ------------------------------ | :------: | ------------------------------------------------------ |
-| `PAYPAL_CLIENT_ID`             |    ✅    | PayPal **sandbox** app client ID                       |
-| `PAYPAL_CLIENT_SECRET`         |    ✅    | PayPal **sandbox** app secret                          |
-| `PAYPAL_API_BASE`              |    ✅    | PayPal API base (`https://api-m.sandbox.paypal.com`)   |
-| `NEXT_PUBLIC_PAYPAL_CLIENT_ID` |    ✅    | Client ID exposed to the browser for the PayPal JS SDK |
-| `LLM_API_KEY`                  |    ✅    | Hosted LLM API key                                     |
-| `LLM_API_BASE`                 |    ✅    | LLM API base URL                                       |
-| `LLM_MODEL`                    |    ✅    | LLM model name                                         |
-| `DATABASE_URL`                 |    ✅    | `file:./data/dev.sqlite` locally; Postgres URL in prod |
-| `NEXT_PUBLIC_APP_URL`          |    ✅    | Public base URL of the app                             |
+| Variable                       | Required | Description                                                                            |
+| ------------------------------ | :------: | -------------------------------------------------------------------------------------- |
+| `PAYPAL_CLIENT_ID`             |    ✅    | PayPal **sandbox** app client ID                                                       |
+| `PAYPAL_CLIENT_SECRET`         |    ✅    | PayPal **sandbox** app secret                                                          |
+| `PAYPAL_API_BASE`              |    ✅    | PayPal API base (`https://api-m.sandbox.paypal.com`)                                   |
+| `NEXT_PUBLIC_PAYPAL_CLIENT_ID` |    ✅    | Client ID exposed to the browser for the PayPal JS SDK                                 |
+| `LLM_API_KEY`                  |    ✅    | Hosted LLM API key                                                                     |
+| `LLM_API_BASE`                 |    ✅    | LLM API base URL                                                                       |
+| `LLM_MODEL`                    |    ✅    | LLM model name                                                                         |
+| `DATABASE_URL`                 |    ✅    | `file:./data/dev.sqlite` locally; `file:./data/demo.sqlite` on Render (seeded at boot) |
+| `NEXT_PUBLIC_APP_URL`          |    ✅    | Public base URL of the app                                                             |
 
 > 🔒 Never commit secrets. Only `.env.example` (with empty placeholders) is tracked.
 

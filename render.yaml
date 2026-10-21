@@ -1,38 +1,53 @@
 # Render deploy config — https://render.com/docs/blueprint-spec
-# Secrets (PayPal, LLM) are set in the Render dashboard, never committed.
+# Secrets (PayPal, AWS) are set in the Render dashboard, never committed.
+#
+# The app persists to SQLite via Node's built-in node:sqlite. The free plan has
+# no persistent disk, so the demo database is re-created and seeded with the
+# synthetic catalog on every boot — fine for a demo, and it means judges always
+# start from a clean marketplace. Add a Render disk and point DATABASE_URL at it
+# to keep orders across restarts.
 services:
   - type: web
     name: meddata-escrow
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    # tsx (a devDependency) runs the seed script at boot, so keep dev deps.
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run seed && npm start
     healthCheckPath: /api/health
     envVars:
       # node:sqlite needs Node >= 22 (package.json engines); match CI's 24.
       - key: NODE_VERSION
         value: "24"
       - key: DATABASE_URL
-        fromDatabase:
-          name: meddata-escrow-db
-          property: connectionString
+        value: file:./data/demo.sqlite
+      # Runs the full escrow arc with no PayPal keys. Remove (and set the
+      # PAYPAL_* secrets below) to run against the PayPal sandbox.
+      - key: PAYPAL_MODE
+        value: mock
       - key: PAYPAL_CLIENT_ID
         sync: false
       - key: PAYPAL_CLIENT_SECRET
         sync: false
       - key: PAYPAL_API_BASE
         value: https://api-m.sandbox.paypal.com
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
       - key: NEXT_PUBLIC_PAYPAL_CLIENT_ID
         sync: false
-      - key: LLM_API_KEY
+      # Claude on Amazon Bedrock. Set LLM_PROVIDER=bedrock plus AWS keys to
+      # enable it; otherwise the deterministic fallbacks are used.
+      - key: LLM_PROVIDER
         sync: false
-      - key: LLM_API_BASE
+      - key: AWS_REGION
+        value: us-east-1
+      - key: AWS_ACCESS_KEY_ID
         sync: false
-      - key: LLM_MODEL
+      - key: AWS_SECRET_ACCESS_KEY
         sync: false
-      - key: NEXT_PUBLIC_APP_URL
+      - key: OUTBOUND_WEBHOOK_URL
         sync: false
-
-databases:
-  - name: meddata-escrow-db
-    plan: free
+      - key: OUTBOUND_WEBHOOK_SECRET
+        sync: false
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false
