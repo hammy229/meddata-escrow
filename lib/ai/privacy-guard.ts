@@ -51,6 +51,70 @@ const AGGREGATE_MARKERS = [
   "group by",
 ];
 
+// Row-level intent phrasings in a plain-English question. Each pattern names a
+// way to ask for individual records rather than an aggregate; the label is what
+// we report back. Kept deliberately broad — a false positive just asks the
+// researcher to rephrase, a false negative could leak a record.
+const ROW_LEVEL_PHRASES: { re: RegExp; label: string }[] = [
+  { re: /select\s+\*/, label: "SELECT *" },
+  {
+    re: /\blist\s+(all\s+|every\s+|the\s+)*(patients|records|rows|people|persons|members)\b/,
+    label: "list of records",
+  },
+  {
+    re: /\bshow\s+(me\s+)?(all\s+|every\s+|the\s+)*(patients|records|rows|people|data)\b/,
+    label: "show records",
+  },
+  {
+    re: /\b(each|every)\s+(patient|person|record|row|member)\b/,
+    label: "each record",
+  },
+  { re: /\bindividual\b/, label: "individual" },
+  { re: /\b(export|dump|download|raw)\b/, label: "export / raw data" },
+  { re: /\blimit\s+1\b/, label: "LIMIT 1" },
+  {
+    re: /\b(one|single|a specific|specific|particular)\s+(patient|person|record|row|member)\b/,
+    label: "a single record",
+  },
+];
+
+/**
+ * Screen a researcher's plain-English question for intent, BEFORE it is
+ * compiled. Unlike `checkQuery` this does not demand SQL syntax — "How many
+ * patients by sex?" is a fine aggregate ask — it only rejects questions that
+ * mention identifiers or ask for row-level records. The compiled SQL is then
+ * re-checked with `checkQuery` (defense in depth), so this screen is about
+ * intent, not proof of aggregation.
+ */
+export async function checkQuestion(
+  question: string,
+  _datasetId: string,
+): Promise<PrivacyVerdict> {
+  const reasons: string[] = [];
+  const q = question.toLowerCase();
+
+  // Identifier mentions, in column form ("date_of_birth") or spoken form
+  // ("date of birth"), with an optional plural ("names", "emails").
+  for (const col of PII_COLUMNS) {
+    const spoken = col.replace(/_/g, "[ _]");
+    const re = new RegExp(`(^|[^a-z0-9_])${spoken}(e?s)?([^a-z0-9_]|$)`);
+    if (re.test(q)) {
+      reasons.push(`Question mentions a PII/identifier field: "${col}".`);
+    }
+  }
+
+  for (const { re, label } of ROW_LEVEL_PHRASES) {
+    if (re.test(q)) {
+      reasons.push(
+        `Question asks for row-level data (${label}); only aggregate ` +
+          "questions are permitted.",
+      );
+    }
+  }
+
+  return { allowed: reasons.length === 0, reasons };
+}
+
 export async function checkQuery(
   query: string,
   _datasetId: string,

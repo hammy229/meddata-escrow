@@ -1,7 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { checkQuery, checkResult, MIN_CELL_SIZE } from "./privacy-guard";
+import {
+  checkQuery,
+  checkQuestion,
+  checkResult,
+  MIN_CELL_SIZE,
+} from "./privacy-guard";
 
 test("allows a plain aggregate query", async () => {
   const v = await checkQuery(
@@ -84,4 +89,55 @@ test("checkResult fails closed on a non-array", async () => {
   // @ts-expect-error intentionally wrong shape
   const v = await checkResult(null);
   assert.equal(v.allowed, false);
+});
+
+test("checkQuestion allows plain-English aggregate questions (no SQL needed)", async () => {
+  for (const q of [
+    "How many patients by sex?",
+    "average age by region",
+    "What is the oldest age in the cohort?",
+    "count of patients per diagnosis",
+    "How many individuals were admitted in 2023?",
+  ]) {
+    const v = await checkQuestion(q, "ds_x");
+    assert.equal(v.allowed, true, `${q}: ${v.reasons.join("; ")}`);
+  }
+});
+
+test("checkQuestion rejects identifier mentions in spoken or column form", async () => {
+  for (const q of [
+    "What are the patient names?",
+    "average age by zip code",
+    "count by date of birth",
+    "group by social_security",
+    "show emails of patients",
+  ]) {
+    const v = await checkQuestion(q, "ds_x");
+    assert.equal(v.allowed, false, q);
+    assert.ok(
+      v.reasons.some((r) => /PII/.test(r)),
+      q,
+    );
+  }
+});
+
+test("checkQuestion rejects row-level asks", async () => {
+  for (const q of [
+    "select * from patients",
+    "list all patients",
+    "show me the records",
+    "age of each patient",
+    "individual level data please",
+    "export the dataset",
+    "give me the raw data",
+    "pick one patient over 90",
+    "count(*) from records limit 1",
+  ]) {
+    const v = await checkQuestion(q, "ds_x");
+    assert.equal(v.allowed, false, q);
+    assert.ok(
+      v.reasons.some((r) => /row-level/.test(r)),
+      q,
+    );
+  }
 });

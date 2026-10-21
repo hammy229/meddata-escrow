@@ -14,12 +14,12 @@ function req(body: unknown) {
 }
 
 test("happy path returns a privacy-safe aggregate (200)", async () => {
-  // checkQuery gates the raw question: it must read as an aggregate ask (carry
-  // an aggregate marker) and contain no row-level / PII phrasing.
+  // Plain English is enough: the question is screened for intent, and the
+  // compiled SQL (not the question) must carry the aggregate.
   const res = await POST(
     req({
       datasetId: "ds_cardio_synthea_v1",
-      question: "count(*) of patients by sex",
+      question: "How many patients by sex?",
     }),
   );
   assert.equal(res.status, 200);
@@ -43,6 +43,32 @@ test("row-level / SELECT * question is rejected (403)", async () => {
   const json = await res.json();
   assert.equal(json.error, "query rejected");
   assert.ok(Array.isArray(json.reasons) && json.reasons.length > 0);
+});
+
+test("plain-English average question returns 200", async () => {
+  const res = await POST(
+    req({ datasetId: "ds_x", question: "average age by region" }),
+  );
+  assert.equal(res.status, 200);
+  const json = await res.json();
+  assert.match(json.compiled.sql, /AVG\(age\)/);
+});
+
+test("PII question is rejected (403)", async () => {
+  const res = await POST(
+    req({ datasetId: "ds_x", question: "How many patients by zip code?" }),
+  );
+  assert.equal(res.status, 403);
+  const json = await res.json();
+  assert.equal(json.error, "query rejected");
+  assert.ok(json.reasons.some((r: string) => /zip/.test(r)));
+});
+
+test("row-level plain-English question is rejected (403)", async () => {
+  const res = await POST(
+    req({ datasetId: "ds_x", question: "List all patients in the cohort" }),
+  );
+  assert.equal(res.status, 403);
 });
 
 test("missing fields -> 422", async () => {
