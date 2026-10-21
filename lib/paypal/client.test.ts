@@ -206,3 +206,67 @@ test("throws PayPalError with the HTTP status on a non-2xx response", async () =
     },
   );
 });
+
+test("every mutating call sends a PayPal-Request-Id, derived when not given", async () => {
+  const { fn, calls } = fakeFetch({
+    "/v1/oauth2/token": TOKEN_OK,
+    "/v2/checkout/orders": () => ({
+      status: 201,
+      body: { id: "ORDER-1", status: "CREATED", links: [] },
+    }),
+    "/v2/checkout/orders/ORDER-1/authorize": () => ({
+      status: 201,
+      body: {
+        id: "ORDER-1",
+        purchase_units: [
+          { payments: { authorizations: [{ id: "AUTH-9", status: "OK" }] } },
+        ],
+      },
+    }),
+    "/v2/payments/authorizations/AUTH-9/capture": () => ({
+      status: 201,
+      body: { id: "CAP-1", status: "COMPLETED" },
+    }),
+    "/v2/payments/authorizations/AUTH-9/void": () => ({ status: 204 }),
+    "/v2/payments/authorizations/AUTH-9/reauthorize": () => ({
+      status: 201,
+      body: { id: "AUTH-10", status: "CREATED" },
+    }),
+  });
+  const pp = createPayPalClient({ ...CREDS, fetch: fn });
+  await pp.createAuthorizeOrder({ amount: 1, requestId: "ord_1:create" });
+  await pp.createAuthorizeOrder({ amount: 1 });
+  await pp.authorizeOrder("ORDER-1");
+  await pp.captureAuthorization("AUTH-9");
+  await pp.voidAuthorization("AUTH-9");
+  await pp.reauthorizeAuthorization("AUTH-9", { amount: 1 });
+
+  const ids = calls
+    .filter((c) => !c.url.endsWith("/v1/oauth2/token"))
+    .map((c) => c.headers["PayPal-Request-Id"]);
+  assert.equal(ids[0], "ord_1:create");
+  assert.match(ids[1], /^create:[0-9a-f-]{36}$/);
+  assert.deepEqual(ids.slice(2), [
+    "ORDER-1:authorize",
+    "AUTH-9:capture",
+    "AUTH-9:void",
+    "AUTH-9:reauthorize",
+  ]);
+});
+
+test("a retried capture reuses the same PayPal-Request-Id", async () => {
+  const { fn, calls } = fakeFetch({
+    "/v1/oauth2/token": TOKEN_OK,
+    "/v2/payments/authorizations/AUTH-9/capture": () => ({
+      status: 201,
+      body: { id: "CAP-1", status: "COMPLETED" },
+    }),
+  });
+  const pp = createPayPalClient({ ...CREDS, fetch: fn });
+  await pp.captureAuthorization("AUTH-9", { requestId: "ord_7:capture" });
+  await pp.captureAuthorization("AUTH-9", { requestId: "ord_7:capture" });
+  const keys = calls
+    .filter((c) => c.url.endsWith("/capture"))
+    .map((c) => c.headers["PayPal-Request-Id"]);
+  assert.deepEqual(keys, ["ord_7:capture", "ord_7:capture"]);
+});

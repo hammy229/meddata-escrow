@@ -40,6 +40,7 @@ import {
   type OrderPatch,
 } from "../db/client";
 import { mockId, isMockMode } from "../mock/ids";
+import { randomUUID } from "node:crypto";
 
 /** Buyer identity when the caller omits it (local demo — no auth layer yet). */
 export const DEFAULT_BUYER_EMAIL = "demo-buyer@meddata.test";
@@ -138,6 +139,19 @@ export interface AdvanceEscrowOrderResult {
 
 const MAX_NOTE = 500;
 
+/**
+ * Deterministic PayPal-Request-Id for a money move on one of our orders, e.g.
+ * `ord_…:capture`. Keyed by the PayPal operation (not the caller's action), so
+ * a capture and a dispute-resolve capture of the same order share one key: a
+ * retry of either can never charge the buyer twice.
+ */
+export function paypalRequestId(
+  orderId: string,
+  operation: "create" | "authorize" | "capture" | "void" | "payout",
+): string {
+  return `${orderId}:${operation}`;
+}
+
 function invalid(message: string): EscrowError {
   return new EscrowError(422, message, "VALIDATION");
 }
@@ -220,16 +234,21 @@ export async function createEscrowOrder(
   }
 
   try {
+    // Mint our order id up front so the PayPal create call can carry an
+    // idempotency key derived from it.
+    const orderId = `ord_${randomUUID()}`;
     const pp = (deps.paypal ?? payPalClientFromEnv)();
     const ppOrder = await pp.createAuthorizeOrder({
       amount,
       currency: typeof input.currency === "string" ? input.currency : undefined,
       referenceId:
         typeof input.referenceId === "string" ? input.referenceId : undefined,
+      requestId: paypalRequestId(orderId, "create"),
     });
     // Persist only after PayPal confirms the order — no dangling rows.
     const order = withDb((db) =>
       createOrder(db, {
+        id: orderId,
         datasetId,
         buyerEmail,
         amountCents,
@@ -347,6 +366,12 @@ export async function advanceEscrowOrder(
       "NOT_IMPLEMENTED",
     );
 
+  // Caller-supplied idempotency key wins; otherwise derive one per operation.
+  const requestIdFor = (op: "authorize" | "capture" | "void") =>
+    typeof input.requestId === "string" && input.requestId.trim() !== ""
+      ? input.requestId
+      : paypalRequestId(orderId, op);
+
   try {
     const pp = (deps.paypal ?? payPalClientFromEnv)();
     if (event === "AUTHORIZE") {
@@ -356,7 +381,9 @@ export async function advanceEscrowOrder(
           "order has no PayPal order id to authorize",
           "PRECONDITION",
         );
-      const auth = await pp.authorizeOrder(order.paypal_order_id);
+      const auth = await pp.authorizeOrder(order.paypal_order_id, {
+        requestId: requestIdFor("authorize"),
+      });
       return done(advance({ authorizationId: auth.authorizationId }), {
         authorizationId: auth.authorizationId,
         status: auth.status,
@@ -370,8 +397,7 @@ export async function advanceEscrowOrder(
           "PRECONDITION",
         );
       const cap = await pp.captureAuthorization(order.authorization_id, {
-        requestId:
-          typeof input.requestId === "string" ? input.requestId : undefined,
+        requestId: requestIdFor("capture"),
       });
       return done(advance(), { captureId: cap.captureId, status: cap.status });
     }
@@ -382,7 +408,9 @@ export async function advanceEscrowOrder(
         "order has no authorization to void",
         "PRECONDITION",
       );
-    await pp.voidAuthorization(order.authorization_id);
+    await pp.voidAuthorization(order.authorization_id, {
+      requestId: requestIdFor("void"),
+    });
     return done(advance());
   } catch (err) {
     return fromPayPalFailure(err);

@@ -7,6 +7,14 @@
 // Security: credentials come only from the injected config (sourced from env
 // in payPalClientFromEnv). The client secret and access token are never logged
 // or included in thrown errors. All traffic is HTTPS to PAYPAL_API_BASE.
+//
+// Idempotency: every mutating call sends a PayPal-Request-Id. Callers should
+// pass a key derived from their own order + action (the escrow service sends
+// `${orderId}:${action}`); when omitted, the key is derived deterministically
+// from the PayPal resource id + operation (e.g. `${authorizationId}:capture`),
+// so a retried capture replays PayPal's original result instead of charging
+// twice. Order creation has no resource id yet, so its fallback is random.
+import { randomUUID } from "node:crypto";
 
 export interface PayPalConfig {
   clientId: string;
@@ -86,13 +94,14 @@ export function createPayPalClient(config: PayPalConfig) {
   async function call<T>(
     endpoint: string,
     path: string,
-    init: { body?: unknown; requestId?: string } = {},
+    // Every call here is a mutating POST, so the idempotency key is required.
+    init: { body?: unknown; requestId: string },
   ): Promise<T> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${await accessToken()}`,
       "Content-Type": "application/json",
     };
-    // PayPal-Request-Id makes capture/reauthorize safe to retry (idempotency).
+    // PayPal-Request-Id makes mutating calls safe to retry (idempotency).
     if (init.requestId) headers["PayPal-Request-Id"] = init.requestId;
     const res = await doFetch(`${base}${path}`, {
       method: "POST",
@@ -110,6 +119,8 @@ export function createPayPalClient(config: PayPalConfig) {
       amount: number;
       currency?: string;
       referenceId?: string;
+      /** Idempotency key; random when omitted (no resource id exists yet). */
+      requestId?: string;
     }): Promise<CreateOrderResult> {
       const body = {
         intent: "AUTHORIZE",
@@ -127,7 +138,10 @@ export function createPayPalClient(config: PayPalConfig) {
         id: string;
         status: string;
         links?: Array<{ rel: string; href: string }>;
-      }>("orders.create", "/v2/checkout/orders", { body });
+      }>("orders.create", "/v2/checkout/orders", {
+        body,
+        requestId: input.requestId ?? `create:${randomUUID()}`,
+      });
       return {
         orderId: json.id,
         status: json.status,
@@ -137,7 +151,10 @@ export function createPayPalClient(config: PayPalConfig) {
       };
     },
 
-    async authorizeOrder(orderId: string): Promise<AuthorizeResult> {
+    async authorizeOrder(
+      orderId: string,
+      opts: { requestId?: string } = {},
+    ): Promise<AuthorizeResult> {
       const json = await call<{
         id: string;
         purchase_units?: Array<{
@@ -145,6 +162,7 @@ export function createPayPalClient(config: PayPalConfig) {
         }>;
       }>("orders.authorize", `/v2/checkout/orders/${orderId}/authorize`, {
         body: {},
+        requestId: opts.requestId ?? `${orderId}:authorize`,
       });
       const auth = json.purchase_units?.[0]?.payments?.authorizations?.[0];
       if (!auth)
@@ -167,15 +185,22 @@ export function createPayPalClient(config: PayPalConfig) {
       const json = await call<{ id: string; status: string }>(
         "payments.capture",
         `/v2/payments/authorizations/${authorizationId}/capture`,
-        { body: { final_capture: true }, requestId: opts.requestId },
+        {
+          body: { final_capture: true },
+          requestId: opts.requestId ?? `${authorizationId}:capture`,
+        },
       );
       return { captureId: json.id, status: json.status };
     },
 
-    async voidAuthorization(authorizationId: string): Promise<void> {
+    async voidAuthorization(
+      authorizationId: string,
+      opts: { requestId?: string } = {},
+    ): Promise<void> {
       await call<void>(
         "payments.void",
         `/v2/payments/authorizations/${authorizationId}/void`,
+        { requestId: opts.requestId ?? `${authorizationId}:void` },
       );
     },
 
@@ -193,7 +218,7 @@ export function createPayPalClient(config: PayPalConfig) {
               value: money(input.amount),
             },
           },
-          requestId: input.requestId,
+          requestId: input.requestId ?? `${authorizationId}:reauthorize`,
         },
       );
       return { orderId: "", authorizationId: json.id, status: json.status };

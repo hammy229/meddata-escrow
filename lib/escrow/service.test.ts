@@ -211,3 +211,36 @@ test(
     assert.equal(getOrder(openDb(url), order.id)?.status, "MATCHED");
   }),
 );
+
+test(
+  "advanceEscrowOrder derives PayPal-Request-Ids from the order id + operation",
+  withDbEnv(async ({ url }) => {
+    const { deps, calls } = fakePayPal();
+    const created = await createEscrowOrder({ datasetId: DATASET_ID }, deps);
+    const id = created.orderId;
+    await advanceEscrowOrder({ orderId: id, action: "authorize" }, deps);
+    await advanceEscrowOrder({ orderId: id, action: "dispute" }, deps);
+    await advanceEscrowOrder(
+      { orderId: id, action: "resolve", resolution: "capture" },
+      deps,
+    );
+    const voidable = seedOrder(url, {
+      status: "AUTHORIZED",
+      authorization_id: "AUTH-V",
+    });
+    await advanceEscrowOrder(
+      { orderId: voidable.id, action: "void", requestId: "caller-key" },
+      deps,
+    );
+
+    const keyOf = (i: number) => {
+      const args = calls[i].args;
+      return (args[args.length - 1] as { requestId?: string }).requestId;
+    };
+    assert.equal(keyOf(0), `${id}:create`);
+    assert.equal(keyOf(1), `${id}:authorize`);
+    // A dispute-resolve capture shares the plain capture key (no double charge).
+    assert.equal(keyOf(2), `${id}:capture`);
+    assert.equal(keyOf(3), "caller-key");
+  }),
+);
