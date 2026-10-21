@@ -1,0 +1,1197 @@
+openapi: 3.1.0
+info:
+  title: MedData Escrow API
+  version: 0.2.0
+  summary: Escrowed marketplace for synthetic medical datasets, settled with PayPal.
+  description: |
+    MedData Escrow lets a researcher describe a study in plain English, match it
+    to vendor datasets, and buy access through an **escrow** built on PayPal
+    authorize-then-capture. Funds are held (authorized) while the data is
+    delivered, captured once the buyer accepts it, and paid out to the vendor.
+    A buyer can dispute while funds are held, and an operator resolves the
+    dispute toward capture or void.
+
+    After delivery the researcher asks plain-English questions. Each question is
+    screened for identifiers, compiled to aggregate-only SQL, re-checked, run
+    vendor-side, put through small-cell suppression, and billed per answer at a
+    server-set fee.
+
+    **All data is synthetic** (Synthea-generated cohorts). No real patient data
+    is stored or returned.
+
+    The server, not the client, decides who pays what and who sees what:
+    the escrowed amount is always the dataset's listed price, queries require a
+    paid and delivered order, and the per-query fee is fixed server-side.
+
+    Errors are always `{ "error": string }`, plus `reasons: string[]` on
+    privacy rejections.
+
+    Run with `PAYPAL_MODE=mock` to drive the whole escrow arc with no PayPal
+    credentials; responses then carry `mock: true` and `MOCK-*` ids.
+
+    Operations marked `x-status: preview` are documented ahead of their
+    implementation landing and may change.
+  license:
+    name: MIT
+    identifier: MIT
+security: []
+servers:
+  - url: http://localhost:3000
+    description: Local dev server (`npm run dev` or `npm run dev:mock`)
+tags:
+  - name: System
+    description: Health and API metadata.
+  - name: Matching
+    description: Rank catalog datasets against a study description.
+  - name: Orders
+    description: Escrow lifecycle (PayPal authorize-then-capture) and order reads.
+  - name: Query
+    description: Privacy-safe, metered plain-English queries over a purchased dataset.
+  - name: Billing
+    description: Per-query usage and spend.
+  - name: Agent
+    description: AI procurement agent that plans a purchase end to end.
+  - name: Webhooks
+    description: Inbound PayPal webhook events.
+paths:
+  /api/health:
+    get:
+      tags: [System]
+      operationId: getHealth
+      summary: Liveness and readiness probe
+      description: |
+        Runs a trivial `SELECT 1` through the normal DB path. Reports the
+        PayPal mode only as `mock` or `live`; no credentials, paths, or error
+        details are ever echoed. Never cached.
+      responses:
+        "200":
+          description: Database reachable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              examples:
+                ok:
+                  value: { status: ok, mode: mock, db: ok }
+        "503":
+          description: Database could not be opened.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              examples:
+                dbDown:
+                  value: { status: error, mode: live, db: error }
+
+  /api/match:
+    post:
+      tags: [Matching]
+      operationId: matchDatasets
+      summary: Rank datasets for a study description
+      description: |
+        Returns catalog datasets ranked by relevance to a plain-English study
+        description, each enriched with its catalog title and listed price.
+
+        Preview: the response gains `source` (`llm` when ranked by the model,
+        `keyword` for the deterministic fallback), and the body may instead be
+        `{ "sampleCheck": datasetId }` to run a sample-quality check on one
+        dataset before buying.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/MatchRequest"
+                - $ref: "#/components/schemas/SampleCheckRequest"
+            examples:
+              match:
+                value:
+                  description: Heart disease cohort with cardiology encounters
+              sampleCheck:
+                summary: Sample check (preview)
+                value:
+                  sampleCheck: ds_cardio_synthea_v1
+      responses:
+        "200":
+          description: Ranked matches (or a sample-check verdict, preview).
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/MatchResponse"
+                  - $ref: "#/components/schemas/SampleCheckResponse"
+              examples:
+                matches:
+                  value:
+                    matches:
+                      - datasetId: ds_cardio_synthea_v1
+                        score: 2
+                        rationale: "Matched on: cardiology, cohort"
+                        title: Synthetic Cardiology Cohort (Synthea)
+                        priceCents: 4900
+                      - datasetId: ds_diabetes_synthea_v1
+                        score: 1
+                        rationale: "Matched on: cohort"
+                        title: Synthetic Type 2 Diabetes Cohort (Synthea)
+                        priceCents: 5900
+                    source: keyword
+                sampleCheck:
+                  summary: Sample check verdict (preview)
+                  value:
+                    sampleCheck:
+                      passed: true
+                      score: 0.92
+                      findings:
+                        - All sampled records are synthetic (Synthea)
+                        - No direct identifiers in sampled columns
+                      source: llm
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/orders:
+    get:
+      tags: [Orders]
+      operationId: getOrders
+      summary: List orders, read one order, or summarize earnings
+      description: |
+        Reads orders from the DB (no PayPal). The query string picks the shape:
+
+        - no `id` / `summary` → `{ orders: OrderRow[] }` (newest first),
+          optionally AND-filtered by `status`, `datasetId`, `buyerEmail`.
+        - `?id=ord_..` → `{ order }`; add `&events=1` for `{ order, events }`
+          (the audit timeline, oldest first). 404 if unknown.
+        - `?summary=1[&datasetId=..]` → `{ summary: OrderSummary }`, the vendor
+          earnings roll-up.
+      parameters:
+        - name: id
+          in: query
+          description: Return a single order by id.
+          schema:
+            {
+              type: string,
+              examples: [ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f],
+            }
+        - name: events
+          in: query
+          description: With `id`, also return the order's audit events (any value).
+          schema: { type: string, examples: ["1"] }
+        - name: summary
+          in: query
+          description: Return the earnings summary instead of rows (any value).
+          schema: { type: string, examples: ["1"] }
+        - name: status
+          in: query
+          description: Filter the list by escrow state.
+          schema:
+            $ref: "#/components/schemas/EscrowState"
+        - name: datasetId
+          in: query
+          description: Filter the list (or scope the summary) to one dataset.
+          schema: { type: string, examples: [ds_cardio_synthea_v1] }
+        - name: buyerEmail
+          in: query
+          description: Filter the list by buyer email.
+          schema: { type: string, format: email }
+      responses:
+        "200":
+          description: Orders, one order (with optional events), or a summary.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/OrderListResponse"
+                  - $ref: "#/components/schemas/OrderDetailResponse"
+                  - $ref: "#/components/schemas/OrderSummaryResponse"
+              examples:
+                list:
+                  value:
+                    orders:
+                      - id: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                        dataset_id: ds_cardio_synthea_v1
+                        buyer_email: demo-buyer@meddata.test
+                        paypal_order_id: MOCK-ORDER-a1b2c3d4
+                        authorization_id: MOCK-AUTH-e5f6a7b8
+                        status: DELIVERED
+                        amount_cents: 4900
+                        created_at: "2026-10-21 17:02:11"
+                        updated_at: "2026-10-21 17:03:40"
+                one:
+                  value:
+                    order:
+                      id: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                      dataset_id: ds_cardio_synthea_v1
+                      buyer_email: demo-buyer@meddata.test
+                      paypal_order_id: MOCK-ORDER-a1b2c3d4
+                      authorization_id: MOCK-AUTH-e5f6a7b8
+                      status: DELIVERED
+                      amount_cents: 4900
+                      created_at: "2026-10-21 17:02:11"
+                      updated_at: "2026-10-21 17:03:40"
+                    events:
+                      - id: evt_0c6d6f7e-1a2b-4c3d-8e9f-001122334455
+                        order_id: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                        seq: 0
+                        event: CREATE
+                        from_state: null
+                        to_state: MATCHED
+                        note: null
+                        created_at: "2026-10-21 17:02:11"
+                      - id: evt_1d7e8f90-2b3c-4d5e-9f00-112233445566
+                        order_id: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                        seq: 1
+                        event: AUTHORIZE
+                        from_state: MATCHED
+                        to_state: AUTHORIZED
+                        note: null
+                        created_at: "2026-10-21 17:02:30"
+                summary:
+                  value:
+                    summary:
+                      countsByStatus:
+                        MATCHED: 1
+                        AUTHORIZED: 0
+                        DELIVERED: 1
+                        CAPTURED: 0
+                        PAID_OUT: 2
+                        DISPUTED: 0
+                        VOIDED: 1
+                        CANCELLED: 0
+                      heldCents: 4900
+                      capturedCents: 10800
+                      paidOutCents: 10800
+                      releasedCents: 4900
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: Unknown `status` filter value.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                badStatus:
+                  value: { error: "unknown status: SHIPPED" }
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Orders]
+      operationId: createOrder
+      summary: Create an escrow order at the listed price
+      description: |
+        Creates a PayPal Orders v2 order (`intent=AUTHORIZE`) and an `orders`
+        row in state `MATCHED`. The escrowed amount is **always** the dataset's
+        listed price; an optional `amount` (major units) is only a confirmation,
+        and a mismatch is 422. In mock mode no PayPal call is made, but the row
+        is still persisted with a `MOCK-ORDER-*` id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+            examples:
+              create:
+                value:
+                  datasetId: ds_cardio_synthea_v1
+                  amount: 49
+                  buyerEmail: researcher@example.edu
+      responses:
+        "201":
+          description: Order created; escrow state `MATCHED`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateOrderResponse"
+              examples:
+                mock:
+                  value:
+                    orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                    paypalOrderId: MOCK-ORDER-a1b2c3d4
+                    status: CREATED
+                    approveUrl: https://sandbox.paypal.com/checkoutnow?token=MOCK-ORDER-a1b2c3d4
+                    escrowState: MATCHED
+                    mock: true
+        "422":
+          description: Missing or unknown `datasetId`, invalid `amount`, or an `amount` that does not match the listed price.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                priceMismatch:
+                  value: { error: amount does not match the listed price }
+                unknownDataset:
+                  value: { error: "unknown datasetId: ds_nope" }
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          $ref: "#/components/responses/PayPalNotConfigured"
+        default:
+          $ref: "#/components/responses/PayPalFailure"
+    patch:
+      tags: [Orders]
+      operationId: advanceOrder
+      summary: Advance an order through the escrow state machine
+      description: |
+        Actions map to escrow events: `authorize` (MATCHED → AUTHORIZED),
+        `deliver` (AUTHORIZED → DELIVERED), `capture` (DELIVERED → CAPTURED),
+        `payout` (CAPTURED → PAID_OUT), `void` (AUTHORIZED → VOIDED),
+        `dispute` (AUTHORIZED/DELIVERED → DISPUTED), and `resolve` with
+        `resolution: capture | void` (DISPUTED → CAPTURED | VOIDED).
+
+        The stored row is the source of truth for the current state and PayPal
+        ids. The transition is validated **before** any PayPal call, so an
+        illegal move never charges anyone and never writes (409).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdvanceOrderRequest"
+            examples:
+              authorize:
+                value:
+                  {
+                    orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f,
+                    action: authorize,
+                  }
+              dispute:
+                value:
+                  orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                  action: dispute
+                  note: Delivered file is missing the medications table
+              resolve:
+                value:
+                  orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                  action: resolve
+                  resolution: void
+                  note: Vendor could not supply the missing table
+      responses:
+        "200":
+          description: Escrow advanced; the new state plus any PayPal id produced.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdvanceOrderResponse"
+              examples:
+                authorized:
+                  value:
+                    escrowState: AUTHORIZED
+                    authorizationId: MOCK-AUTH-e5f6a7b8
+                    status: COMPLETED
+                    mock: true
+                delivered:
+                  value: { escrowState: DELIVERED, mock: true }
+                captured:
+                  value:
+                    escrowState: CAPTURED
+                    captureId: MOCK-CAP-9a8b7c6d
+                    status: COMPLETED
+                    mock: true
+                paidOut:
+                  value:
+                    escrowState: PAID_OUT
+                    payoutBatchId: MOCK-PAYOUT-1f2e3d4c
+                    status: PENDING
+                    mock: true
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: Illegal transition from the order's current state, or the order lacks the PayPal id the action needs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                illegal:
+                  value:
+                    {
+                      error: "Invalid escrow transition: CAPTURE not allowed from MATCHED",
+                    }
+                noAuthorization:
+                  value: { error: order has no authorization to capture }
+        "422":
+          description: Unknown `action`, missing `orderId`, or `resolve` without a valid `resolution`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                badAction:
+                  value:
+                    error: "action must be one of: authorize, deliver, capture, payout, void, dispute, resolve"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "501":
+          description: "`payout` in live mode: real PayPal Payouts is not implemented yet."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                payouts:
+                  value: { error: real PayPal Payouts not implemented }
+        "503":
+          $ref: "#/components/responses/PayPalNotConfigured"
+        default:
+          $ref: "#/components/responses/PayPalFailure"
+
+  /api/query:
+    post:
+      tags: [Query]
+      operationId: runQuery
+      summary: Ask a plain-English question of a purchased dataset
+      description: |
+        Requires an order for this dataset in `DELIVERED`, `CAPTURED` or
+        `PAID_OUT`. The question is screened for identifiers and row-level asks,
+        compiled to parameterized aggregate-only SQL, re-checked, executed
+        vendor-side (mocked), and put through small-cell suppression (k ≥ 11).
+        Only answered queries are billed, at the server-set per-query fee.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueryRequest"
+            examples:
+              avgAgeBySex:
+                value:
+                  orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                  datasetId: ds_cardio_synthea_v1
+                  question: average age by sex
+      responses:
+        "200":
+          description: Aggregate answer, with the usage row it was billed as.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryResponse"
+              examples:
+                answered:
+                  value:
+                    datasetId: ds_cardio_synthea_v1
+                    question: average age by sex
+                    compiled:
+                      sql: 'SELECT sex AS "group", AVG(age) AS avg_age FROM records WHERE dataset_id = ? GROUP BY sex'
+                      params: [ds_cardio_synthea_v1]
+                    result:
+                      - { group: female, avg_age: 77 }
+                      - { group: male, avg_age: 60 }
+                    usage:
+                      usageId: qu_5b6c7d8e-9f01-4a2b-8c3d-4e5f60718293
+                      chargeCents: 50
+        "403":
+          description: Order does not grant data access, or the question/SQL/result was rejected by the privacy guard (`reasons` explains why).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                pii:
+                  value:
+                    error: query rejected
+                    reasons:
+                      - 'Question mentions a PII/identifier field: "name".'
+                      - 'Question mentions a PII/identifier field: "ssn".'
+                noAccess:
+                  value:
+                    {
+                      error: order does not grant data access (status AUTHORIZED),
+                    }
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          description: Missing fields, question longer than 500 characters, or the order is for a different dataset.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                missing:
+                  value:
+                    {
+                      error: "orderId, datasetId and question (non-empty strings) are required",
+                    }
+        "500":
+          description: The order could not be loaded or usage could not be recorded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                usage:
+                  value: { error: could not record query usage }
+
+  /api/billing:
+    get:
+      tags: [Billing]
+      operationId: getBilling
+      summary: An order's per-query usage and spend
+      parameters:
+        - name: orderId
+          in: query
+          required: true
+          schema:
+            {
+              type: string,
+              examples: [ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f],
+            }
+      responses:
+        "200":
+          description: Usage rows (newest first) with count and total.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingResponse"
+              examples:
+                billed:
+                  value:
+                    orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                    usage:
+                      - id: qu_5b6c7d8e-9f01-4a2b-8c3d-4e5f60718293
+                        order_id: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                        question: average age by sex
+                        charge_cents: 50
+                        created_at: "2026-10-21 17:04:02"
+                    queryCount: 1
+                    totalCents: 50
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+    post:
+      tags: [Billing]
+      operationId: recordUsage
+      summary: Record one per-query charge
+      description: |
+        Records a usage row at the server-set fee (`PER_QUERY_FEE_CENTS`, 50).
+        `chargeCents` is accepted only as a confirmation; any other value is
+        422. The order must grant data access, otherwise 409. This is where a
+        real PayPal per-query capture would fire (mocked).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordUsageRequest"
+            examples:
+              charge:
+                value:
+                  orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                  question: count by region
+                  chargeCents: 50
+      responses:
+        "201":
+          description: Usage recorded and charged.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordUsageResponse"
+              examples:
+                charged:
+                  value:
+                    usageId: qu_6c7d8e9f-0a1b-4c2d-9e3f-50617283a4b5
+                    orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                    chargeCents: 50
+                    charged: true
+        "409":
+          description: The order's escrow state does not grant data access.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                notDelivered:
+                  value:
+                    {
+                      error: "order is AUTHORIZED; queries are billable only once data access is granted",
+                    }
+        "422":
+          description: Missing fields, unknown order, or a `chargeCents` that differs from the server fee.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                wrongFee:
+                  value:
+                    {
+                      error: "chargeCents is set by the server (per-query fee is 50)",
+                    }
+
+  /api/agent:
+    post:
+      x-status: preview
+      tags: [Agent]
+      operationId: runProcurementAgent
+      summary: Run the AI procurement agent (preview)
+      description: |
+        Given a study description and an optional budget, the agent matches
+        datasets, sample-checks candidates, and recommends one to buy; it may
+        also open an escrow order. Returns the step-by-step trace.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentRequest"
+            examples:
+              run:
+                value:
+                  study: Outcomes of statin therapy in adults with coronary heart disease
+                  budgetCents: 6000
+      responses:
+        "200":
+          description: Agent run trace and recommendation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentResponse"
+              examples:
+                run:
+                  value:
+                    runId: run_7e8f9a0b
+                    steps:
+                      - { tool: match, summary: 2 candidate datasets }
+                      - {
+                          tool: sampleCheck,
+                          summary: ds_cardio_synthea_v1 passed (0.92),
+                        }
+                    recommendation:
+                      datasetId: ds_cardio_synthea_v1
+                      reason: Best match within budget; sample check passed
+                    order:
+                      orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                      escrowState: MATCHED
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /api/webhooks/paypal:
+    post:
+      x-status: preview
+      tags: [Webhooks]
+      operationId: receivePaypalWebhook
+      summary: Receive a PayPal webhook event (preview)
+      description: |
+        PayPal posts payment events here. The signature is verified against
+        PayPal (using the `paypal-transmission-*` headers) before the event is
+        mapped onto the escrow state machine. Redelivered events are
+        acknowledged as `duplicate`; event types the escrow does not track are
+        acknowledged as `ignored`.
+      parameters:
+        - { name: paypal-transmission-id, in: header, schema: { type: string } }
+        - {
+            name: paypal-transmission-time,
+            in: header,
+            schema: { type: string },
+          }
+        - {
+            name: paypal-transmission-sig,
+            in: header,
+            schema: { type: string },
+          }
+        - { name: paypal-cert-url, in: header, schema: { type: string } }
+        - { name: paypal-auth-algo, in: header, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaypalWebhookEvent"
+            examples:
+              captureCompleted:
+                value:
+                  id: WH-58D329510W468432D-8HN650336L201105X
+                  event_type: PAYMENT.CAPTURE.COMPLETED
+                  resource_type: capture
+                  resource: { id: 2GG279541U471931P, status: COMPLETED }
+      responses:
+        "200":
+          description: Event accepted (applied, duplicate, or ignored).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookAck"
+              examples:
+                applied:
+                  value: {}
+                duplicate:
+                  value: { duplicate: true }
+                ignored:
+                  value: { ignored: true }
+        "401":
+          description: Webhook signature verification failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  schemas:
+    EscrowState:
+      type: string
+      description: Escrow lifecycle state. `PAID_OUT`, `VOIDED` and `CANCELLED` are terminal.
+      enum:
+        [
+          MATCHED,
+          AUTHORIZED,
+          DELIVERED,
+          CAPTURED,
+          PAID_OUT,
+          DISPUTED,
+          VOIDED,
+          CANCELLED,
+        ]
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        reasons:
+          type: array
+          description: Present on privacy-guard rejections.
+          items: { type: string }
+    HealthResponse:
+      type: object
+      required: [status, mode, db]
+      properties:
+        status: { type: string, enum: [ok, error] }
+        mode: { type: string, enum: [mock, live] }
+        db: { type: string, enum: [ok, error] }
+    OrderRow:
+      type: object
+      description: A persisted order row (snake_case, as stored).
+      required:
+        [
+          id,
+          dataset_id,
+          buyer_email,
+          paypal_order_id,
+          authorization_id,
+          status,
+          amount_cents,
+          created_at,
+          updated_at,
+        ]
+      properties:
+        id:
+          { type: string, examples: [ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f] }
+        dataset_id: { type: string }
+        buyer_email: { type: string }
+        paypal_order_id: { type: [string, "null"] }
+        authorization_id: { type: [string, "null"] }
+        status: { $ref: "#/components/schemas/EscrowState" }
+        amount_cents:
+          {
+            type: integer,
+            description: Escrowed amount; always the listed price.,
+          }
+        created_at:
+          {
+            type: string,
+            description: "SQLite timestamp, `YYYY-MM-DD HH:MM:SS` UTC.",
+          }
+        updated_at: { type: [string, "null"] }
+    OrderEventRow:
+      type: object
+      description: One audit-trail row per lifecycle transition (append-only).
+      required:
+        [id, order_id, seq, event, from_state, to_state, note, created_at]
+      properties:
+        id: { type: string }
+        order_id: { type: string }
+        seq:
+          {
+            type: integer,
+            description: Monotonic per-order position; 0 is the genesis row.,
+          }
+        event:
+          type: string
+          description: "`CREATE` for the genesis row, otherwise the escrow event."
+          enum:
+            [
+              CREATE,
+              AUTHORIZE,
+              DELIVER,
+              CAPTURE,
+              PAYOUT,
+              DISPUTE,
+              RESOLVE_CAPTURE,
+              RESOLVE_VOID,
+              VOID,
+              CANCEL,
+            ]
+        from_state:
+          oneOf:
+            - $ref: "#/components/schemas/EscrowState"
+            - type: "null"
+        to_state: { $ref: "#/components/schemas/EscrowState" }
+        note:
+          {
+            type: [string, "null"],
+            description: Dispute reason or resolution note.,
+          }
+        created_at: { type: string }
+    UsageRow:
+      type: object
+      required: [id, order_id, question, charge_cents, created_at]
+      properties:
+        id:
+          { type: string, examples: [qu_5b6c7d8e-9f01-4a2b-8c3d-4e5f60718293] }
+        order_id: { type: string }
+        question: { type: string }
+        charge_cents: { type: integer }
+        created_at: { type: string }
+    OrderSummary:
+      type: object
+      description: Vendor earnings roll-up. Every escrow state is present in `countsByStatus` (zero-filled).
+      required:
+        [countsByStatus, heldCents, capturedCents, paidOutCents, releasedCents]
+      properties:
+        countsByStatus:
+          type: object
+          required:
+            [
+              MATCHED,
+              AUTHORIZED,
+              DELIVERED,
+              CAPTURED,
+              PAID_OUT,
+              DISPUTED,
+              VOIDED,
+              CANCELLED,
+            ]
+          properties:
+            MATCHED: { type: integer }
+            AUTHORIZED: { type: integer }
+            DELIVERED: { type: integer }
+            CAPTURED: { type: integer }
+            PAID_OUT: { type: integer }
+            DISPUTED: { type: integer }
+            VOIDED: { type: integer }
+            CANCELLED: { type: integer }
+        heldCents:
+          { type: integer, description: AUTHORIZED + DELIVERED + DISPUTED. }
+        capturedCents: { type: integer, description: CAPTURED + PAID_OUT. }
+        paidOutCents: { type: integer, description: PAID_OUT. }
+        releasedCents: { type: integer, description: VOIDED. }
+    MatchRequest:
+      type: object
+      required: [description]
+      properties:
+        description:
+          {
+            type: string,
+            minLength: 1,
+            description: Plain-English study description.,
+          }
+    SampleCheckRequest:
+      type: object
+      x-status: preview
+      required: [sampleCheck]
+      properties:
+        sampleCheck: { type: string, description: Dataset id to sample-check. }
+    DatasetMatch:
+      type: object
+      required: [datasetId, score, rationale, title, priceCents]
+      properties:
+        datasetId: { type: string }
+        score: { type: number }
+        rationale: { type: string }
+        title: { type: [string, "null"] }
+        priceCents: { type: [integer, "null"] }
+    MatchResponse:
+      type: object
+      required: [matches]
+      properties:
+        matches:
+          type: array
+          items: { $ref: "#/components/schemas/DatasetMatch" }
+        source:
+          x-status: preview
+          type: string
+          enum: [llm, keyword]
+          description: Whether the ranking came from the model or the keyword fallback.
+    SampleCheckResponse:
+      type: object
+      x-status: preview
+      required: [sampleCheck]
+      properties:
+        sampleCheck:
+          type: object
+          required: [passed, score, findings, source]
+          properties:
+            passed: { type: boolean }
+            score: { type: number }
+            findings:
+              type: array
+              items: { type: string }
+            source: { type: string, enum: [llm, keyword] }
+    OrderListResponse:
+      type: object
+      required: [orders]
+      properties:
+        orders:
+          type: array
+          items: { $ref: "#/components/schemas/OrderRow" }
+    OrderDetailResponse:
+      type: object
+      required: [order]
+      properties:
+        order: { $ref: "#/components/schemas/OrderRow" }
+        events:
+          type: array
+          description: Present when `events` is passed; oldest first.
+          items: { $ref: "#/components/schemas/OrderEventRow" }
+    OrderSummaryResponse:
+      type: object
+      required: [summary]
+      properties:
+        summary: { $ref: "#/components/schemas/OrderSummary" }
+    CreateOrderRequest:
+      type: object
+      required: [datasetId]
+      properties:
+        datasetId: { type: string }
+        amount:
+          type: number
+          exclusiveMinimum: 0
+          description: Optional confirmation of the listed price, in major units (e.g. 49 for $49.00).
+        currency:
+          {
+            type: string,
+            description: ISO currency code (live mode only). Defaults to USD.,
+          }
+        referenceId:
+          {
+            type: string,
+            description: PayPal purchase-unit reference (live mode only).,
+          }
+        buyerEmail:
+          { type: string, description: Defaults to demo-buyer@meddata.test. }
+    CreateOrderResponse:
+      type: object
+      required: [orderId, paypalOrderId, status, approveUrl, escrowState]
+      properties:
+        orderId: { type: string }
+        paypalOrderId: { type: string }
+        status:
+          { type: string, description: PayPal order status (e.g. CREATED). }
+        approveUrl: { type: string, format: uri }
+        escrowState: { $ref: "#/components/schemas/EscrowState" }
+        mock: { type: boolean, description: Present (true) in mock mode. }
+    AdvanceOrderRequest:
+      type: object
+      required: [orderId, action]
+      properties:
+        orderId: { type: string }
+        action:
+          type: string
+          enum: [authorize, deliver, capture, payout, void, dispute, resolve]
+        resolution:
+          type: string
+          enum: [capture, void]
+          description: Required when `action` is `resolve`.
+        requestId:
+          {
+            type: string,
+            description: PayPal idempotency key for capture (live mode).,
+          }
+        note:
+          {
+            type: string,
+            maxLength: 500,
+            description: "Recorded on the audit event (trimmed, capped at 500 chars).",
+          }
+    AdvanceOrderResponse:
+      type: object
+      required: [escrowState]
+      properties:
+        escrowState: { $ref: "#/components/schemas/EscrowState" }
+        authorizationId:
+          { type: string, description: Present after `authorize`. }
+        captureId:
+          {
+            type: string,
+            description: Present after `capture` or `resolve` (capture).,
+          }
+        payoutBatchId:
+          { type: string, description: Present after `payout` (mock mode). }
+        status: { type: string, description: PayPal status of the money move. }
+        mock: { type: boolean }
+    CompiledQuery:
+      type: object
+      required: [sql, params]
+      properties:
+        sql: { type: string, description: "Parameterized, aggregate-only SQL." }
+        params:
+          type: array
+          items: {}
+    QueryRequest:
+      type: object
+      required: [orderId, datasetId, question]
+      properties:
+        orderId: { type: string }
+        datasetId: { type: string }
+        question: { type: string, minLength: 1, maxLength: 500 }
+    QueryResponse:
+      type: object
+      required: [datasetId, question, compiled, result, usage]
+      properties:
+        datasetId: { type: string }
+        question: { type: string }
+        compiled: { $ref: "#/components/schemas/CompiledQuery" }
+        result:
+          type: array
+          description: Aggregate rows only; every count is at or above the small-cell threshold.
+          items:
+            type: object
+            additionalProperties:
+              type: [string, number]
+        usage:
+          type: object
+          required: [usageId, chargeCents]
+          properties:
+            usageId: { type: string }
+            chargeCents: { type: integer }
+    BillingResponse:
+      type: object
+      required: [orderId, usage, queryCount, totalCents]
+      properties:
+        orderId: { type: string }
+        usage:
+          type: array
+          items: { $ref: "#/components/schemas/UsageRow" }
+        queryCount: { type: integer }
+        totalCents: { type: integer }
+    RecordUsageRequest:
+      type: object
+      required: [orderId, question]
+      properties:
+        orderId: { type: string }
+        question: { type: string, minLength: 1 }
+        chargeCents:
+          {
+            type: integer,
+            const: 50,
+            description: Optional confirmation of the server fee.,
+          }
+    RecordUsageResponse:
+      type: object
+      required: [usageId, orderId, chargeCents, charged]
+      properties:
+        usageId: { type: string }
+        orderId: { type: string }
+        chargeCents: { type: integer }
+        charged: { type: boolean }
+    AgentRequest:
+      type: object
+      x-status: preview
+      required: [study]
+      properties:
+        study:
+          {
+            type: string,
+            minLength: 1,
+            description: Plain-English study description.,
+          }
+        budgetCents:
+          {
+            type: integer,
+            minimum: 0,
+            description: Maximum spend; datasets above it are not recommended.,
+          }
+    AgentResponse:
+      type: object
+      x-status: preview
+      required: [runId, steps, recommendation]
+      properties:
+        runId: { type: string }
+        steps:
+          type: array
+          description: Ordered trace of the agent's tool calls.
+          items:
+            type: object
+            additionalProperties: true
+        recommendation:
+          type: object
+          additionalProperties: true
+        order:
+          type: object
+          description: Present when the agent opened an escrow order.
+          additionalProperties: true
+    PaypalWebhookEvent:
+      type: object
+      x-status: preview
+      required: [id, event_type, resource]
+      properties:
+        id: { type: string }
+        event_type:
+          {
+            type: string,
+            examples: [PAYMENT.CAPTURE.COMPLETED, PAYMENT.AUTHORIZATION.VOIDED],
+          }
+        resource_type: { type: string }
+        resource:
+          type: object
+          additionalProperties: true
+    WebhookAck:
+      type: object
+      x-status: preview
+      properties:
+        duplicate:
+          { type: boolean, description: The event id was already processed. }
+        ignored:
+          {
+            type: boolean,
+            description: The event type is not tracked by the escrow.,
+          }
+  responses:
+    ValidationError:
+      description: Invalid or missing request fields.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            invalid:
+              value: { error: "description (non-empty string) is required" }
+    NotFound:
+      description: Unknown order id.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            unknownOrder:
+              value: { error: "unknown orderId: ord_missing" }
+    InternalError:
+      description: Unexpected server error (details are logged, never returned).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            internal:
+              value: { error: internal error }
+    PayPalNotConfigured:
+      description: Live mode without PayPal credentials (set PAYPAL_MODE=mock or fill .env.local).
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            notConfigured:
+              value: { error: PayPal not configured (see .env.example) }
+    PayPalFailure:
+      description: A PayPal API call failed; the status mirrors PayPal's response status.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            paypal:
+              value: { error: PayPal request failed }
