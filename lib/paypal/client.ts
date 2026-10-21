@@ -17,13 +17,34 @@
 // twice. Order creation has no resource id yet, so its fallback is random.
 import { randomUUID } from "node:crypto";
 
+import { isMockMode } from "../mock/ids";
+
 export interface PayPalConfig {
   clientId: string;
   clientSecret: string;
   apiBase?: string;
   /** Injectable for tests; defaults to the global fetch. */
   fetch?: typeof fetch;
+  /** Webhook id from the PayPal dashboard; required to verify webhooks. */
+  webhookId?: string;
 }
+
+/** Anything header-shaped: a fetch Headers or a plain (lower-case) record. */
+export type HeaderSource = Headers | Record<string, string | undefined>;
+
+function readHeader(h: HeaderSource, name: string): string | undefined {
+  if (h instanceof Headers) return h.get(name) ?? undefined;
+  return h[name] ?? h[name.toLowerCase()];
+}
+
+/** The PayPal transmission headers verify-webhook-signature needs. */
+const WEBHOOK_SIGNATURE_HEADERS = {
+  auth_algo: "paypal-auth-algo",
+  cert_url: "paypal-cert-url",
+  transmission_id: "paypal-transmission-id",
+  transmission_sig: "paypal-transmission-sig",
+  transmission_time: "paypal-transmission-time",
+} as const;
 
 export interface CreateOrderResult {
   orderId: string;
@@ -101,7 +122,9 @@ export function createPayPalClient(config: PayPalConfig) {
     endpoint: string,
     path: string,
     // Every call here is a mutating POST, so the idempotency key is required.
-    init: { body?: unknown; requestId: string },
+    // Mutating calls must pass a key; `null` is only for read-like POSTs
+    // (webhook signature verification).
+    init: { body?: unknown; requestId: string | null },
   ): Promise<T> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${await accessToken()}`,
@@ -273,6 +296,53 @@ export function createPayPalClient(config: PayPalConfig) {
         batchStatus: json.batch_header.batch_status,
       };
     },
+
+    /**
+     * Ask PayPal whether a webhook delivery is authentic
+     * (POST /v1/notifications/verify-webhook-signature). Never throws: a
+     * missing transmission header, a missing webhookId, an unparseable body,
+     * or any PayPal/network failure all count as unverified (false).
+     */
+    async verifyWebhookSignature(
+      headers: HeaderSource,
+      rawBody: string,
+    ): Promise<boolean> {
+      if (!config.webhookId) return false;
+      const transmission: Record<string, string> = {};
+      for (const [field, name] of Object.entries(WEBHOOK_SIGNATURE_HEADERS)) {
+        const value = readHeader(headers, name);
+        if (!value) return false;
+        transmission[field] = value;
+      }
+      let event: unknown;
+      try {
+        event = JSON.parse(rawBody);
+      } catch {
+        return false;
+      }
+      try {
+        const json = await call<{ verification_status?: string }>(
+          "notifications.verify-webhook-signature",
+          "/v1/notifications/verify-webhook-signature",
+          {
+            body: {
+              ...transmission,
+              webhook_id: config.webhookId,
+              webhook_event: event,
+            },
+            requestId: null,
+          },
+        );
+        return json?.verification_status === "SUCCESS";
+      } catch (err) {
+        // Status only — never the token, secret, or PayPal's full payload.
+        console.error(
+          "paypal webhook verification failed:",
+          err instanceof PayPalError ? `HTTP ${err.status}` : String(err),
+        );
+        return false;
+      }
+    },
   };
 }
 
@@ -291,5 +361,35 @@ export function payPalClientFromEnv(): PayPalClient {
     clientId,
     clientSecret,
     apiBase: process.env.PAYPAL_API_BASE,
+    webhookId: process.env.PAYPAL_WEBHOOK_ID,
   });
+}
+
+/** Header that marks a hand-made webhook as acceptable in mock mode. */
+export const MOCK_WEBHOOK_HEADER = "x-mock-webhook";
+
+/**
+ * Verify an inbound PayPal webhook using the env configuration.
+ *
+ * - PAYPAL_MODE=mock (DEMO ONLY): accepted iff the request carries
+ *   `x-mock-webhook: 1`, so the demo can replay events with curl and no
+ *   PayPal account. Never set PAYPAL_MODE=mock on a public deployment: anyone
+ *   who knows the header could drive escrow state.
+ * - Otherwise: PayPal's verify-webhook-signature with PAYPAL_WEBHOOK_ID.
+ *   Missing credentials or webhook id => unverified.
+ */
+export async function verifyPayPalWebhook(
+  headers: HeaderSource,
+  rawBody: string,
+  deps: { client?: () => PayPalClient } = {},
+): Promise<boolean> {
+  if (isMockMode()) return readHeader(headers, MOCK_WEBHOOK_HEADER) === "1";
+  let client: PayPalClient;
+  try {
+    client = (deps.client ?? payPalClientFromEnv)();
+  } catch {
+    console.error("paypal webhook rejected: PayPal credentials not configured");
+    return false;
+  }
+  return client.verifyWebhookSignature(headers, rawBody);
 }

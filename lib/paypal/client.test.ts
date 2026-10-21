@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { createPayPalClient, PayPalError } from "./client";
+import { createPayPalClient, PayPalError, verifyPayPalWebhook } from "./client";
 
 type Handler = (init: {
   method?: string;
@@ -287,6 +287,123 @@ test("createPayout posts one EMAIL item keyed by sender_batch_id", async () => {
     },
   ]);
   assert.deepEqual(res, { payoutBatchId: "BATCH-1", batchStatus: "PENDING" });
+});
+
+// --- Webhook signature verification ---
+
+const WEBHOOK_HEADERS = {
+  "paypal-auth-algo": "SHA256withRSA",
+  "paypal-cert-url": "https://api.sandbox.paypal.com/v1/notifications/certs/C",
+  "paypal-transmission-id": "tx-1",
+  "paypal-transmission-sig": "sig==",
+  "paypal-transmission-time": "2026-10-21T00:00:00Z",
+};
+const WEBHOOK_BODY = JSON.stringify({
+  id: "WH-1",
+  event_type: "PAYMENT.CAPTURE.COMPLETED",
+  resource: { id: "CAP-1" },
+});
+
+function verifyRoute(status: string | null, http = 200) {
+  return fakeFetch({
+    "/v1/oauth2/token": TOKEN_OK,
+    "/v1/notifications/verify-webhook-signature": () => ({
+      status: http,
+      body: status ? { verification_status: status } : { name: "ERR" },
+    }),
+  });
+}
+
+test("verifyWebhookSignature posts the transmission headers + event and accepts SUCCESS", async () => {
+  const { fn, calls } = verifyRoute("SUCCESS");
+  const pp = createPayPalClient({ ...CREDS, fetch: fn, webhookId: "WH-ID" });
+  assert.equal(
+    await pp.verifyWebhookSignature(new Headers(WEBHOOK_HEADERS), WEBHOOK_BODY),
+    true,
+  );
+  const call = calls.find((c) => c.url.endsWith("verify-webhook-signature"))!;
+  assert.equal(call.headers["PayPal-Request-Id"], undefined);
+  assert.deepEqual(JSON.parse(call.body!), {
+    auth_algo: "SHA256withRSA",
+    cert_url: WEBHOOK_HEADERS["paypal-cert-url"],
+    transmission_id: "tx-1",
+    transmission_sig: "sig==",
+    transmission_time: "2026-10-21T00:00:00Z",
+    webhook_id: "WH-ID",
+    webhook_event: JSON.parse(WEBHOOK_BODY),
+  });
+});
+
+test("verifyWebhookSignature rejects FAILURE and PayPal errors", async () => {
+  for (const [status, http] of [
+    ["FAILURE", 200],
+    [null, 500],
+  ] as const) {
+    const { fn } = verifyRoute(status, http);
+    const pp = createPayPalClient({ ...CREDS, fetch: fn, webhookId: "WH-ID" });
+    assert.equal(
+      await pp.verifyWebhookSignature(WEBHOOK_HEADERS, WEBHOOK_BODY),
+      false,
+    );
+  }
+});
+
+test("verifyWebhookSignature is unverified without a header, webhook id, or JSON body (no network)", async () => {
+  const { fn, calls } = verifyRoute("SUCCESS");
+  const withId = createPayPalClient({ ...CREDS, fetch: fn, webhookId: "W" });
+  const noId = createPayPalClient({ ...CREDS, fetch: fn });
+  const missing = { ...WEBHOOK_HEADERS, "paypal-transmission-sig": undefined };
+  assert.equal(
+    await withId.verifyWebhookSignature(missing, WEBHOOK_BODY),
+    false,
+  );
+  assert.equal(
+    await noId.verifyWebhookSignature(WEBHOOK_HEADERS, WEBHOOK_BODY),
+    false,
+  );
+  assert.equal(
+    await withId.verifyWebhookSignature(WEBHOOK_HEADERS, "not json"),
+    false,
+  );
+  assert.equal(calls.length, 0);
+});
+
+test("verifyPayPalWebhook: mock mode needs x-mock-webhook: 1; real mode needs creds", async () => {
+  const saved = process.env.PAYPAL_MODE;
+  try {
+    process.env.PAYPAL_MODE = "mock";
+    assert.equal(
+      await verifyPayPalWebhook({ "x-mock-webhook": "1" }, WEBHOOK_BODY),
+      true,
+    );
+    assert.equal(await verifyPayPalWebhook({}, WEBHOOK_BODY), false);
+    assert.equal(
+      await verifyPayPalWebhook(WEBHOOK_HEADERS, WEBHOOK_BODY),
+      false,
+    );
+
+    delete process.env.PAYPAL_MODE;
+    // The mock header means nothing outside mock mode.
+    const noCreds = () => {
+      throw new Error("PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET must be set");
+    };
+    assert.equal(
+      await verifyPayPalWebhook({ "x-mock-webhook": "1" }, WEBHOOK_BODY, {
+        client: noCreds,
+      }),
+      false,
+    );
+    const { fn } = verifyRoute("SUCCESS");
+    const client = () =>
+      createPayPalClient({ ...CREDS, fetch: fn, webhookId: "WH-ID" });
+    assert.equal(
+      await verifyPayPalWebhook(WEBHOOK_HEADERS, WEBHOOK_BODY, { client }),
+      true,
+    );
+  } finally {
+    if (saved === undefined) delete process.env.PAYPAL_MODE;
+    else process.env.PAYPAL_MODE = saved;
+  }
 });
 
 test("a retried capture reuses the same PayPal-Request-Id", async () => {
