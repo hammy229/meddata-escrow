@@ -1,10 +1,14 @@
 // /api/orders — escrow lifecycle via PayPal authorize-then-capture, persisted
 // through the SQLite DB layer (lib/db/client).
 //
-//   POST  { datasetId, amount, currency?, referenceId?, buyerEmail? }
+//   POST  { datasetId, amount?, currency?, referenceId?, buyerEmail? }
 //         -> create an Orders v2 order (intent=AUTHORIZE) AND an `orders` row
 //            (status MATCHED). Returns the DB `orderId`, the `paypalOrderId`,
-//            and the approve URL.
+//            and the approve URL. The escrowed amount is ALWAYS the dataset's
+//            listed price (datasets.price_cents), never a client figure: an
+//            optional `amount` (major units) is only a confirmation, and a
+//            mismatch is 422 so a tampered request can't escrow $0.01 for a
+//            $49 dataset.
 //   PATCH { orderId, action, resolution?, requestId?, note? }
 //         action: authorize | deliver | capture | payout | void | dispute
 //                 | resolve  (resolve needs resolution: "capture" | "void")
@@ -121,19 +125,18 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const datasetId = body?.datasetId;
-  const amount = body?.amount;
+  const clientAmount: unknown = body?.amount;
+  if (typeof datasetId !== "string" || datasetId.trim() === "")
+    return bad("datasetId (string) is required");
   if (
-    typeof datasetId !== "string" ||
-    typeof amount !== "number" ||
-    !(amount > 0)
-  ) {
-    return bad("datasetId (string) and amount (positive number) are required");
-  }
+    clientAmount !== undefined &&
+    (typeof clientAmount !== "number" || !(clientAmount > 0))
+  )
+    return bad("amount, if provided, must be a positive number");
   const buyerEmail =
     typeof body?.buyerEmail === "string" && body.buyerEmail.trim() !== ""
       ? body.buyerEmail
       : DEFAULT_BUYER_EMAIL;
-  const amountCents = Math.round(amount * 100);
 
   // The dataset must exist (orders.dataset_id is a FK) — turn a bad id into a
   // clean 422 instead of a DB-level foreign-key throw.
@@ -144,6 +147,17 @@ export async function POST(request: Request) {
     return errorResponse(err);
   }
   if (!dataset) return bad(`unknown datasetId: ${datasetId}`);
+
+  // The server's listed price is the only source of the escrowed amount. A
+  // client `amount` is compared in cents (no float equality) and must match.
+  const amountCents = dataset.price_cents;
+  if (!(amountCents > 0)) return bad("dataset has no listed price");
+  if (
+    typeof clientAmount === "number" &&
+    Math.round(clientAmount * 100) !== amountCents
+  )
+    return bad("amount does not match the listed price");
+  const amount = amountCents / 100;
 
   // MOCK MODE (opt-in): no PayPal, but we DO persist — a real, queryable order
   // row with a mock PayPal order id.

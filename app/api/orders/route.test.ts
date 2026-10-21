@@ -100,9 +100,19 @@ function withEnv(
 // --- Input validation (resolves before any PayPal/DB write that could fail) ---
 
 test(
-  "POST rejects a missing/invalid amount with 422",
+  "POST rejects a non-numeric or non-positive amount with 422",
   withEnv(async () => {
-    const res = await POST(req({ datasetId: DATASET_ID }));
+    for (const amount of ["49", 0, -49]) {
+      const res = await POST(req({ datasetId: DATASET_ID, amount }));
+      assert.equal(res.status, 422, `amount=${JSON.stringify(amount)}`);
+    }
+  }),
+);
+
+test(
+  "POST rejects a missing datasetId with 422",
+  withEnv(async () => {
+    const res = await POST(req({ amount: 49 }));
     assert.equal(res.status, 422);
   }),
 );
@@ -186,7 +196,7 @@ test(
   "POST in mock mode returns 201 with a DB orderId, a mock paypalOrderId, and MATCHED",
   withEnv(
     async ({ url }) => {
-      const res = await POST(req({ datasetId: DATASET_ID, amount: 42 }));
+      const res = await POST(req({ datasetId: DATASET_ID, amount: 49 }));
       assert.equal(res.status, 201);
       const json = (await res.json()) as Record<string, unknown>;
       assert.equal(json.mock, true);
@@ -198,7 +208,73 @@ test(
       // Persisted: the row exists with the right amount and state.
       const row = getOrder(openDb(url), String(json.orderId));
       assert.equal(row?.status, "MATCHED");
-      assert.equal(row?.amount_cents, 4200);
+      assert.equal(row?.amount_cents, 4900);
+    },
+    { mock: true },
+  ),
+);
+
+// --- Pricing: the escrowed amount is the dataset's listed price, never the client's ---
+
+test(
+  "POST with a tampered amount is 422 and writes no order",
+  withEnv(
+    async ({ url }) => {
+      const res = await POST(req({ datasetId: DATASET_ID, amount: 0.01 }));
+      assert.equal(res.status, 422);
+      const json = (await res.json()) as { error: string };
+      assert.equal(json.error, "amount does not match the listed price");
+      const db = openDb(url);
+      const { n } = db.prepare(`SELECT COUNT(*) AS n FROM orders`).get() as {
+        n: number;
+      };
+      db.close();
+      assert.equal(n, 0);
+    },
+    { mock: true },
+  ),
+);
+
+test(
+  "POST without an amount escrows the dataset's listed price",
+  withEnv(
+    async ({ url }) => {
+      const res = await POST(req({ datasetId: DATASET_ID }));
+      assert.equal(res.status, 201);
+      const json = (await res.json()) as { orderId: string };
+      assert.equal(getOrder(openDb(url), json.orderId)?.amount_cents, 4900);
+    },
+    { mock: true },
+  ),
+);
+
+test(
+  "POST with an amount matching the listed price (float-safe) is 201",
+  withEnv(
+    async ({ url }) => {
+      // 49 dollars as the researcher UI sends it: priceCents / 100.
+      const res = await POST(
+        req({ datasetId: DATASET_ID, amount: 4900 / 100 }),
+      );
+      assert.equal(res.status, 201);
+      const json = (await res.json()) as { orderId: string };
+      assert.equal(getOrder(openDb(url), json.orderId)?.amount_cents, 4900);
+    },
+    { mock: true },
+  ),
+);
+
+test(
+  "POST for a dataset with no listed price is 422",
+  withEnv(
+    async ({ url }) => {
+      const db = openDb(url);
+      db.prepare(
+        `INSERT INTO datasets (id, vendor_id, title, price_cents) VALUES (?, ?, ?, ?)`,
+      ).run("ds_free", "vnd_demo_health", "Unpriced", 0);
+      db.close();
+      const res = await POST(req({ datasetId: "ds_free" }));
+      assert.equal(res.status, 422);
     },
     { mock: true },
   ),
