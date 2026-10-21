@@ -29,8 +29,8 @@ Medical-school researchers waste weeks sourcing data: they can't inspect quality
 
 ## Screens
 
-| Landing (light) | Landing (dark) |
-| --- | --- |
+| Landing (light)                                               | Landing (dark)                                              |
+| ------------------------------------------------------------- | ----------------------------------------------------------- |
 | ![Landing page, light theme](docs/screenshots/home-light.png) | ![Landing page, dark theme](docs/screenshots/home-dark.png) |
 
 <img src="docs/screenshots/home-mobile.png" alt="Landing page on mobile" width="320" />
@@ -74,6 +74,41 @@ written inside `createOrder`/`advanceOrder` so the history can never drift from
 an order's status. Read a single order's timeline (oldest-first) with
 `GET /api/orders?id=<orderId>&events=1`. A `dispute` or `resolve` PATCH can
 include a `note` (e.g. the dispute reason), recorded on that transition's event.
+
+### Trust guarantees
+
+The server, not the client, decides who pays what and who sees what:
+
+- **Price is server-set.** `POST /api/orders` escrows the dataset's listed
+  price. An optional `amount` is only a confirmation, and a mismatch is `422`,
+  so a tampered request can't escrow $0.01 for a $49 dataset.
+- **No query without a paid, delivered order.** `POST /api/query` requires an
+  `orderId` for that dataset in `DELIVERED`, `CAPTURED` or `PAID_OUT`
+  (`grantsDataAccess`). Access freezes while a dispute is open.
+- **Two privacy screens.** The plain-English question is screened for
+  identifiers and row-level asks (`checkQuestion`), then the compiled SQL is
+  re-checked as aggregate-only (`checkQuery`), and results go through small-cell
+  suppression (k ≥ 11, `checkResult`).
+- **Metered per answer.** Each answered query is billed against the order at a
+  fixed server fee (`PER_QUERY_FEE_CENTS`). Rejected or suppressed queries are
+  never billed.
+
+### API reference
+
+| Method & path                                                 | Purpose                                                                             |
+| ------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `POST /api/match` `{ description }`                           | Rank catalog datasets for a study description                                       |
+| `POST /api/orders` `{ datasetId, amount? }`                   | Create an escrow order at the listed price (`MATCHED`)                              |
+| `PATCH /api/orders` `{ orderId, action, resolution?, note? }` | Advance escrow: `authorize · deliver · capture · payout · void · dispute · resolve` |
+| `GET /api/orders` `?status= &datasetId= &buyerEmail=`         | List orders (newest first)                                                          |
+| `GET /api/orders?id=<id>&events=1`                            | One order plus its audit timeline                                                   |
+| `GET /api/orders?summary=1[&datasetId=]`                      | Vendor earnings: counts by status, held / captured / paid-out / released cents      |
+| `POST /api/query` `{ orderId, datasetId, question }`          | Plain-English question → privacy-safe aggregate, metered (`usage` in response)      |
+| `GET /api/billing?orderId=<id>`                               | An order's per-query usage, `queryCount`, `totalCents`                              |
+| `POST /api/billing` `{ orderId, question }`                   | Record one query charge (fee is server-set; `409` without data access)              |
+| `GET /api/health`                                             | Uptime check: `{ status, mode, db }` (Render health check)                          |
+
+Errors are always `{ error }` (plus `reasons` on privacy rejections).
 
 ## Quick start
 
@@ -162,10 +197,13 @@ meddata-escrow/
 │  └─ api/
 │     ├─ match/              # POST  — match datasets to a study description
 │     ├─ orders/             # GET/POST/PATCH — list + escrow lifecycle (authorize → capture/void/payout, dispute/resolve); GET ?events= returns the audit timeline
-│     ├─ query/              # POST  — plain-English query (privacy-safe aggregate)
-│     └─ billing/            # POST  — per-query charge
+│     ├─ query/              # POST  — plain-English query (paid order required; privacy-safe aggregate, metered)
+│     ├─ billing/            # GET/POST — per-query usage + spend
+│     └─ health/             # GET   — uptime check
 ├─ lib/
 │  ├─ ai/                    # matcher, nl2query, privacy-guard
+│  ├─ query/                 # mock vendor-side executor, per-query pricing
+│  ├─ escrow/                # escrow state machine + data-access rule
 │  ├─ paypal/                # PayPal Orders/Payments client
 │  └─ db/                    # SQLite persistence layer (client.ts, usage.ts), schema.sql, seed.ts
 ├─ data/catalog.json         # dataset catalog (synthetic)
