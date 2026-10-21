@@ -11,8 +11,9 @@
 //   3. mockExecute  — the vendor-side aggregate query runs here (mock; no raw
 //                     records ever leave the vendor).
 //   4. checkResult  — small-cell suppression on the aggregate (403 if unsafe).
-// Per-query billing is recorded separately via POST /api/billing after a
-// successful query (keeps metering out of the read path).
+//   5. recordUsage  — meter the answered query against the order at
+//                     PER_QUERY_FEE_CENTS (lib/db/usage). Only successful
+//                     answers reach this step, so rejections are never billed.
 import { nl2query } from "../../../lib/ai/nl2query";
 import {
   checkQuery,
@@ -21,7 +22,9 @@ import {
 } from "../../../lib/ai/privacy-guard";
 import { mockExecute } from "../../../lib/query/mock-execute";
 import { getOrder, withDb } from "../../../lib/db/client";
+import { recordUsage } from "../../../lib/db/usage";
 import { grantsDataAccess } from "../../../lib/escrow/state-machine";
+import { PER_QUERY_FEE_CENTS } from "../../../lib/query/pricing";
 
 // Upper bound on a question. Real questions are a sentence or two; the cap keeps
 // the regex screens and (later) the LLM prompt bounded against oversized input.
@@ -104,10 +107,22 @@ export async function POST(request: Request) {
     );
   }
 
+  // 5. Meter the answered query against the order. Only reached on success, so
+  //    rejected and suppressed queries are never billed.
+  let usage;
+  try {
+    usage = withDb((db) =>
+      recordUsage(db, { orderId, question, chargeCents: PER_QUERY_FEE_CENTS }),
+    );
+  } catch {
+    return bad("could not record query usage", 500);
+  }
+
   return Response.json({
     datasetId,
     question,
     compiled,
     result: rows,
+    usage: { usageId: usage.id, chargeCents: usage.charge_cents },
   });
 }

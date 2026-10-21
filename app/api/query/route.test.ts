@@ -12,7 +12,9 @@ import { randomUUID } from "node:crypto";
 
 import { POST } from "./route";
 import { openDb, createOrder } from "../../../lib/db/client";
+import { listUsage } from "../../../lib/db/usage";
 import type { EscrowState } from "../../../lib/escrow/state-machine";
+import { PER_QUERY_FEE_CENTS } from "../../../lib/query/pricing";
 
 const DATASET_ID = "ds_cardio_synthea_v1";
 const OTHER_DATASET_ID = "ds_onc_v1";
@@ -211,6 +213,57 @@ for (const status of ["MATCHED", "AUTHORIZED", "DISPUTED", "VOIDED"] as const) {
     }),
   );
 }
+
+// --- Metering: each answered query is billed against the order ---
+
+function usageFor(url: string, orderId: string) {
+  const db = openDb(url);
+  try {
+    return listUsage(db, orderId);
+  } finally {
+    db.close();
+  }
+}
+
+test(
+  "an answered query records one usage row at the per-query fee",
+  withEnv(async ({ url, orderId }) => {
+    const res = await ask(orderId, "How many patients by sex?");
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.usage.chargeCents, PER_QUERY_FEE_CENTS);
+    assert.equal(PER_QUERY_FEE_CENTS, 50);
+
+    const rows = usageFor(url, orderId);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].id, json.usage.usageId);
+    assert.equal(rows[0].question, "How many patients by sex?");
+    assert.equal(rows[0].charge_cents, PER_QUERY_FEE_CENTS);
+
+    // A second answer is a second charge.
+    await ask(orderId, "average age by region");
+    assert.equal(usageFor(url, orderId).length, 2);
+  }),
+);
+
+test(
+  "a privacy-rejected query is not billed",
+  withEnv(async ({ url, orderId }) => {
+    const res = await ask(orderId, "List all patients in the cohort");
+    assert.equal(res.status, 403);
+    assert.equal(usageFor(url, orderId).length, 0);
+  }),
+);
+
+test(
+  "a query on an order without data access is not billed",
+  withEnv(async ({ url }) => {
+    const orderId = seedOrder(url, "AUTHORIZED");
+    const res = await ask(orderId, "How many patients?");
+    assert.equal(res.status, 403);
+    assert.equal(usageFor(url, orderId).length, 0);
+  }),
+);
 
 for (const status of ["CAPTURED", "PAID_OUT"] as const) {
   test(

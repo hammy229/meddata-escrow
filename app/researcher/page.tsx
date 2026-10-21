@@ -155,6 +155,7 @@ export default function ResearcherPage() {
   const [queryReasons, setQueryReasons] = useState<string[]>([]);
   const [compiled, setCompiled] = useState<string | null>(null);
   const [results, setResults] = useState<AggregateRow[] | null>(null);
+  const [queryCharge, setQueryCharge] = useState<number | null>(null);
 
   function resetEscrow() {
     setEscrow(null);
@@ -356,6 +357,7 @@ export default function ResearcherPage() {
     setQueryReasons([]);
     setCompiled(null);
     setResults(null);
+    setQueryCharge(null);
     try {
       const res = await fetch("/api/query", {
         method: "POST",
@@ -377,6 +379,12 @@ export default function ResearcherPage() {
       }
       setCompiled(typeof data.compiled === "string" ? data.compiled : null);
       setResults(Array.isArray(data.result) ? data.result : []);
+      // The server meters each answered query against the order.
+      setQueryCharge(
+        typeof data.usage?.chargeCents === "number"
+          ? data.usage.chargeCents
+          : null,
+      );
     } catch {
       setQueryError("Could not reach the query service.");
     } finally {
@@ -646,6 +654,11 @@ export default function ResearcherPage() {
                 columnDefs={resultColumns(results)}
                 height={Math.min(80 + results.length * 44, 360)}
               />
+              {queryCharge !== null && (
+                <p className="mt-2 text-xs text-zinc-500">
+                  Billed {usd(queryCharge)} to this order.
+                </p>
+              )}
             </div>
           )}
         </section>
