@@ -344,6 +344,9 @@ export default function OrdersLedger() {
     gridRef.current?.api.exportDataAsCsv({
       fileName: "meddata-orders.csv",
       processCellCallback: exportCell,
+      // The pinned total is a UI summary, not an order: keep it out of the
+      // export so every CSV row is a real ledger entry.
+      skipPinnedBottom: true,
     });
   }
 
