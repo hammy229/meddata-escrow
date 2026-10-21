@@ -19,6 +19,10 @@ import {
 } from "../../../lib/ai/privacy-guard";
 import { mockExecute } from "../../../lib/query/mock-execute";
 
+// Upper bound on a question. Real questions are a sentence or two; the cap keeps
+// the regex screens and (later) the LLM prompt bounded against oversized input.
+const MAX_QUESTION_LENGTH = 500;
+
 // Same error shape as /api/orders: { error }.
 function bad(error: string, status = 422) {
   return Response.json({ error }, { status });
@@ -35,6 +39,9 @@ export async function POST(request: Request) {
     question.trim() === ""
   ) {
     return bad("datasetId and question (non-empty strings) are required");
+  }
+  if (question.length > MAX_QUESTION_LENGTH) {
+    return bad(`question is too long (max ${MAX_QUESTION_LENGTH} characters)`);
   }
 
   // 1. Reject the question before compiling if it asks for row-level/PII data.

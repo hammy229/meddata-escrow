@@ -71,6 +71,21 @@ test("row-level plain-English question is rejected (403)", async () => {
   assert.equal(res.status, 403);
 });
 
+test("question over 500 characters -> 422", async () => {
+  const res = await POST(
+    req({ datasetId: "ds_x", question: "how many patients ".repeat(30) }),
+  );
+  assert.equal(res.status, 422);
+  const json = await res.json();
+  assert.match(json.error, /too long/);
+});
+
+test("question of exactly 500 characters is accepted", async () => {
+  const question = "how many patients by sex".padEnd(500, " ");
+  const res = await POST(req({ datasetId: "ds_x", question }));
+  assert.equal(res.status, 200);
+});
+
 test("missing fields -> 422", async () => {
   const res = await POST(req({ datasetId: "ds_x" }));
   assert.equal(res.status, 422);
