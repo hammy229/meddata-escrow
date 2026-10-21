@@ -8,6 +8,8 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import type { DatabaseSync } from "node:sqlite";
+
 import { openDb, resolveDbPath } from "./client";
 
 interface CatalogEntry {
@@ -39,13 +41,15 @@ function vendorName(vendorId: string): string {
     .join(" ");
 }
 
-async function main(): Promise<void> {
-  const target = resolveDbPath();
-  console.log(`[seed] meddata-escrow -> ${target}`);
-
-  const db = openDb();
-  console.log("[seed] applied schema.sql");
-
+/**
+ * Load the catalog (vendors + datasets) into an open, migrated database.
+ * Idempotent upserts; returns how many rows of each were written. Exported so
+ * scripts (e.g. the `npm run demo` happy path) can seed a scratch database.
+ */
+export function seedDatabase(db: DatabaseSync): {
+  vendors: number;
+  datasets: number;
+} {
   const catalog = JSON.parse(
     readFileSync(CATALOG_PATH, "utf8"),
   ) as CatalogEntry[];
@@ -62,8 +66,6 @@ async function main(): Promise<void> {
   for (const vendorId of vendorIds) {
     upsertVendor.run(vendorId, vendorName(vendorId), DEMO_VENDOR_PAYOUT_EMAIL);
   }
-  console.log(`[seed] upserted ${vendorIds.length} vendor(s)`);
-
   const upsertDataset = db.prepare(
     `INSERT INTO datasets (id, vendor_id, title, description, price_cents)
        VALUES (?, ?, ?, ?, ?)
@@ -82,13 +84,26 @@ async function main(): Promise<void> {
       d.priceCents,
     );
   }
-  console.log(`[seed] upserted ${catalog.length} dataset(s)`);
+  return { vendors: vendorIds.length, datasets: catalog.length };
+}
 
+function main(): void {
+  console.log(`[seed] meddata-escrow -> ${resolveDbPath()}`);
+  const db = openDb();
+  console.log("[seed] applied schema.sql");
+  const { vendors, datasets } = seedDatabase(db);
+  console.log(`[seed] upserted ${vendors} vendor(s)`);
+  console.log(`[seed] upserted ${datasets} dataset(s)`);
   db.close();
   console.log("[seed] done.");
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+// Run only when executed directly (`npm run seed`), not when imported.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  try {
+    main();
+  } catch (err) {
+    console.error(err);
+    process.exit(1);
+  }
+}
