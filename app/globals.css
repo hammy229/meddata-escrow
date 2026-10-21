@@ -187,3 +187,7 @@ a {
 .ag-row.dg-row-selected {
   background-color: color-mix(in srgb, #0070e0 16%, transparent);
 }
+/* Vendor ledger: the pinned total row reads as a footer. */
+.ag-row.ledger-total {
+  font-weight: 600;
+}

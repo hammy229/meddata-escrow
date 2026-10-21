@@ -5,6 +5,7 @@ import Link from "next/link";
 import VendorCatalog, { type CatalogRow } from "../components/VendorCatalog";
 import IncomingOrders from "../components/IncomingOrders";
 import EarningsSummary from "../components/EarningsSummary";
+import OrdersLedger from "../components/OrdersLedger";
 import { ArrowLeft, Database } from "../components/icons";
 
 interface CatalogEntry {
@@ -105,6 +106,15 @@ export default function VendorPage() {
           (void).
         </p>
         <IncomingOrders />
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm shadow-zinc-900/5 dark:border-zinc-800 dark:bg-zinc-900/40 dark:shadow-black/20">
+        <h2 className="mb-1 text-lg font-semibold">All orders</h2>
+        <p className="mb-4 text-sm text-zinc-500">
+          The full ledger. Filter by status, amount or date, search everything,
+          and export what you see. The total row sums the filtered orders.
+        </p>
+        <OrdersLedger />
       </section>
     </main>
   );
