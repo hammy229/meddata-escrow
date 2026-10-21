@@ -22,10 +22,9 @@ interface Match {
   priceCents: number;
 }
 
-interface AggregateRow {
-  group: string;
-  count: number;
-}
+// One aggregate result row: `{ group, count }`, `{ group, avg_age }`, or a
+// single scalar like `{ avg_bmi }` — the keys follow the compiled query.
+type AggregateRow = Record<string, string | number>;
 
 // The escrow lifecycle, in order. The UI advances through these as the flow
 // progresses; VOIDED is a terminal off-ramp handled separately.
@@ -66,10 +65,15 @@ const matchColumns: ColDef<Match>[] = [
   },
 ];
 
-const resultColumns: ColDef<AggregateRow>[] = [
-  { field: "group", headerName: "Group", flex: 2 },
-  { field: "count", headerName: "Count", flex: 1, maxWidth: 160 },
-];
+// Result columns follow the returned row's keys, so a grouped average shows
+// its mean column instead of an empty "Count".
+function resultColumns(rows: AggregateRow[]): ColDef<AggregateRow>[] {
+  return Object.keys(rows[0] ?? {}).map((field) =>
+    field === "group"
+      ? { field, headerName: "Group", flex: 2 }
+      : { field, headerName: field, flex: 1, maxWidth: 160 },
+  );
+}
 
 function EscrowStepper({
   state,
@@ -633,7 +637,7 @@ export default function ResearcherPage() {
             <div className="mt-4">
               <DataGrid<AggregateRow>
                 rowData={results}
-                columnDefs={resultColumns}
+                columnDefs={resultColumns(results)}
                 height={Math.min(80 + results.length * 44, 360)}
               />
             </div>

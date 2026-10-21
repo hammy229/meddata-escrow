@@ -6,8 +6,8 @@
 // real dataset in this demo, so we synthesize a deterministic, privacy-safe
 // aggregate from the compiled query shape instead of touching any data.
 //
-// The output is always aggregate-shaped (grouped `{ group, count }` rows, or a
-// single scalar-aggregate row) with every count safely at or above the privacy
+// The output is always aggregate-shaped (grouped `{ group, count }` or
+// `{ group, avg_<field> }` rows, or a single scalar-aggregate row) with every count safely at or above the privacy
 // guard's minimum cell size, so a well-formed query is never spuriously
 // suppressed. No row-level record is ever produced here.
 import { MIN_CELL_SIZE } from "../ai/privacy-guard";
@@ -46,17 +46,30 @@ function safeCount(seed: string): number {
 
 /**
  * Synthesize a deterministic aggregate result for a compiled query. Grouped
- * queries yield a few `{ group, count }` rows; scalar aggregates yield one row
+ * queries yield a few `{ group, count }` (or `{ group, avg_<field> }`) rows;
+ * scalar aggregates yield one row
  * named after the SELECT alias.
  */
 export function mockExecute(compiled: CompiledQuery): AggregateRow[] {
   const sql = compiled.sql;
 
-  // Grouped query -> one row per domain value of the group column.
+  // The aggregate's SELECT alias (e.g. `count`, `avg_value`, `min_age`) — the
+  // last `AS <alias>` before FROM, which skips the `AS "group"` label.
+  const alias = sql.match(/\sAS\s+(\w+)\s+FROM/i)?.[1] ?? "count";
+
+  // Grouped query -> one row per domain value of the group column, carrying the
+  // query's own aggregate: `{ group, count }` for a grouped COUNT, or
+  // `{ group, avg_<field> }` for a grouped AVG (a mean, not a headcount).
   const groupBy = sql.match(/GROUP BY\s+(\w+)/i);
   if (groupBy) {
     const col = groupBy[1];
     const values = GROUP_VALUES[col] ?? ["a", "b", "c"];
+    if (/^avg_/.test(alias)) {
+      return values.map((group) => ({
+        group,
+        [alias]: 40 + (hash(`${alias}:${col}:${group}`) % 40),
+      }));
+    }
     return values.map((group) => ({
       group,
       count: safeCount(`${col}:${group}`),
@@ -66,7 +79,6 @@ export function mockExecute(compiled: CompiledQuery): AggregateRow[] {
   // Scalar aggregate -> single row keyed by the SELECT alias (e.g. `count`,
   // `avg_value`, `min_age`). AVG/MIN/MAX are given a plausible numeric value;
   // a bare COUNT gets a safely-large count.
-  const alias = sql.match(/\sAS\s+(\w+)\s+FROM/i)?.[1] ?? "count";
   if (/^avg_/.test(alias)) {
     return [{ [alias]: 40 + (hash(alias) % 40) }]; // e.g. a mean in a sane range
   }
