@@ -61,15 +61,22 @@ operations and results pass through the privacy guard before returning.
 ## API routes
 
 - `POST /api/match` — rank datasets for a study description
-- `POST /api/orders` — create order + authorize (escrow hold)
-- `PATCH /api/orders` — capture or void after the sample check
-- `POST /api/query` — plain-English query → privacy-safe aggregate
-- `POST /api/billing` — record + charge per-query usage
+- `POST /api/orders` — create an escrow order at the dataset's listed price
+- `PATCH /api/orders` — advance escrow (authorize, deliver, capture, payout,
+  void, dispute, resolve)
+- `GET /api/orders` — list orders; `?id=&events=1` adds the audit timeline;
+  `?summary=1` returns vendor earnings
+- `POST /api/query` — plain-English query → privacy-safe aggregate; requires a
+  paid, delivered order and meters each answer
+- `GET|POST /api/billing` — per-query usage and spend for an order
+- `GET /api/health` — uptime check (DB + mock/live mode)
+
+See the README's "Trust guarantees" and "API reference" for the full contract.
 
 ## Data model
 
 See [`../lib/db/schema.sql`](../lib/db/schema.sql): `vendors`, `datasets`,
-`orders`, `query_usage`.
+`orders`, `query_usage`, `order_events` (append-only audit trail).
 
 ## Deployment (Render)
 

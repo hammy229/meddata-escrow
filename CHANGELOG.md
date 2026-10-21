@@ -2,6 +2,52 @@
 
 All notable changes to MedData Escrow. Newest first.
 
+## 2026-10-21 — Trust hardening, audit trail UI, earnings & spend
+
+A security and product pass: the server now enforces who pays what and who
+sees what, and both workspaces show where the money is.
+
+### Security
+
+- **Listed-price escrow** — `POST /api/orders` charges the dataset's price; a
+  client `amount` that doesn't match is `422`.
+- **Paid-order query gate** — `POST /api/query` requires an `orderId` for that
+  dataset in `DELIVERED`, `CAPTURED` or `PAID_OUT` (`grantsDataAccess`); access
+  freezes during a dispute.
+- **Server-set billing** — the per-query fee is fixed server-side (one constant
+  in `lib/query/pricing`); `/api/billing` rejects client prices and orders
+  without data access (`409`).
+- **Two-stage privacy screen** — plain-English questions are screened for
+  identifiers and row-level asks (`checkQuestion`), then the compiled SQL is
+  re-checked as aggregate-only. Questions are capped at 500 characters.
+
+### Added
+
+- Per-answer metering on `/api/query` (`usage` in the response).
+- `GET /api/billing?orderId=` (usage + spend), `GET /api/orders?summary=1`
+  (vendor earnings), `GET /api/health`.
+- **Audit trail UI** — an `OrderTimeline` stepper in the researcher escrow
+  panel and an expandable History row on vendor incoming orders, with dispute
+  notes.
+- **Earnings summary** on the vendor workspace and **query spend** on the
+  researcher workspace.
+
+### Fixed
+
+- Plain-English questions like "How many patients by sex?" were rejected
+  because the privacy check demanded SQL syntax.
+- Grouped averages returned counts instead of averages.
+- The compiled SQL never rendered on the researcher query panel.
+- Render deployed on Node 20, but `node:sqlite` needs Node ≥ 22; now Node 24
+  with `/api/health` as the health check.
+
+### CI & repo
+
+- CI now runs the test suite (140 tests), with a read-only token, a timeout
+  and cancellation of superseded runs.
+- Dependabot for npm (minor/patch, grouped) and GitHub Actions; issue forms
+  with a no-PHI reminder; updated PR template.
+
 ## 2026-10-15 — PayPal-blue rebrand
 
 Recolored the whole product from emerald to a **PayPal-blue** system for the
