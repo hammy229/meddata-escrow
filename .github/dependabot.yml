@@ -7,6 +7,11 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "chore(deps)"
+    # Major toolchain upgrades (TypeScript, ESLint, Node types) are breaking and
+    # get done deliberately, not via weekly bot PRs during the hackathon.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
     groups:
       minor-and-patch:
         update-types:
