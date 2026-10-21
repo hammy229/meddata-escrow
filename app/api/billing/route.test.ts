@@ -1,6 +1,6 @@
 // /api/billing spec — records per-query usage. Uses an isolated temp SQLite
 // file (never ./data/dev.sqlite) injected via DATABASE_URL, with a seeded
-// order so the FK is satisfied. Calls the exported POST with a Web Request.
+// order so the FK is satisfied. Calls the exported GET/POST with a Web Request.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
@@ -8,9 +8,13 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
 
-import { POST } from "./route";
+import { GET, POST } from "./route";
 import { openDb, createOrder } from "../../../lib/db/client";
-import { listUsage, PER_QUERY_FEE_CENTS } from "../../../lib/db/usage";
+import {
+  listUsage,
+  recordUsage,
+  PER_QUERY_FEE_CENTS,
+} from "../../../lib/db/usage";
 import type { EscrowState } from "../../../lib/escrow/state-machine";
 
 function tmpDbPath() {
@@ -163,4 +167,81 @@ test("unknown orderId -> 422 (not 500)", async () => {
 test("missing fields -> 422", async () => {
   const res = await POST(req({ orderId: "ord_test" }));
   assert.equal(res.status, 422);
+});
+
+// --- GET /api/billing?orderId= (usage + spend for one order) ---
+
+function getReq(query = "") {
+  return new Request(`http://localhost/api/billing${query}`, {
+    method: "GET",
+  });
+}
+
+test("GET returns an order's usage newest first, with count and total", async () => {
+  const path = tmpDbPath();
+  await withDbEnv(path, async () => {
+    seed(path);
+    const db = openDb(path);
+    recordUsage(db, {
+      id: "qu_old",
+      orderId: "ord_test",
+      question: "first",
+      chargeCents: 50,
+    });
+    recordUsage(db, {
+      id: "qu_new",
+      orderId: "ord_test",
+      question: "second",
+      chargeCents: 75,
+    });
+    // created_at is second-resolution; pin distinct times so order is certain.
+    const setAt = db.prepare(
+      `UPDATE query_usage SET created_at = ? WHERE id = ?`,
+    );
+    setAt.run("2026-01-01 00:00:00", "qu_old");
+    setAt.run("2026-01-02 00:00:00", "qu_new");
+    db.close();
+
+    const res = await GET(getReq("?orderId=ord_test"));
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.orderId, "ord_test");
+    assert.deepEqual(
+      json.usage.map((u: { id: string }) => u.id),
+      ["qu_new", "qu_old"],
+    );
+    assert.equal(json.usage[0].charge_cents, 75);
+    assert.equal(json.queryCount, 2);
+    assert.equal(json.totalCents, 125);
+  });
+});
+
+test("GET for an order with no usage returns zeros", async () => {
+  const path = tmpDbPath();
+  await withDbEnv(path, async () => {
+    seed(path);
+    const res = await GET(getReq("?orderId=ord_test"));
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), {
+      orderId: "ord_test",
+      usage: [],
+      queryCount: 0,
+      totalCents: 0,
+    });
+  });
+});
+
+test("GET without orderId -> 422", async () => {
+  assert.equal((await GET(getReq())).status, 422);
+  assert.equal((await GET(getReq("?orderId="))).status, 422);
+});
+
+test("GET for an unknown orderId -> 404", async () => {
+  const path = tmpDbPath();
+  await withDbEnv(path, async () => {
+    openDb(path).close(); // migrate an empty DB (no orders)
+    const res = await GET(getReq("?orderId=ord_missing"));
+    assert.equal(res.status, 404);
+    assert.match((await res.json()).error, /unknown orderId/);
+  });
 });
