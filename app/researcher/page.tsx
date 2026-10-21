@@ -360,11 +360,17 @@ export default function ResearcherPage() {
       const res = await fetch("/api/query", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ datasetId: selected.datasetId, question }),
+        // The server checks this order is paid + delivered for the dataset.
+        body: JSON.stringify({
+          orderId,
+          datasetId: selected.datasetId,
+          question,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // 403 => privacy guard rejected the query (row-level/PII/small cell).
+        // 403 => privacy guard rejected the query (row-level/PII/small cell)
+        // or the order does not grant data access; 404/422 => bad order.
         setQueryError(data?.error ?? `Query rejected (${res.status}).`);
         setQueryReasons(Array.isArray(data?.reasons) ? data.reasons : []);
         return;
