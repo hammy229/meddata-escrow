@@ -26,6 +26,9 @@ const CATALOG_PATH = join(
   "catalog.json",
 );
 
+/** Sandbox PayPal receiver for seeded vendors' payouts (demo only). */
+const DEMO_VENDOR_PAYOUT_EMAIL = "vendor-demo@meddata.test";
+
 /** Derive a display name from a vendor id, e.g. vnd_demo_health -> "Demo Health". */
 function vendorName(vendorId: string): string {
   return vendorId
@@ -48,12 +51,16 @@ async function main(): Promise<void> {
   ) as CatalogEntry[];
 
   const vendorIds = [...new Set(catalog.map((d) => d.vendorId))];
+  // Every demo vendor is paid at one sandbox payout address; COALESCE keeps a
+  // payout email someone already set by hand.
   const upsertVendor = db.prepare(
-    `INSERT INTO vendors (id, name) VALUES (?, ?)
-       ON CONFLICT(id) DO UPDATE SET name = excluded.name`,
+    `INSERT INTO vendors (id, name, payout_email) VALUES (?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name         = excluded.name,
+         payout_email = COALESCE(vendors.payout_email, excluded.payout_email)`,
   );
   for (const vendorId of vendorIds) {
-    upsertVendor.run(vendorId, vendorName(vendorId));
+    upsertVendor.run(vendorId, vendorName(vendorId), DEMO_VENDOR_PAYOUT_EMAIL);
   }
   console.log(`[seed] upserted ${vendorIds.length} vendor(s)`);
 

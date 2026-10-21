@@ -30,6 +30,8 @@ export interface OrderRow {
   buyer_email: string;
   paypal_order_id: string | null;
   authorization_id: string | null;
+  /** PayPal Payouts batch id, set when the vendor is paid (PAYOUT). */
+  payout_batch_id: string | null;
   status: EscrowState;
   amount_cents: number;
   created_at: string;
@@ -93,6 +95,9 @@ export function migrate(db: DatabaseSync): void {
   ensureColumn(db, "order_events", "seq", "INTEGER");
   // order_events.note (dispute reason / resolution note) likewise back-filled.
   ensureColumn(db, "order_events", "note", "TEXT");
+  // Vendor payout receiver + the payout batch id recorded on PAYOUT.
+  ensureColumn(db, "vendors", "payout_email", "TEXT");
+  ensureColumn(db, "orders", "payout_batch_id", "TEXT");
 }
 
 /** Add `table.column` if it is missing (idempotent schema back-fill). */
@@ -272,6 +277,22 @@ export function getDataset(
 export interface OrderPatch {
   paypalOrderId?: string | null;
   authorizationId?: string | null;
+  payoutBatchId?: string | null;
+}
+
+/** A persisted vendor row (snake_case columns, as stored). */
+export interface VendorRow {
+  id: string;
+  name: string;
+  /** PayPal email the vendor is paid at; null until onboarded for payouts. */
+  payout_email: string | null;
+  created_at: string;
+}
+
+/** Read one vendor by id, or undefined if it does not exist. */
+export function getVendor(db: DatabaseSync, id: string): VendorRow | undefined {
+  return db.prepare(`SELECT * FROM vendors WHERE id = ?`).get(id) as
+    VendorRow | undefined;
 }
 
 /**
@@ -302,6 +323,10 @@ export function advanceOrder(
   if (patch && "authorizationId" in patch) {
     sets.push("authorization_id = ?");
     values.push(patch.authorizationId ?? null);
+  }
+  if (patch && "payoutBatchId" in patch) {
+    sets.push("payout_batch_id = ?");
+    values.push(patch.payoutBatchId ?? null);
   }
   values.push(id);
   db.prepare(`UPDATE orders SET ${sets.join(", ")} WHERE id = ?`).run(

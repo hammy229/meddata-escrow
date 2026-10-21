@@ -23,6 +23,21 @@ Capture the authorization to complete the purchase. See `captureAuthorization`.
 
 Void the authorization so the buyer is never charged. See `voidAuthorization`.
 
+## 4b. Vendor payout (after capture)
+
+`PATCH /api/orders { action: "payout" }` pays the dataset's vendor through the
+PayPal **Payouts API** (`createPayout`, `POST /v1/payments/payouts`) at the
+vendor's `vendors.payout_email`. The vendor receives the captured amount
+minus the platform fee: `PLATFORM_FEE_BPS = 1000` (10%) in
+[`../lib/escrow/fees.ts`](../lib/escrow/fees.ts), fee rounded to the cent.
+`sender_batch_id` is `payout_<orderId>`, so an order can only ever be paid out
+once; the returned `payout_batch_id` is stored on the order. A vendor with no
+payout email gets a 409 and nothing is sent.
+
+Every mutating PayPal call carries a `PayPal-Request-Id` derived from our order
+id + operation (e.g. `ord_…:capture`), so a retried request replays PayPal's
+first result instead of moving money twice.
+
 ## 5. Per-query billing
 
 After purchase, each plain-English query is metered and charged individually.
@@ -34,4 +49,5 @@ See `chargePerQuery` and [`../app/api/billing`](../app/api/billing).
 | ------------------- | ------------------------ |
 | `POST /api/orders`  | create order + authorize |
 | `PATCH /api/orders` | capture **or** void      |
+| `PATCH /api/orders` | payout (Payouts API)     |
 | `POST /api/billing` | per-query charge         |

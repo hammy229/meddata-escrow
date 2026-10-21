@@ -11,7 +11,9 @@
 //                         The stored row is the source of truth for the `from`
 //                         state and PayPal ids. The state-machine transition is
 //                         validated BEFORE any PayPal call, so an illegal move
-//                         never charges anyone and never writes.
+//                         never charges anyone and never writes. `payout`
+//                         pays the vendor (amount minus PLATFORM_FEE_BPS, see
+//                         ./fees) through the PayPal Payouts API.
 //
 // Failures are thrown as EscrowError with an HTTP-ish `status` and a stable
 // `code`, so callers can map them without parsing messages. Anything else that
@@ -35,11 +37,13 @@ import {
   createOrder,
   getOrder,
   getDataset,
+  getVendor,
   advanceOrder,
   type OrderRow,
   type OrderPatch,
 } from "../db/client";
 import { mockId, isMockMode } from "../mock/ids";
+import { vendorPayoutCents } from "./fees";
 import { randomUUID } from "node:crypto";
 
 /** Buyer identity when the caller omits it (local demo — no auth layer yet). */
@@ -68,10 +72,9 @@ export type EscrowErrorCode =
   | "VALIDATION" // bad input (422)
   | "NOT_FOUND" // unknown order (404)
   | "INVALID_TRANSITION" // illegal state-machine move (409)
-  | "PRECONDITION" // order lacks a PayPal id the action needs (409)
+  | "PRECONDITION" // order lacks a PayPal id / vendor payout email (409)
   | "PAYPAL" // PayPal returned non-2xx (PayPal's status)
-  | "NOT_CONFIGURED" // PayPal credentials missing (503)
-  | "NOT_IMPLEMENTED"; // seam not built yet (501)
+  | "NOT_CONFIGURED"; // PayPal credentials missing (503)
 
 /** A typed, expected failure. `status` is an HTTP-ish code; `message` is safe
  *  to show a caller (never credentials or PayPal internals). */
@@ -150,6 +153,11 @@ export function paypalRequestId(
   operation: "create" | "authorize" | "capture" | "void" | "payout",
 ): string {
   return `${orderId}:${operation}`;
+}
+
+/** Payouts sender_batch_id for an order — one payout batch per order, ever. */
+export function payoutSenderBatchId(orderId: string): string {
+  return `payout_${orderId}`;
 }
 
 function invalid(message: string): EscrowError {
@@ -348,32 +356,53 @@ export async function advanceEscrowOrder(
         status: "COMPLETED",
         mock: true,
       });
-    if (event === "PAYOUT")
-      return done(advance(), {
-        payoutBatchId: mockId("MOCK-PAYOUT"),
+    if (event === "PAYOUT") {
+      const payoutBatchId = mockId("MOCK-PAYOUT");
+      return done(advance({ payoutBatchId }), {
+        payoutBatchId,
         status: "PENDING",
         mock: true,
       });
+    }
     // VOID or RESOLVE_VOID
     return done(advance(), { mock: true });
   }
 
-  // REAL MODE: Payouts is the not-yet-built seam (deliberate, not a side effect).
-  if (event === "PAYOUT")
-    throw new EscrowError(
-      501,
-      "real PayPal Payouts not implemented",
-      "NOT_IMPLEMENTED",
-    );
-
   // Caller-supplied idempotency key wins; otherwise derive one per operation.
-  const requestIdFor = (op: "authorize" | "capture" | "void") =>
+  const requestIdFor = (op: "authorize" | "capture" | "void" | "payout") =>
     typeof input.requestId === "string" && input.requestId.trim() !== ""
       ? input.requestId
       : paypalRequestId(orderId, op);
 
   try {
     const pp = (deps.paypal ?? payPalClientFromEnv)();
+    if (event === "PAYOUT") {
+      // Pay the dataset's vendor its share (captured amount minus the
+      // platform fee) at their PayPal email.
+      const receiver = withDb((db) => {
+        const dataset = getDataset(db, order.dataset_id);
+        return dataset ? getVendor(db, dataset.vendor_id)?.payout_email : null;
+      });
+      if (!receiver)
+        throw new EscrowError(
+          409,
+          "vendor has no payout email",
+          "PRECONDITION",
+        );
+      const payout = await pp.createPayout({
+        // Unique per order: PayPal refuses a second batch with the same id.
+        senderBatchId: payoutSenderBatchId(orderId),
+        receiver,
+        amount: vendorPayoutCents(order.amount_cents) / 100,
+        note: `MedData Escrow payout for order ${orderId}`,
+        emailSubject: "You have a MedData Escrow payout",
+        requestId: requestIdFor("payout"),
+      });
+      return done(advance({ payoutBatchId: payout.payoutBatchId }), {
+        payoutBatchId: payout.payoutBatchId,
+        status: payout.batchStatus,
+      });
+    }
     if (event === "AUTHORIZE") {
       if (!order.paypal_order_id)
         throw new EscrowError(

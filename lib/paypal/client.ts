@@ -2,7 +2,8 @@
 //
 // Flow: createAuthorizeOrder (intent=AUTHORIZE) -> buyer approves -> authorizeOrder
 // -> captureAuthorization (on delivery) | voidAuthorization (on failure) |
-// reauthorizeAuthorization (past PayPal's 3-day honor period).
+// reauthorizeAuthorization (past PayPal's 3-day honor period). After capture,
+// createPayout releases the vendor's share via the Payouts API.
 //
 // Security: credentials come only from the injected config (sourced from env
 // in payPalClientFromEnv). The client secret and access token are never logged
@@ -37,6 +38,11 @@ export interface AuthorizeResult {
 export interface CaptureResult {
   captureId: string;
   status: string;
+}
+export interface PayoutResult {
+  payoutBatchId: string;
+  /** e.g. PENDING, PROCESSING, SUCCESS, DENIED. */
+  batchStatus: string;
 }
 
 /** Non-2xx PayPal response. Carries the HTTP status; body is PayPal's error
@@ -222,6 +228,50 @@ export function createPayPalClient(config: PayPalConfig) {
         },
       );
       return { orderId: "", authorizationId: json.id, status: json.status };
+    },
+
+    /**
+     * Pay a vendor via the Payouts API (one EMAIL item per batch).
+     * `senderBatchId` must be unique per payout: PayPal rejects a reused one,
+     * so it doubles as the idempotency key (also the default PayPal-Request-Id).
+     */
+    async createPayout(input: {
+      senderBatchId: string;
+      receiver: string;
+      amount: number;
+      currency?: string;
+      note?: string;
+      emailSubject?: string;
+      senderItemId?: string;
+      requestId?: string;
+    }): Promise<PayoutResult> {
+      const json = await call<{
+        batch_header: { payout_batch_id: string; batch_status: string };
+      }>("payouts.create", "/v1/payments/payouts", {
+        body: {
+          sender_batch_header: {
+            sender_batch_id: input.senderBatchId,
+            email_subject: input.emailSubject ?? "You have a payout",
+          },
+          items: [
+            {
+              recipient_type: "EMAIL",
+              amount: {
+                value: money(input.amount),
+                currency: input.currency ?? "USD",
+              },
+              receiver: input.receiver,
+              ...(input.note ? { note: input.note } : {}),
+              sender_item_id: input.senderItemId ?? input.senderBatchId,
+            },
+          ],
+        },
+        requestId: input.requestId ?? input.senderBatchId,
+      });
+      return {
+        payoutBatchId: json.batch_header.payout_batch_id,
+        batchStatus: json.batch_header.batch_status,
+      };
     },
   };
 }

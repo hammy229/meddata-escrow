@@ -254,6 +254,41 @@ test("every mutating call sends a PayPal-Request-Id, derived when not given", as
   ]);
 });
 
+test("createPayout posts one EMAIL item keyed by sender_batch_id", async () => {
+  const { fn, calls } = fakeFetch({
+    "/v1/oauth2/token": TOKEN_OK,
+    "/v1/payments/payouts": () => ({
+      status: 201,
+      body: {
+        batch_header: { payout_batch_id: "BATCH-1", batch_status: "PENDING" },
+      },
+    }),
+  });
+  const pp = createPayPalClient({ ...CREDS, fetch: fn });
+  const res = await pp.createPayout({
+    senderBatchId: "payout_ord_1",
+    receiver: "vendor@example.com",
+    amount: 44.1,
+    note: "thanks",
+  });
+
+  const call = calls.find((c) => c.url.endsWith("/v1/payments/payouts"))!;
+  assert.equal(call.method, "POST");
+  assert.equal(call.headers["PayPal-Request-Id"], "payout_ord_1");
+  const sent = JSON.parse(call.body!);
+  assert.equal(sent.sender_batch_header.sender_batch_id, "payout_ord_1");
+  assert.deepEqual(sent.items, [
+    {
+      recipient_type: "EMAIL",
+      amount: { value: "44.10", currency: "USD" },
+      receiver: "vendor@example.com",
+      note: "thanks",
+      sender_item_id: "payout_ord_1",
+    },
+  ]);
+  assert.deepEqual(res, { payoutBatchId: "BATCH-1", batchStatus: "PENDING" });
+});
+
 test("a retried capture reuses the same PayPal-Request-Id", async () => {
   const { fn, calls } = fakeFetch({
     "/v1/oauth2/token": TOKEN_OK,

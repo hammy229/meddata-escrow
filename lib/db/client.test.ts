@@ -12,7 +12,10 @@ import {
   listOrders,
   listOrderEvents,
   summarizeOrders,
+  getVendor,
+  migrate,
 } from "./client";
+import { DatabaseSync } from "node:sqlite";
 import {
   InvalidTransitionError,
   ESCROW_STATES,
@@ -318,5 +321,49 @@ test("summarizeOrders buckets amounts by escrow state, optionally per dataset", 
   assert.equal(cardio.countsByStatus.CAPTURED, 0);
   assert.equal(cardio.capturedCents, 4900);
   assert.equal(cardio.heldCents, 0);
+  db.close();
+});
+
+test("migrate back-fills payout columns on a pre-payouts DB", () => {
+  const db = new DatabaseSync(":memory:");
+  db.exec(`
+    CREATE TABLE vendors (id TEXT PRIMARY KEY, name TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE orders (id TEXT PRIMARY KEY, dataset_id TEXT NOT NULL,
+      buyer_email TEXT NOT NULL, paypal_order_id TEXT, authorization_id TEXT,
+      status TEXT NOT NULL DEFAULT 'MATCHED', amount_cents INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+  `);
+  migrate(db);
+  const cols = (t: string) =>
+    (db.prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).map(
+      (c) => c.name,
+    );
+  assert.ok(cols("vendors").includes("payout_email"));
+  assert.ok(cols("orders").includes("payout_batch_id"));
+  db.close();
+});
+
+test("getVendor reads the payout email; advanceOrder can record a payout batch id", () => {
+  const db = freshDb();
+  assert.equal(getVendor(db, "vnd_demo_health")?.payout_email, null);
+  db.prepare(`UPDATE vendors SET payout_email = ? WHERE id = ?`).run(
+    "v@example.com",
+    "vnd_demo_health",
+  );
+  assert.equal(getVendor(db, "vnd_demo_health")?.payout_email, "v@example.com");
+  assert.equal(getVendor(db, "vnd_missing"), undefined);
+
+  const order = createOrder(db, {
+    datasetId: "ds_x",
+    buyerEmail: "b@example.com",
+    amountCents: 100,
+    status: "CAPTURED",
+  });
+  const paid = advanceOrder(db, order.id, "PAYOUT", {
+    payoutBatchId: "BATCH-1",
+  });
+  assert.equal(paid.status, "PAID_OUT");
+  assert.equal(paid.payout_batch_id, "BATCH-1");
   db.close();
 });

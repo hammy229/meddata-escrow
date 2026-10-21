@@ -5,6 +5,9 @@
 CREATE TABLE IF NOT EXISTS vendors (
   id          TEXT PRIMARY KEY,
   name        TEXT NOT NULL,
+  -- PayPal account email the vendor is paid at (Payouts API receiver). NULL =
+  -- not onboarded for payouts yet. Added to existing DBs via a guarded ALTER.
+  payout_email TEXT,
   created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -25,6 +28,9 @@ CREATE TABLE IF NOT EXISTS orders (
   buyer_email      TEXT NOT NULL,
   paypal_order_id  TEXT,
   authorization_id TEXT,
+  -- PayPal Payouts batch id from paying the vendor (set on PAYOUT). Added to
+  -- existing DBs via a guarded ALTER in migrate().
+  payout_batch_id  TEXT,
   -- Canonical EscrowState (see lib/escrow/state-machine.ts). One of:
   --   MATCHED | AUTHORIZED | DELIVERED | CAPTURED | PAID_OUT
   --   | DISPUTED | VOIDED | CANCELLED

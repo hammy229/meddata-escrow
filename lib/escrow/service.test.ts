@@ -15,7 +15,7 @@ import {
   type EscrowDeps,
 } from "./service";
 import { openDb, createOrder, getOrder, type OrderRow } from "../db/client";
-import type { PayPalClient } from "../paypal/client";
+import { createPayPalClient, type PayPalClient } from "../paypal/client";
 
 const DATASET_ID = "ds_service_test";
 
@@ -34,10 +34,9 @@ function withDbEnv(
     if (opts.mock) process.env.PAYPAL_MODE = "mock";
     else delete process.env.PAYPAL_MODE;
     const db = openDb(url);
-    db.prepare(`INSERT INTO vendors (id, name) VALUES (?, ?)`).run(
-      "vnd_svc",
-      "Svc Vendor",
-    );
+    db.prepare(
+      `INSERT INTO vendors (id, name, payout_email) VALUES (?, ?, ?)`,
+    ).run("vnd_svc", "Svc Vendor", "vendor-demo@meddata.test");
     db.prepare(
       `INSERT INTO datasets (id, vendor_id, title, price_cents) VALUES (?, ?, ?, ?)`,
     ).run(DATASET_ID, "vnd_svc", "Service Cohort", 4900);
@@ -210,6 +209,130 @@ test(
     );
     assert.equal(getOrder(openDb(url), order.id)?.status, "MATCHED");
   }),
+);
+
+/** A real PayPal client over an injected fetch that records every request. */
+function payPalOverFetch(
+  routes: Record<string, () => { status: number; body?: unknown }>,
+) {
+  const requests: Array<{
+    url: string;
+    headers: Record<string, string>;
+    body?: string;
+  }> = [];
+  const fetchFn = (async (url: string | URL, init: RequestInit = {}) => {
+    const u = String(url);
+    requests.push({
+      url: u,
+      headers: (init.headers ?? {}) as Record<string, string>,
+      body: init.body as string | undefined,
+    });
+    if (u.endsWith("/v1/oauth2/token"))
+      return Response.json({ access_token: "tok", expires_in: 3600 });
+    const key = Object.keys(routes).find((k) => u.endsWith(k));
+    if (!key) throw new Error(`no route for ${u}`);
+    const { status, body } = routes[key]();
+    return Response.json(body ?? {}, { status });
+  }) as typeof fetch;
+  const client = createPayPalClient({
+    clientId: "cid",
+    clientSecret: "secret",
+    fetch: fetchFn,
+  });
+  const deps: EscrowDeps = { paypal: () => client };
+  return { deps, requests };
+}
+
+const PAYOUT_OK = () => ({
+  status: 201,
+  body: {
+    batch_header: { payout_batch_id: "BATCH-77", batch_status: "PENDING" },
+  },
+});
+
+test(
+  "payout (real mode) pays the vendor's email the amount minus the platform fee",
+  withDbEnv(async ({ url }) => {
+    const { deps, requests } = payPalOverFetch({
+      "/v1/payments/payouts": PAYOUT_OK,
+    });
+    const order = seedOrder(url, { status: "CAPTURED" });
+    const res = await advanceEscrowOrder(
+      { orderId: order.id, action: "payout" },
+      deps,
+    );
+    assert.equal(res.escrowState, "PAID_OUT");
+    assert.equal(res.payoutBatchId, "BATCH-77");
+    assert.equal(res.status, "PENDING");
+    assert.equal(res.order.payout_batch_id, "BATCH-77");
+
+    const call = requests.find((r) => r.url.endsWith("/v1/payments/payouts"))!;
+    assert.equal(call.headers["PayPal-Request-Id"], `${order.id}:payout`);
+    const sent = JSON.parse(call.body!);
+    assert.equal(
+      sent.sender_batch_header.sender_batch_id,
+      `payout_${order.id}`,
+    );
+    assert.equal(sent.items[0].receiver, "vendor-demo@meddata.test");
+    // 4900 cents captured, 10% platform fee -> 4410 to the vendor.
+    assert.deepEqual(sent.items[0].amount, { value: "44.10", currency: "USD" });
+  }),
+);
+
+test(
+  "payout (real mode) without a vendor payout email is a 409 and writes nothing",
+  withDbEnv(async ({ url }) => {
+    const db = openDb(url);
+    db.prepare(`UPDATE vendors SET payout_email = NULL`).run();
+    db.close();
+    const { deps, requests } = payPalOverFetch({
+      "/v1/payments/payouts": PAYOUT_OK,
+    });
+    const order = seedOrder(url, { status: "CAPTURED" });
+    await rejectsWith(
+      advanceEscrowOrder({ orderId: order.id, action: "payout" }, deps),
+      409,
+      "PRECONDITION",
+    );
+    assert.equal(requests.length, 0);
+    assert.equal(getOrder(openDb(url), order.id)?.status, "CAPTURED");
+  }),
+);
+
+test(
+  "payout (real mode) surfaces a PayPal failure as a PAYPAL error and stays CAPTURED",
+  withDbEnv(async ({ url }) => {
+    const { deps } = payPalOverFetch({
+      "/v1/payments/payouts": () => ({ status: 422, body: { name: "ERR" } }),
+    });
+    const order = seedOrder(url, { status: "CAPTURED" });
+    await rejectsWith(
+      advanceEscrowOrder({ orderId: order.id, action: "payout" }, deps),
+      422,
+      "PAYPAL",
+    );
+    assert.equal(getOrder(openDb(url), order.id)?.status, "CAPTURED");
+  }),
+);
+
+test(
+  "payout (mock mode) returns and persists a mock batch id",
+  withDbEnv(
+    async ({ url }) => {
+      const order = seedOrder(url, { status: "CAPTURED" });
+      const res = await advanceEscrowOrder({
+        orderId: order.id,
+        action: "payout",
+      });
+      assert.match(String(res.payoutBatchId), /^MOCK-PAYOUT-/);
+      assert.equal(res.mock, true);
+      assert.equal(
+        getOrder(openDb(url), order.id)?.payout_batch_id,
+        res.payoutBatchId,
+      );
+    },
+    { mock: true },
+  ),
 );
 
 test(
