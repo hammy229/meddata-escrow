@@ -802,7 +802,7 @@
       "description": "AI procurement agent that plans a purchase end to end.",
       "item": [
         {
-          "name": "Run the AI procurement agent (preview)",
+          "name": "Run the AI procurement agent",
           "request": {
             "method": "POST",
             "header": [
@@ -816,10 +816,10 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "agent"]
             },
-            "description": "**Preview:** documented ahead of its implementation; may 404 on this server.\n\nGiven a study description and an optional budget, the agent matches\ndatasets, sample-checks candidates, and recommends one to buy; it may\nalso open an escrow order. Returns the step-by-step trace.\n",
+            "description": "Agentic commerce: given a study and a budget, the agent searches the\ncatalog, inspects datasets, sample-checks a candidate, and only then\nopens a PayPal escrow order (MATCHED + approve URL). Funds are held only\nafter the buyer approves in PayPal; the agent never authorizes or\ncaptures.\n\nClaude on Amazon Bedrock drives the tool loop when\n`LLM_PROVIDER=bedrock`; otherwise a deterministic scripted planner runs\nthe same tools (`source` says which). Guardrails are enforced in code,\nnot the prompt: price must fit `budgetCents`, a passing sample check for\nthat dataset must come first, and at most one order is created per run.\n",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"study\": \"Outcomes of statin therapy in adults with coronary heart disease\",\n  \"budgetCents\": 6000\n}",
+              "raw": "{\n  \"study\": \"Outcomes of statin therapy in adults with coronary heart disease\",\n  \"budgetCents\": 6000,\n  \"buyerEmail\": \"researcher@university.edu\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
