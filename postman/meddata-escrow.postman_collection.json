@@ -1,0 +1,907 @@
+{
+  "info": {
+    "name": "MedData Escrow API",
+    "description": "Generated from openapi/openapi.yaml (v0.2.0) by `npm run postman:gen`. Do not edit by hand.\n\nMedData Escrow lets a researcher describe a study in plain English, match it\nto vendor datasets, and buy access through an **escrow** built on PayPal\nauthorize-then-capture. Funds are held (authorized) while the data is\ndelivered, captured once the buyer accepts it, and paid out to the vendor.\nA buyer can dispute while funds are held, and an operator resolves the\ndispute toward capture or void.\n\nAfter delivery the researcher asks plain-English questions. Each question is\nscreened for identifiers, compiled to aggregate-only SQL, re-checked, run\nvendor-side, put through small-cell suppression, and billed per answer at a\nserver-set fee.\n\n**All data is synthetic** (Synthea-generated cohorts). No real patient data\nis stored or returned.\n\nThe server, not the client, decides who pays what and who sees what:\nthe escrowed amount is always the dataset's listed price, queries require a\npaid and delivered order, and the per-query fee is fixed server-side.\n\nErrors are always `{ \"error\": string }`, plus `reasons: string[]` on\nprivacy rejections.\n\nRun with `PAYPAL_MODE=mock` to drive the whole escrow arc with no PayPal\ncredentials; responses then carry `mock: true` and `MOCK-*` ids.\n\nOperations marked `x-status: preview` are documented ahead of their\nimplementation landing and may change.\n",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Demo: full escrow arc",
+      "description": "Run in order against a `PAYPAL_MODE=mock` server (`npm run dev:mock`). Matches a study, escrows the top dataset at its listed price, walks authorize → deliver → query → billing → capture → payout, and reads the audit trail. datasetId and orderId chain through collection variables.",
+      "item": [
+        {
+          "name": "1. Match a study to datasets",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const matches = pm.response.json().matches;",
+                  "pm.test(\"returns at least one match\", function () {",
+                  "  pm.expect(matches.length).to.be.above(0);",
+                  "});",
+                  "pm.collectionVariables.set(\"datasetId\", matches[0].datasetId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/match",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "match"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Heart disease cohort with cardiology encounters\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "2. Create escrow order (→ MATCHED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test(\"order starts MATCHED\", function () {",
+                  "  pm.expect(body.escrowState).to.eql(\"MATCHED\");",
+                  "});",
+                  "pm.collectionVariables.set(\"orderId\", body.orderId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"datasetId\": \"{{datasetId}}\",\n  \"buyerEmail\": \"researcher@example.edu\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "3. Authorize (→ AUTHORIZED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"escrow is AUTHORIZED\", function () {",
+                  "  pm.expect(pm.response.json().escrowState).to.eql(\"AUTHORIZED\");",
+                  "});",
+                  "pm.test(\"returns an authorizationId\", function () {",
+                  "  pm.expect(pm.response.json().authorizationId).to.be.a(\"string\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"action\": \"authorize\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "4. Deliver (→ DELIVERED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"escrow is DELIVERED\", function () {",
+                  "  pm.expect(pm.response.json().escrowState).to.eql(\"DELIVERED\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"action\": \"deliver\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "5. Query the dataset (privacy-safe aggregate)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test(\"returns aggregate rows and bills the query\", function () {",
+                  "  pm.expect(body.result.length).to.be.above(0);",
+                  "  pm.expect(body.usage.chargeCents).to.eql(50);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/query",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "query"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"datasetId\": \"{{datasetId}}\",\n  \"question\": \"average age by sex\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "6. Billing: per-query spend",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"the answered query was metered\", function () {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.queryCount).to.eql(1);",
+                  "  pm.expect(body.totalCents).to.eql(50);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/billing?orderId={{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "billing"],
+              "query": [
+                {
+                  "key": "orderId",
+                  "value": "{{orderId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "7. Capture (→ CAPTURED)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"escrow is CAPTURED\", function () {",
+                  "  pm.expect(pm.response.json().escrowState).to.eql(\"CAPTURED\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"action\": \"capture\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "8. Payout (→ PAID_OUT)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"escrow is PAID_OUT\", function () {",
+                  "  pm.expect(pm.response.json().escrowState).to.eql(\"PAID_OUT\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"action\": \"payout\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "9. Order with audit events",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});",
+                  "const body = pm.response.json();",
+                  "pm.test(\"order is PAID_OUT with the full timeline\", function () {",
+                  "  pm.expect(body.order.status).to.eql(\"PAID_OUT\");",
+                  "  pm.expect(body.events.map(function (e) { return e.event; })).to.eql(",
+                  "    [\"CREATE\", \"AUTHORIZE\", \"DELIVER\", \"CAPTURE\", \"PAYOUT\"]",
+                  "  );",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders?id={{orderId}}&events=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"],
+              "query": [
+                {
+                  "key": "id",
+                  "value": "{{orderId}}"
+                },
+                {
+                  "key": "events",
+                  "value": "1"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "System",
+      "description": "Health and API metadata.",
+      "item": [
+        {
+          "name": "Liveness and readiness probe",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            },
+            "description": "Runs a trivial `SELECT 1` through the normal DB path. Reports the\nPayPal mode only as `mock` or `live`; no credentials, paths, or error\ndetails are ever echoed. Never cached.\n"
+          },
+          "response": []
+        },
+        {
+          "name": "This OpenAPI document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/openapi",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "openapi"],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "json",
+                  "disabled": true,
+                  "description": "`yaml` returns the file verbatim; anything else returns JSON."
+                }
+              ]
+            },
+            "description": "Serves `openapi/openapi.yaml`: parsed to JSON by default, or the raw\nYAML with `?format=yaml`. Point Postman or APIMatic at this URL to\nimport the API.\n"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Matching",
+      "description": "Rank catalog datasets against a study description.",
+      "item": [
+        {
+          "name": "Rank datasets for a study description",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/match",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "match"]
+            },
+            "description": "Returns catalog datasets ranked by relevance to a plain-English study\ndescription, each enriched with its catalog title and listed price.\n\nPreview: the response gains `source` (`llm` when ranked by the model,\n`keyword` for the deterministic fallback), and the body may instead be\n`{ \"sampleCheck\": datasetId }` to run a sample-quality check on one\ndataset before buying.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"Heart disease cohort with cardiology encounters\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "description": "Escrow lifecycle (PayPal authorize-then-capture) and order reads.",
+      "item": [
+        {
+          "name": "List orders, read one order, or summarize earnings",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"],
+              "query": [
+                {
+                  "key": "id",
+                  "value": "{{orderId}}",
+                  "disabled": true,
+                  "description": "Return a single order by id."
+                },
+                {
+                  "key": "events",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "With `id`, also return the order's audit events (any value)."
+                },
+                {
+                  "key": "summary",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "Return the earnings summary instead of rows (any value)."
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "disabled": true,
+                  "description": "Filter the list by escrow state."
+                },
+                {
+                  "key": "datasetId",
+                  "value": "ds_cardio_synthea_v1",
+                  "disabled": true,
+                  "description": "Filter the list (or scope the summary) to one dataset."
+                },
+                {
+                  "key": "buyerEmail",
+                  "value": "",
+                  "disabled": true,
+                  "description": "Filter the list by buyer email."
+                }
+              ]
+            },
+            "description": "Reads orders from the DB (no PayPal). The query string picks the shape:\n\n- no `id` / `summary` → `{ orders: OrderRow[] }` (newest first),\n  optionally AND-filtered by `status`, `datasetId`, `buyerEmail`.\n- `?id=ord_..` → `{ order }`; add `&events=1` for `{ order, events }`\n  (the audit timeline, oldest first). 404 if unknown.\n- `?summary=1[&datasetId=..]` → `{ summary: OrderSummary }`, the vendor\n  earnings roll-up.\n"
+          },
+          "response": []
+        },
+        {
+          "name": "Create an escrow order at the listed price",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});",
+                  "pm.collectionVariables.set(\"newOrderId\", pm.response.json().orderId);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"]
+            },
+            "description": "Creates a PayPal Orders v2 order (`intent=AUTHORIZE`) and an `orders`\nrow in state `MATCHED`. The escrowed amount is **always** the dataset's\nlisted price; an optional `amount` (major units) is only a confirmation,\nand a mismatch is 422. In mock mode no PayPal call is made, but the row\nis still persisted with a `MOCK-ORDER-*` id.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"datasetId\": \"{{datasetId}}\",\n  \"amount\": 49,\n  \"buyerEmail\": \"researcher@example.edu\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Advance an order through the escrow state machine",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/orders",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "orders"]
+            },
+            "description": "Actions map to escrow events: `authorize` (MATCHED → AUTHORIZED),\n`deliver` (AUTHORIZED → DELIVERED), `capture` (DELIVERED → CAPTURED),\n`payout` (CAPTURED → PAID_OUT), `void` (AUTHORIZED → VOIDED),\n`dispute` (AUTHORIZED/DELIVERED → DISPUTED), and `resolve` with\n`resolution: capture | void` (DISPUTED → CAPTURED | VOIDED).\n\nThe stored row is the source of truth for the current state and PayPal\nids. The transition is validated **before** any PayPal call, so an\nillegal move never charges anyone and never writes (409).\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{newOrderId}}\",\n  \"action\": \"authorize\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Query",
+      "description": "Privacy-safe, metered plain-English queries over a purchased dataset.",
+      "item": [
+        {
+          "name": "Ask a plain-English question of a purchased dataset",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/query",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "query"]
+            },
+            "description": "Requires an order for this dataset in `DELIVERED`, `CAPTURED` or\n`PAID_OUT`. The question is screened for identifiers and row-level asks,\ncompiled to parameterized aggregate-only SQL, re-checked, executed\nvendor-side (mocked), and put through small-cell suppression (k ≥ 11).\nOnly answered queries are billed, at the server-set per-query fee.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"datasetId\": \"{{datasetId}}\",\n  \"question\": \"average age by sex\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Billing",
+      "description": "Per-query usage and spend.",
+      "item": [
+        {
+          "name": "An order's per-query usage and spend",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "  pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/billing?orderId={{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "billing"],
+              "query": [
+                {
+                  "key": "orderId",
+                  "value": "{{orderId}}",
+                  "disabled": false
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Record one per-query charge",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () {",
+                  "  pm.response.to.have.status(201);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/billing",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "billing"]
+            },
+            "description": "Records a usage row at the server-set fee (`PER_QUERY_FEE_CENTS`, 50).\n`chargeCents` is accepted only as a confirmation; any other value is\n422. The order must grant data access, otherwise 409. This is where a\nreal PayPal per-query capture would fire (mocked).\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"question\": \"count by region\",\n  \"chargeCents\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Agent",
+      "description": "AI procurement agent that plans a purchase end to end.",
+      "item": [
+        {
+          "name": "Run the AI procurement agent (preview)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/agent",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "agent"]
+            },
+            "description": "**Preview:** documented ahead of its implementation; may 404 on this server.\n\nGiven a study description and an optional budget, the agent matches\ndatasets, sample-checks candidates, and recommends one to buy; it may\nalso open an escrow order. Returns the step-by-step trace.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"study\": \"Outcomes of statin therapy in adults with coronary heart disease\",\n  \"budgetCents\": 6000\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "description": "Inbound PayPal webhook events.",
+      "item": [
+        {
+          "name": "Receive a PayPal webhook event (preview)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "paypal-transmission-id",
+                "value": ""
+              },
+              {
+                "key": "paypal-transmission-time",
+                "value": ""
+              },
+              {
+                "key": "paypal-transmission-sig",
+                "value": ""
+              },
+              {
+                "key": "paypal-cert-url",
+                "value": ""
+              },
+              {
+                "key": "paypal-auth-algo",
+                "value": ""
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/webhooks/paypal",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "webhooks", "paypal"]
+            },
+            "description": "**Preview:** documented ahead of its implementation; may 404 on this server.\n\nPayPal posts payment events here. The signature is verified against\nPayPal (using the `paypal-transmission-*` headers) before the event is\nmapped onto the escrow state machine. Redelivered events are\nacknowledged as `duplicate`; event types the escrow does not track are\nacknowledged as `ignored`.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"WH-58D329510W468432D-8HN650336L201105X\",\n  \"event_type\": \"PAYMENT.CAPTURE.COMPLETED\",\n  \"resource_type\": \"capture\",\n  \"resource\": {\n    \"id\": \"2GG279541U471931P\",\n    \"status\": \"COMPLETED\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "datasetId",
+      "value": "ds_cardio_synthea_v1"
+    },
+    {
+      "key": "orderId",
+      "value": ""
+    },
+    {
+      "key": "newOrderId",
+      "value": ""
+    }
+  ]
+}

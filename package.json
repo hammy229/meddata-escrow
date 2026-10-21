@@ -16,6 +16,7 @@
     "format:check": "prettier --check .",
     "seed": "tsx lib/db/seed.ts",
     "test": "node --import tsx --test \"lib/**/*.test.ts\" \"app/**/*.test.ts\" \"scripts/**/*.test.ts\"",
+    "postman:gen": "tsx scripts/openapi/to-postman.ts && prettier --write postman/*.json",
     "demo": "node --import tsx --env-file-if-exists=.env.local scripts/happy-path.ts"
   },
   "dependencies": {
