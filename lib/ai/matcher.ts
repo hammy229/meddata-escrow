@@ -1,26 +1,44 @@
 // Dataset matcher.
 //
-// MOCK (stub for Bedrock): deterministic keyword/tag overlap scoring over the
-// local catalog, so today's flow runs with no AWS. The real version prompts
-// Claude on Bedrock to rank datasets; keep this signature so the swap is local.
+// When the LLM is enabled (LLM_PROVIDER=bedrock), Claude on Bedrock ranks the
+// catalog against the study description and explains each pick. The answer is
+// validated here: unknown ids are dropped, duplicates collapsed, and any
+// dataset Claude skipped is appended with score 0 and a keyword rationale, so
+// the result always covers the whole catalog exactly once. When the LLM is off
+// or the call fails, the deterministic keyword/tag overlap scorer is used
+// instead, so the flow never depends on AWS.
 import { readFileSync } from "node:fs";
+import * as z from "zod/v4";
+
+import { llmEnabled, structured, type LlmClient } from "../llm/client";
 
 export interface DatasetMatch {
   datasetId: string;
   score: number;
   rationale: string;
+  /** Which ranker produced this match ("keyword" for LLM-skipped entries). */
+  source?: "llm" | "keyword";
 }
 
-interface CatalogEntry {
+export interface CatalogEntry {
   id: string;
   title: string;
   description: string;
   tags: string[];
+  recordCount: number;
+}
+
+/** Shared options for the lib/ai features that can call Claude. */
+export interface AiOptions {
+  /** Inject a client (tests). Defaults to the shared Bedrock client. */
+  client?: LlmClient;
+  /** Force the LLM path on/off. Defaults to llmEnabled(). */
+  useLlm?: boolean;
 }
 
 const CATALOG_URL = new URL("../../data/catalog.json", import.meta.url);
 
-function loadCatalog(): CatalogEntry[] {
+export function loadCatalog(): CatalogEntry[] {
   return JSON.parse(readFileSync(CATALOG_URL, "utf8")) as CatalogEntry[];
 }
 
@@ -31,14 +49,13 @@ function tokens(text: string): string[] {
   );
 }
 
-export async function matchDatasets(
+function keywordMatch(
   studyDescription: string,
-): Promise<DatasetMatch[]> {
+  catalog: CatalogEntry[],
+): DatasetMatch[] {
   const query = new Set(tokens(studyDescription));
-  const catalog = loadCatalog();
-
   return catalog
-    .map((d) => {
+    .map((d): DatasetMatch => {
       const haystack = new Set(
         tokens(`${d.title} ${d.description} ${d.tags.join(" ")}`),
       );
@@ -49,7 +66,87 @@ export async function matchDatasets(
         rationale: matched.length
           ? `Matched on: ${matched.join(", ")}`
           : "No direct keyword overlap",
+        source: "keyword",
       };
     })
     .sort((a, b) => b.score - a.score);
+}
+
+const Ranking = z.object({
+  ranking: z.array(
+    z.object({
+      datasetId: z.string(),
+      score: z.number().min(0).max(100),
+      rationale: z.string(),
+    }),
+  ),
+});
+
+const RANK_SYSTEM =
+  "You rank medical research datasets for a researcher's study. " +
+  "Score each dataset 0-100 for how well it fits the study's population, " +
+  "variables, and design. Give a 1-2 sentence rationale that cites the " +
+  "study's specific needs. Use only dataset ids from the catalog provided " +
+  "and include every dataset exactly once.";
+
+async function llmMatch(
+  studyDescription: string,
+  catalog: CatalogEntry[],
+  client?: LlmClient,
+): Promise<DatasetMatch[]> {
+  const listing = catalog.map(
+    ({ id, title, description, tags, recordCount }) => ({
+      id,
+      title,
+      description,
+      tags,
+      recordCount,
+    }),
+  );
+  const { ranking } = await structured({
+    system: RANK_SYSTEM,
+    prompt:
+      `Study description:\n${studyDescription}\n\n` +
+      `Catalog (JSON):\n${JSON.stringify(listing)}`,
+    schema: Ranking,
+    client,
+  });
+
+  // Validate against the real catalog: drop hallucinated ids, keep the first
+  // occurrence of each id, then append anything the model left out.
+  const known = new Set(catalog.map((d) => d.id));
+  const seen = new Set<string>();
+  const out: DatasetMatch[] = [];
+  for (const r of ranking) {
+    if (!known.has(r.datasetId) || seen.has(r.datasetId)) continue;
+    seen.add(r.datasetId);
+    out.push({
+      datasetId: r.datasetId,
+      score: r.score,
+      rationale: r.rationale,
+      source: "llm",
+    });
+  }
+  const missing = catalog.filter((d) => !seen.has(d.id));
+  for (const m of keywordMatch(studyDescription, missing)) {
+    out.push({ ...m, score: 0 });
+  }
+  return out.sort((a, b) => b.score - a.score);
+}
+
+export async function matchDatasets(
+  studyDescription: string,
+  opts: AiOptions = {},
+): Promise<DatasetMatch[]> {
+  const catalog = loadCatalog();
+  if (opts.useLlm ?? llmEnabled()) {
+    try {
+      return await llmMatch(studyDescription, catalog, opts.client);
+    } catch (err) {
+      console.warn(
+        `matcher: LLM ranking failed, using keyword match (${(err as Error).message})`,
+      );
+    }
+  }
+  return keywordMatch(studyDescription, catalog);
 }

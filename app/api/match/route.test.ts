@@ -34,6 +34,9 @@ test("returns ranked, catalog-enriched matches (200)", async () => {
   assert.equal(top.datasetId, "ds_cardio_synthea_v1");
   assert.equal(typeof top.title, "string");
   assert.equal(typeof top.priceCents, "number");
+
+  // With the LLM off (default in tests) the keyword ranker is reported.
+  assert.equal(json.source, "keyword");
 });
 
 test("empty description -> 422 with { error }", async () => {

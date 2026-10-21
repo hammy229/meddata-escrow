@@ -2,6 +2,8 @@
 // Takes a plain-English study description and returns candidate vendor
 // datasets ranked by relevance (lib/ai/matcher), each enriched with its
 // catalog title and price so the researcher UI can show a buyable list.
+// Response: { matches, source } where source is "llm" when Claude on Bedrock
+// ranked the catalog and "keyword" when the deterministic fallback did.
 import { readFileSync } from "node:fs";
 
 import { matchDatasets } from "../../../lib/ai/matcher";
@@ -34,7 +36,9 @@ export async function POST(request: Request) {
   }
 
   const catalog = loadCatalog();
-  const matches = (await matchDatasets(description)).map((m) => {
+  const ranked = await matchDatasets(description);
+  const source = ranked.some((m) => m.source === "llm") ? "llm" : "keyword";
+  const matches = ranked.map((m) => {
     const entry = catalog.get(m.datasetId);
     return {
       ...m,
@@ -43,5 +47,5 @@ export async function POST(request: Request) {
     };
   });
 
-  return Response.json({ matches });
+  return Response.json({ matches, source });
 }
