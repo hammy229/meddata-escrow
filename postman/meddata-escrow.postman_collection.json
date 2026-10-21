@@ -836,7 +836,7 @@
       "description": "Inbound PayPal webhook events.",
       "item": [
         {
-          "name": "Receive a PayPal webhook event (preview)",
+          "name": "Receive a PayPal webhook event",
           "request": {
             "method": "POST",
             "header": [
@@ -870,7 +870,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "webhooks", "paypal"]
             },
-            "description": "**Preview:** documented ahead of its implementation; may 404 on this server.\n\nPayPal posts payment events here. The signature is verified against\nPayPal (using the `paypal-transmission-*` headers) before the event is\nmapped onto the escrow state machine. Redelivered events are\nacknowledged as `duplicate`; event types the escrow does not track are\nacknowledged as `ignored`.\n",
+            "description": "PayPal posts payment events here. The raw body is verified with PayPal's\n`verify-webhook-signature` (headers `paypal-transmission-*`,\n`paypal-cert-url`, `paypal-auth-algo`; webhook id `PAYPAL_WEBHOOK_ID`)\nbefore it is trusted.\n\nEvery event id is recorded in the same transaction as any state change,\nso redeliveries are no-ops (`duplicate`). An event is applied only when\nits escrow transition is legal from the order's current state; anything\nelse is acknowledged as `ignored` with a reason. After verification the\nanswer is always 200 so PayPal does not retry forever; only an\nunexpected internal failure returns 500 (and the retry is safe).\n\nDemo only: with `PAYPAL_MODE=mock`, an event is accepted iff it carries\nthe header `x-mock-webhook: 1`.\n",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"id\": \"WH-58D329510W468432D-8HN650336L201105X\",\n  \"event_type\": \"PAYMENT.CAPTURE.COMPLETED\",\n  \"resource_type\": \"capture\",\n  \"resource\": {\n    \"id\": \"2GG279541U471931P\",\n    \"status\": \"COMPLETED\"\n  }\n}",

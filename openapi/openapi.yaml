@@ -711,16 +711,24 @@ paths:
 
   /api/webhooks/paypal:
     post:
-      x-status: preview
       tags: [Webhooks]
       operationId: receivePaypalWebhook
-      summary: Receive a PayPal webhook event (preview)
+      summary: Receive a PayPal webhook event
       description: |
-        PayPal posts payment events here. The signature is verified against
-        PayPal (using the `paypal-transmission-*` headers) before the event is
-        mapped onto the escrow state machine. Redelivered events are
-        acknowledged as `duplicate`; event types the escrow does not track are
-        acknowledged as `ignored`.
+        PayPal posts payment events here. The raw body is verified with PayPal's
+        `verify-webhook-signature` (headers `paypal-transmission-*`,
+        `paypal-cert-url`, `paypal-auth-algo`; webhook id `PAYPAL_WEBHOOK_ID`)
+        before it is trusted.
+
+        Every event id is recorded in the same transaction as any state change,
+        so redeliveries are no-ops (`duplicate`). An event is applied only when
+        its escrow transition is legal from the order's current state; anything
+        else is acknowledged as `ignored` with a reason. After verification the
+        answer is always 200 so PayPal does not retry forever; only an
+        unexpected internal failure returns 500 (and the retry is safe).
+
+        Demo only: with `PAYPAL_MODE=mock`, an event is accepted iff it carries
+        the header `x-mock-webhook: 1`.
       parameters:
         - { name: paypal-transmission-id, in: header, schema: { type: string } }
         - {
@@ -750,18 +758,38 @@ paths:
                   resource: { id: 2GG279541U471931P, status: COMPLETED }
       responses:
         "200":
-          description: Event accepted (applied, duplicate, or ignored).
+          description: Event verified (applied, recorded, duplicate, or ignored).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/WebhookAck"
               examples:
                 applied:
-                  value: {}
+                  value:
+                    {
+                      received: true,
+                      applied: VOID,
+                      orderId: ord_3f2c9a1e,
+                      escrowState: VOIDED,
+                    }
+                recorded:
+                  value:
+                    {
+                      received: true,
+                      recorded: true,
+                      orderId: ord_3f2c9a1e,
+                      escrowState: CAPTURED,
+                    }
                 duplicate:
                   value: { duplicate: true }
                 ignored:
-                  value: { ignored: true }
+                  value:
+                    {
+                      ignored: true,
+                      reason: "transition not legal from current state",
+                    }
+        "500":
+          $ref: "#/components/responses/InternalError"
         "401":
           description: Webhook signature verification failed.
           content:
@@ -1170,7 +1198,6 @@ components:
           additionalProperties: true
     PaypalWebhookEvent:
       type: object
-      x-status: preview
       required: [id, event_type, resource]
       properties:
         id: { type: string }
@@ -1185,15 +1212,25 @@ components:
           additionalProperties: true
     WebhookAck:
       type: object
-      x-status: preview
       properties:
+        received: { type: boolean }
+        applied:
+          type: string
+          description: The escrow event applied (e.g. VOID, DISPUTE).
+        recorded:
+          { type: boolean, description: Relevant event, no state change. }
+        orderId: { type: string }
+        escrowState: { $ref: "#/components/schemas/EscrowState" }
         duplicate:
           { type: boolean, description: The event id was already processed. }
         ignored:
           {
             type: boolean,
-            description: The event type is not tracked by the escrow.,
+            description: Unknown type,
+            no matching order,
+            or illegal transition.,
           }
+        reason: { type: string }
   responses:
     ValidationError:
       description: Invalid or missing request fields.
