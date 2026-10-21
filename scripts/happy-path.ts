@@ -1,97 +1,29 @@
-// Happy-path demo: request -> match -> authorize -> deliver -> capture -> payout.
+// Happy-path demo: match -> sample check -> escrow -> deliver -> capture -> payout.
 //
 //   npm run demo                  # mock mode (no creds, no network)
-//   npm run demo -- --sandbox     # real sandbox calls (needs .env.local)
+//   npm run demo -- --sandbox     # real sandbox order (needs .env.local)
 //   npm run demo -- "heart disease cohort"   # custom study description
 //
-// Mock mode drives the REAL escrow state machine and matcher against a stubbed
-// PayPal client, so the full loop is exercised offline. --sandbox swaps in the
-// real Orders v2 client; note the authorize step needs buyer approval of the
-// order (the approve URL is printed) — automated in the AI-Toolkit/MCP session.
-import { randomUUID } from "node:crypto";
+// The demo drives the SAME code the app runs — the matcher, the sample check,
+// and the escrow service (lib/escrow/service) with its state machine, audit
+// trail and PayPal client — against a freshly seeded scratch SQLite database,
+// so it never touches data/dev.sqlite. Mock mode completes the whole arc
+// offline. --sandbox creates a real PayPal sandbox order and stops at the
+// approve URL: authorizing needs the buyer to approve it in PayPal first.
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { transition, type EscrowState } from "../lib/escrow/state-machine";
 import { matchDatasets } from "../lib/ai/matcher";
+import { checkSample } from "../lib/ai/sample-check";
 import { mockDeliveryUrl } from "../lib/delivery/mock-s3";
+import { listOrderEvents, openDb, withDb } from "../lib/db/client";
+import { seedDatabase } from "../lib/db/seed";
 import {
-  payPalClientFromEnv,
-  type CreateOrderResult,
-  type AuthorizeResult,
-  type CaptureResult,
-} from "../lib/paypal/client";
-
-// Result of releasing escrowed funds to the vendor (PayPal Payouts shape).
-interface PayoutResult {
-  payoutBatchId: string;
-  status: string;
-}
-
-// Minimal shape the demo needs — satisfied by the real client and the mock.
-interface EscrowPayPal {
-  createAuthorizeOrder(i: {
-    amount: number;
-    currency?: string;
-    referenceId?: string;
-  }): Promise<CreateOrderResult>;
-  authorizeOrder(orderId: string): Promise<AuthorizeResult>;
-  captureAuthorization(
-    authId: string,
-    o?: { requestId?: string },
-  ): Promise<CaptureResult>;
-  // Release captured funds to the dataset vendor. Mock here; the real PayPal
-  // Payouts call drops in behind this same method (see sandboxPayPal / the
-  // "real PayPal Payouts goes here" seam) without touching the loop below.
-  payoutToVendor(i: {
-    amount: number;
-    currency?: string;
-    receiver?: string;
-  }): Promise<PayoutResult>;
-}
-
-function mockPayPal(): EscrowPayPal {
-  return {
-    async createAuthorizeOrder() {
-      return {
-        orderId: "MOCK-ORDER-1",
-        status: "CREATED",
-        approveUrl: "https://sandbox.paypal.com/checkoutnow?token=MOCK-ORDER-1",
-      };
-    },
-    async authorizeOrder(orderId) {
-      return { orderId, authorizationId: "MOCK-AUTH-1", status: "CREATED" };
-    },
-    async captureAuthorization(_authId) {
-      return { captureId: "MOCK-CAP-1", status: "COMPLETED" };
-    },
-    async payoutToVendor() {
-      return { payoutBatchId: "MOCK-PAYOUT-1", status: "PENDING" };
-    },
-  };
-}
-
-// Sandbox adapter: the real Orders v2 client covers create/authorize/capture,
-// but has no Payouts method yet. We wrap it and supply a payout seam so the
-// interface is satisfied and real PayPal Payouts can drop in here later.
-function sandboxPayPal(): EscrowPayPal {
-  const client = payPalClientFromEnv();
-  return {
-    createAuthorizeOrder: (i) => client.createAuthorizeOrder(i),
-    authorizeOrder: (id) => client.authorizeOrder(id),
-    captureAuthorization: (id, o) => client.captureAuthorization(id, o),
-    async payoutToVendor() {
-      // real PayPal Payouts goes here (POST /v1/payments/payouts via the client).
-      throw new Error(
-        "PayPal Payouts not implemented for --sandbox yet (mock mode reaches PAID_OUT).",
-      );
-    },
-  };
-}
-
-let state: EscrowState = "MATCHED";
-function step(event: Parameters<typeof transition>[1], note: string) {
-  state = transition(state, event);
-  console.log(`  [${event.padEnd(9)}] -> ${state.padEnd(10)} ${note}`);
-}
+  advanceEscrowOrder,
+  createEscrowOrder,
+  type EscrowAction,
+} from "../lib/escrow/service";
 
 async function main() {
   const args = process.argv.slice(2);
@@ -100,51 +32,72 @@ async function main() {
     args.find((a) => !a.startsWith("--")) ??
     "cardiovascular disease patient cohort";
 
+  // Scratch database + mode, set before any DB or PayPal call reads the env.
+  const dir = mkdtempSync(join(tmpdir(), "meddata-demo-"));
+  process.env.DATABASE_URL = `file:${join(dir, "demo.sqlite")}`;
+  if (!sandbox) process.env.PAYPAL_MODE = "mock";
+  const db = openDb();
+  seedDatabase(db);
+  db.close();
+
   console.log(
     `\nMedData Escrow happy-path  (${sandbox ? "SANDBOX" : "mock"} mode)`,
   );
   console.log(`Study: "${description}"\n`);
 
-  // 1. Match (mock Bedrock ranker over the local catalog).
-  const ranked = await matchDatasets(description);
-  const top = ranked[0];
+  // 1. Match the study to a catalog dataset.
+  const [top] = await matchDatasets(description);
   console.log(
-    `Matched dataset: ${top.datasetId}  (score ${top.score} — ${top.rationale})`,
+    `Matched ${top.datasetId}  (score ${top.score}: ${top.rationale})`,
   );
 
-  const pp: EscrowPayPal = sandbox ? sandboxPayPal() : mockPayPal();
-  const amount = 49.0; // demo price (USD)
-
-  // 2. Create order (intent=AUTHORIZE) and authorize funds into escrow.
-  const order = await pp.createAuthorizeOrder({
-    amount,
-    referenceId: `study-${Date.now()}`,
+  // 2. Check a sample before any money is held.
+  const sample = await checkSample(top.datasetId, {
+    studyDescription: description,
   });
-  console.log(`\nOrder ${order.orderId} created (${order.status}).`);
+  console.log(
+    `Sample check: ${sample.passed ? "PASSED" : "FAILED"} (score ${sample.score}, ${sample.source})`,
+  );
+  if (!sample.passed) {
+    console.log(`  Findings: ${sample.findings.join("; ")}`);
+    console.log("\nNot buying a dataset that failed its sample check.\n");
+    return;
+  }
+
+  // 3. Open the escrow order at the dataset's listed price.
+  const order = await createEscrowOrder({ datasetId: top.datasetId });
+  console.log(
+    `\nOrder ${order.orderId} (${order.escrowState}), PayPal ${order.paypalOrderId}`,
+  );
   if (sandbox) {
-    console.log(`Buyer must approve first: ${order.approveUrl}`);
+    console.log(`Buyer approves here, then authorize: ${order.approveUrl}\n`);
+    return;
+  }
+
+  // 4. Walk the escrow arc through the service, exactly as the API does.
+  const arc: EscrowAction[] = ["authorize", "deliver", "capture", "payout"];
+  for (const action of arc) {
+    const res = await advanceEscrowOrder({ orderId: order.orderId, action });
+    const detail =
+      action === "deliver"
+        ? `delivery=${mockDeliveryUrl(top.datasetId).slice(0, 48)}...`
+        : (res.authorizationId ?? res.captureId ?? res.payoutBatchId ?? "");
     console.log(
-      "(Sandbox authorize requires approval — finish via the PayPal MCP/test accounts.)",
+      `  ${action.padEnd(9)} -> ${res.escrowState.padEnd(10)} ${detail}`,
     );
   }
-  const auth = await pp.authorizeOrder(order.orderId);
-  step("AUTHORIZE", `authorizationId=${auth.authorizationId}`);
 
-  // 3. Deliver the dataset (mock presigned URL).
-  const url = mockDeliveryUrl(top.datasetId);
-  step("DELIVER", `delivery=${url.slice(0, 60)}...`);
-
-  // 4. Buyer confirms within the window -> capture the held funds.
-  const cap = await pp.captureAuthorization(auth.authorizationId, {
-    requestId: randomUUID(),
-  });
-  step("CAPTURE", `captureId=${cap.captureId} (${cap.status})`);
-
-  // 5. Release the captured funds to the vendor (mock PayPal Payouts).
-  const payout = await pp.payoutToVendor({ amount, currency: "USD" });
-  step("PAYOUT", `payoutBatchId=${payout.payoutBatchId} (${payout.status})`);
-
-  console.log(`\nDone. Final escrow state: ${state}\n`);
+  // 5. Print the append-only audit trail the order accumulated.
+  const events = withDb((d) => listOrderEvents(d, order.orderId));
+  console.log(`\nAudit trail (${events.length} events):`);
+  for (const e of events) {
+    console.log(
+      `  #${e.seq} ${e.event.padEnd(9)} ${e.from_state ?? "-"} -> ${e.to_state}`,
+    );
+  }
+  console.log(
+    `\nDone. Final escrow state: ${events[events.length - 1].to_state}\n`,
+  );
 }
 
 main().catch((err) => {
