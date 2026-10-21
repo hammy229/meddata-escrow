@@ -4,6 +4,7 @@
 import Link from "next/link";
 import VendorCatalog, { type CatalogRow } from "../components/VendorCatalog";
 import IncomingOrders from "../components/IncomingOrders";
+import EarningsSummary from "../components/EarningsSummary";
 import { ArrowLeft, Database } from "../components/icons";
 
 interface CatalogEntry {
@@ -83,6 +84,15 @@ export default function VendorPage() {
           Catalog
         </h2>
         <VendorCatalog rows={rows} />
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm shadow-zinc-900/5 dark:border-zinc-800 dark:bg-zinc-900/40 dark:shadow-black/20">
+        <h2 className="mb-1 text-lg font-semibold">Earnings</h2>
+        <p className="mb-4 text-sm text-zinc-500">
+          Where your money sits across every order, from held in escrow to paid
+          out.
+        </p>
+        <EarningsSummary />
       </section>
 
       <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm shadow-zinc-900/5 dark:border-zinc-800 dark:bg-zinc-900/40 dark:shadow-black/20">
