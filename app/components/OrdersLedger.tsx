@@ -160,6 +160,16 @@ function clearView(): void {
   }
 }
 
+// Stable identity (see DataGrid): the 5s poll re-renders this component, and
+// a new defaultColDef each time would reset the user's sort and widths.
+const LEDGER_COL_DEF: ColDef<OrderRow> = {
+  flex: 1,
+  minWidth: 110,
+  resizable: true,
+  sortable: true,
+  floatingFilter: true,
+};
+
 const toolBtn =
   "inline-flex items-center gap-1.5 rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900";
 
@@ -306,7 +316,7 @@ export default function OrdersLedger() {
         colId: "created",
         headerName: "Created",
         minWidth: 190,
-        sort: "desc",
+        initialSort: "desc",
         filter: "agDateColumnFilter",
         filterParams: { comparator: compareDay },
         valueGetter: (p) => parseTs(p.data?.created_at),
@@ -408,13 +418,7 @@ export default function OrdersLedger() {
         options={{
           loading,
           quickFilterText: quick,
-          defaultColDef: {
-            flex: 1,
-            minWidth: 110,
-            resizable: true,
-            sortable: true,
-            floatingFilter: true,
-          },
+          defaultColDef: LEDGER_COL_DEF,
           pagination: true,
           paginationAutoPageSize: true,
           pinnedBottomRowData: pinnedBottom,

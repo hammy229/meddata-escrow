@@ -88,6 +88,15 @@ export interface DataGridProps<T> {
   options?: Omit<AgGridReactProps<T>, "rowData" | "columnDefs" | "theme">;
 }
 
+// Module-level so its identity is stable: a fresh object on every render makes
+// AG Grid re-apply column defaults (flex, sort) and wipe the user's changes.
+const DEFAULT_COL_DEF: ColDef = {
+  flex: 1,
+  minWidth: 100,
+  resizable: true,
+  sortable: true,
+};
+
 export default function DataGrid<T>({
   rowData,
   columnDefs,
@@ -107,12 +116,7 @@ export default function DataGrid<T>({
         theme={dark ? darkTheme : lightTheme}
         rowData={rowData}
         columnDefs={columnDefs}
-        defaultColDef={{
-          flex: 1,
-          minWidth: 100,
-          resizable: true,
-          sortable: true,
-        }}
+        defaultColDef={DEFAULT_COL_DEF}
         tooltipShowDelay={250}
         getRowId={getRowId ? (p) => getRowId(p.data) : undefined}
         rowClass={onRowClicked ? "cursor-pointer" : undefined}
