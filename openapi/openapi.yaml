@@ -83,6 +83,40 @@ paths:
                 dbDown:
                   value: { status: error, mode: live, db: error }
 
+  /api/openapi:
+    get:
+      tags: [System]
+      operationId: getOpenApiSpec
+      summary: This OpenAPI document
+      description: |
+        Serves `openapi/openapi.yaml`: parsed to JSON by default, or the raw
+        YAML with `?format=yaml`. Point Postman or APIMatic at this URL to
+        import the API.
+      parameters:
+        - name: format
+          in: query
+          description: "`yaml` returns the file verbatim; anything else returns JSON."
+          schema:
+            type: string
+            enum: [json, yaml]
+      responses:
+        "200":
+          description: The OpenAPI 3.1 document.
+          content:
+            application/json:
+              schema:
+                type: object
+                description: OpenAPI 3.1 document.
+                additionalProperties: true
+              examples:
+                spec:
+                  value:
+                    openapi: 3.1.0
+                    info: { title: MedData Escrow API, version: 0.2.0 }
+            application/yaml:
+              schema:
+                type: string
+
   /api/match:
     post:
       tags: [Matching]
