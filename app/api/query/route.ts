@@ -12,7 +12,7 @@
 //                     records ever leave the vendor).
 //   4. checkResult  — small-cell suppression on the aggregate (403 if unsafe).
 //   5. recordUsage  — meter the answered query against the order at
-//                     PER_QUERY_FEE_CENTS (lib/db/usage). Only successful
+//                     PER_QUERY_FEE_CENTS (lib/query/pricing). Only successful
 //                     answers reach this step, so rejections are never billed.
 import { nl2query } from "../../../lib/ai/nl2query";
 import {
