@@ -6,7 +6,8 @@
 // buyer" (resolve: void) — which PATCH /api/orders against the new contract
 // ({ action: "resolve", resolution, orderId }); the server is authoritative for
 // the from-state and PayPal ids, so we send nothing else.
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import OrderTimeline from "./OrderTimeline";
 
 // Mirrors lib/db/client OrderRow (the GET endpoint returns raw DB rows). Kept
 // local so this client component never imports the server-only db module.
@@ -76,6 +77,19 @@ export default function IncomingOrders() {
   const [disputesOnly, setDisputesOnly] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  // Orders whose audit timeline is expanded, and a per-order counter bumped
+  // after the vendor acts so an open timeline refetches immediately.
+  const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
+  const [acted, setActed] = useState<Record<string, number>>({});
+
+  function toggleHistory(orderId: string) {
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(orderId)) next.delete(orderId);
+      else next.add(orderId);
+      return next;
+    });
+  }
 
   const load = useCallback(async () => {
     try {
@@ -132,6 +146,7 @@ export default function IncomingOrders() {
       setNote("Could not reach the order service.");
     } finally {
       setBusyId(null);
+      setActed((prev) => ({ ...prev, [orderId]: (prev[orderId] ?? 0) + 1 }));
     }
   }
 
@@ -189,51 +204,92 @@ export default function IncomingOrders() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((o) => (
-                <tr
-                  key={o.id}
-                  className="border-b border-zinc-100 last:border-0 dark:border-zinc-900"
-                >
-                  <td className="py-3 pr-4 font-mono text-xs text-zinc-500">
-                    {o.id}
-                  </td>
-                  <td className="py-3 pr-4">{o.dataset_id}</td>
-                  <td className="py-3 pr-4 text-zinc-600 dark:text-zinc-400">
-                    {o.buyer_email}
-                  </td>
-                  <td className="py-3 pr-4 tabular-nums">
-                    {usd(o.amount_cents)}
-                  </td>
-                  <td className="py-3 pr-4">
-                    <StateBadge status={o.status} />
-                  </td>
-                  <td className="py-3 pr-4 text-xs text-zinc-500">
-                    {when(o.updated_at ?? o.created_at)}
-                  </td>
-                  <td className="py-3">
-                    {o.status === "DISPUTED" ? (
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          onClick={() => resolve(o.id, "capture")}
-                          disabled={busyId !== null}
-                          className={`${resolveBtn} bg-pp-600 text-white hover:bg-pp-500`}
-                        >
-                          {busyId === o.id ? "Resolving…" : "Release to vendor"}
-                        </button>
-                        <button
-                          onClick={() => resolve(o.id, "void")}
-                          disabled={busyId !== null}
-                          className={`${resolveBtn} border border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/10`}
-                        >
-                          {busyId === o.id ? "Resolving…" : "Refund buyer"}
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-zinc-400">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {rows.map((o) => {
+                const expanded = open.has(o.id);
+                const panelId = `history-${o.id}`;
+                return (
+                  <Fragment key={o.id}>
+                    <tr
+                      className={
+                        expanded
+                          ? ""
+                          : "border-b border-zinc-100 dark:border-zinc-900"
+                      }
+                    >
+                      <td className="py-3 pr-4 font-mono text-xs text-zinc-500">
+                        {o.id}
+                      </td>
+                      <td className="py-3 pr-4">{o.dataset_id}</td>
+                      <td className="py-3 pr-4 text-zinc-600 dark:text-zinc-400">
+                        {o.buyer_email}
+                      </td>
+                      <td className="py-3 pr-4 tabular-nums">
+                        {usd(o.amount_cents)}
+                      </td>
+                      <td className="py-3 pr-4">
+                        <StateBadge status={o.status} />
+                      </td>
+                      <td className="py-3 pr-4 text-xs text-zinc-500">
+                        {when(o.updated_at ?? o.created_at)}
+                      </td>
+                      <td className="py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {o.status === "DISPUTED" && (
+                            <>
+                              <button
+                                onClick={() => resolve(o.id, "capture")}
+                                disabled={busyId !== null}
+                                className={`${resolveBtn} bg-pp-600 text-white hover:bg-pp-500`}
+                              >
+                                {busyId === o.id
+                                  ? "Resolving…"
+                                  : "Release to vendor"}
+                              </button>
+                              <button
+                                onClick={() => resolve(o.id, "void")}
+                                disabled={busyId !== null}
+                                className={`${resolveBtn} border border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/10`}
+                              >
+                                {busyId === o.id
+                                  ? "Resolving…"
+                                  : "Refund buyer"}
+                              </button>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => toggleHistory(o.id)}
+                            aria-expanded={expanded}
+                            aria-controls={panelId}
+                            className={`${resolveBtn} whitespace-nowrap border border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900`}
+                          >
+                            {expanded ? "Hide history" : "History"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    {/* Always rendered (hidden when collapsed) so aria-controls
+                        resolves; the timeline only mounts — and fetches — when
+                        expanded. */}
+                    <tr
+                      id={panelId}
+                      hidden={!expanded}
+                      className="border-b border-zinc-100 dark:border-zinc-900"
+                    >
+                      <td colSpan={7} className="pb-5 pl-4 pt-1">
+                        {expanded && (
+                          <div className="reveal max-w-2xl rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+                            <OrderTimeline
+                              orderId={o.id}
+                              refreshKey={`${o.status}:${o.updated_at}:${acted[o.id] ?? 0}`}
+                            />
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  </Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>
