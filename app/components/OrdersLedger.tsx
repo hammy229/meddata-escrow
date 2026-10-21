@@ -5,11 +5,20 @@
 // floating column filters (status text, amount number, created date), a quick
 // filter, pagination, CSV export, and a pinned total row that always reflects
 // the rows currently passing the filters. Polls GET /api/orders on the same
-// 5s cadence as IncomingOrders.
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+// 5s cadence as IncomingOrders. The vendor's column layout, sort and filters
+// persist in localStorage, with a "Reset view" escape hatch.
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type {
   ColDef,
   GridApi,
+  GridState,
   ProcessCellForExportParams,
 } from "ag-grid-community";
 import type { AgGridReact, CustomCellRendererProps } from "ag-grid-react";
@@ -104,6 +113,53 @@ function exportCell(p: ProcessCellForExportParams<OrderRow>): string {
   return p.value == null ? "" : String(p.value);
 }
 
+// The vendor's saved ledger layout: column order, widths, visibility, sort and
+// filters, in this browser's localStorage. Storage can be missing or throw
+// (private mode, blocked site data, SSR), so every access is guarded and the
+// grid simply starts from its defaults.
+const VIEW_KEY = "meddata-escrow:vendor-ledger-view:v1";
+
+function readView(): GridState | undefined {
+  try {
+    const raw = window.localStorage.getItem(VIEW_KEY);
+    if (!raw) return undefined;
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === "object"
+      ? (parsed as GridState)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeView(state: GridState): void {
+  const { columnOrder, columnSizing, columnVisibility, sort, filter } = state;
+  try {
+    window.localStorage.setItem(
+      VIEW_KEY,
+      JSON.stringify({
+        columnOrder,
+        columnSizing,
+        columnVisibility,
+        sort,
+        filter,
+      }),
+    );
+  } catch {
+    // Storage unavailable or full: the view just won't persist.
+  }
+}
+
+const noopSubscribe = () => () => {};
+
+function clearView(): void {
+  try {
+    window.localStorage.removeItem(VIEW_KEY);
+  } catch {
+    // Nothing to clear.
+  }
+}
+
 const toolBtn =
   "inline-flex items-center gap-1.5 rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900";
 
@@ -119,6 +175,25 @@ export default function OrdersLedger() {
   const [error, setError] = useState<string | null>(null);
   const [quick, setQuick] = useState("");
   const [totals, setTotals] = useState<Totals>({ count: 0, cents: 0 });
+  // Saved layout, read once per grid mount (initialState is init-only), and a
+  // key bumped by "Reset view" to remount the grid with its defaults.
+  const [savedView, setSavedView] = useState<GridState | undefined>(readView);
+  const [gridKey, setGridKey] = useState(0);
+  const [customized, setCustomized] = useState(() => savedView !== undefined);
+  // False on the server and during hydration, so the button's markup matches
+  // before localStorage is consulted.
+  const hydrated = useSyncExternalStore(
+    noopSubscribe,
+    () => true,
+    () => false,
+  );
+
+  function resetView() {
+    clearView();
+    setSavedView(undefined);
+    setCustomized(false);
+    setGridKey((k) => k + 1);
+  }
 
   const load = useCallback(async () => {
     try {
@@ -299,6 +374,15 @@ export default function OrdersLedger() {
             <Download className="h-3.5 w-3.5" />
             Export CSV
           </button>
+          <button
+            type="button"
+            onClick={resetView}
+            disabled={!hydrated || !customized}
+            title="Restore the default columns, sort and filters"
+            className={toolBtn}
+          >
+            Reset view
+          </button>
         </div>
       </div>
 
@@ -312,6 +396,7 @@ export default function OrdersLedger() {
       )}
 
       <DataGrid<OrderRow>
+        key={gridKey}
         gridRef={gridRef}
         rowData={orders}
         columnDefs={columns}
@@ -335,6 +420,13 @@ export default function OrdersLedger() {
           onFilterChanged: (e) => recomputeTotals(e.api),
           onRowDataUpdated: (e) => recomputeTotals(e.api),
           onFirstDataRendered: (e) => recomputeTotals(e.api),
+          initialState: savedView,
+          // Persist only user changes, not the grid's own initialization.
+          onStateUpdated: (e) => {
+            if (e.sources.includes("gridInitializing")) return;
+            writeView(e.state);
+            setCustomized(true);
+          },
         }}
       />
     </div>
