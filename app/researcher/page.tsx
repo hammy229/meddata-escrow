@@ -12,6 +12,7 @@ import Link from "next/link";
 import type { ColDef } from "ag-grid-community";
 import DataGrid from "../components/DataGrid";
 import OrderTimeline from "../components/OrderTimeline";
+import QuerySpend from "../components/QuerySpend";
 import { ArrowLeft, Check, AlertTriangle, Search } from "../components/icons";
 
 interface Match {
@@ -156,6 +157,8 @@ export default function ResearcherPage() {
   const [compiled, setCompiled] = useState<string | null>(null);
   const [results, setResults] = useState<AggregateRow[] | null>(null);
   const [queryCharge, setQueryCharge] = useState<number | null>(null);
+  // Bumped after every answered query so the spend tally refetches.
+  const [spendKey, setSpendKey] = useState(0);
 
   function resetEscrow() {
     setEscrow(null);
@@ -388,6 +391,7 @@ export default function ResearcherPage() {
           ? data.usage.chargeCents
           : null,
       );
+      setSpendKey((k) => k + 1);
     } catch {
       setQueryError("Could not reach the query service.");
     } finally {
@@ -662,6 +666,17 @@ export default function ResearcherPage() {
                   Billed {usd(queryCharge)} to this order.
                 </p>
               )}
+            </div>
+          )}
+
+          {orderId && (
+            <div className="mt-6 border-t border-zinc-200 pt-5 dark:border-zinc-800">
+              <h3 className="mb-3 text-sm font-semibold">Query spend</h3>
+              <QuerySpend
+                key={orderId}
+                orderId={orderId}
+                refreshKey={spendKey}
+              />
             </div>
           )}
         </section>
