@@ -132,6 +132,11 @@ stored in `agent_runs` (`GET /api/agent?runId=`).
 | `POST /api/query` `{ orderId, datasetId, question }`          | Plain-English question → privacy-safe aggregate, metered (`usage` in response)      |
 | `GET /api/billing?orderId=<id>`                               | An order's per-query usage, `queryCount`, `totalCents`                              |
 | `POST /api/billing` `{ orderId, question }`                   | Record one query charge (fee is server-set; `409` without data access)              |
+| `POST /api/match` `{ sampleCheck, description? }`             | Pre-purchase sample quality check on one dataset                                    |
+| `POST /api/agent` `{ study, budgetCents }`                    | Run the procurement agent; returns `runId`, steps, recommendation, order            |
+| `GET /api/agent?runId=<id>`                                   | Replay a stored agent run (audit)                                                   |
+| `POST /api/webhooks/paypal`                                   | Signature-verified, deduped PayPal events applied to escrow state                   |
+| `GET /api/openapi`                                            | The OpenAPI 3.1 spec (`openapi/openapi.yaml`)                                       |
 | `GET /api/health`                                             | Uptime check: `{ status, mode, db }` (Render health check)                          |
 
 Errors are always `{ error }` (plus `reasons` on privacy rejections).
