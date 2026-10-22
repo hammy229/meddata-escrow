@@ -47,12 +47,23 @@ function usd(cents: number): string {
 }
 
 /** One-line summary of a tool's input/output object, e.g. "datasetId: ds_x". */
+// Arrays read as a count ("matches: 2"); long prose and URLs are left to
+// the recommendation and order card below rather than crowding the step.
+const SKIP_KEYS = new Set(["description", "approveUrl", "rationale"]);
+
 function summarize(value: unknown): string {
   if (value === null || value === undefined) return "";
   if (typeof value !== "object") return String(value);
   return Object.entries(value as Record<string, unknown>)
-    .filter(([, v]) => v !== null && typeof v !== "object")
-    .map(([k, v]) => `${k}: ${String(v)}`)
+    .filter(([k, v]) => v !== null && !SKIP_KEYS.has(k))
+    .map(([k, v]) =>
+      Array.isArray(v)
+        ? `${k}: ${v.length}`
+        : typeof v === "object"
+          ? null
+          : `${k}: ${String(v)}`,
+    )
+    .filter(Boolean)
     .join(" · ");
 }
 
