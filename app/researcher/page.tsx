@@ -22,6 +22,7 @@ import SampleCheckCard, {
   type SampleCheck,
 } from "../components/SampleCheckCard";
 import QuerySpend from "../components/QuerySpend";
+import AgentRun from "../components/AgentRun";
 import {
   ArrowLeft,
   Check,
@@ -497,6 +498,26 @@ export default function ResearcherPage() {
               {matchError}
             </span>
           )}
+        </div>
+      </section>
+
+      {/* Shortcut — hand the whole search → check → order loop to the agent */}
+      <section className={`mt-6 ${sectionCard}`}>
+        <div className="flex items-center gap-2.5">
+          <span className={stepBadge}>AI</span>
+          <h2 className="text-lg font-semibold">Or let the agent buy it</h2>
+        </div>
+        <p className="mt-2 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
+          The agent searches, sample-checks and opens an escrow order within
+          your budget. Guardrails are enforced in code: it can&apos;t exceed the
+          budget, skip the sample check, or release any money.
+        </p>
+        <div className="mt-4">
+          <AgentRun
+            study={description}
+            primaryBtn={secondaryBtn}
+            inputBase={inputBase}
+          />
         </div>
       </section>
 
