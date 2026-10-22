@@ -35,6 +35,11 @@ Medical-school researchers waste weeks sourcing data: they can't inspect quality
 
 <img src="docs/screenshots/home-mobile.png" alt="Landing page on mobile" width="320" />
 
+**Procurement agent** — a $60 budget: search → inspect → sample check → a
+`MATCHED` escrow order the buyer approves in PayPal (mock mode, synthetic data).
+
+![Researcher workspace: the agent's steps, recommendation and opened escrow order](docs/screenshots/researcher-agent.png)
+
 ## How it works (6-step flow)
 
 1. **Describe** — A researcher describes their study in plain English.
