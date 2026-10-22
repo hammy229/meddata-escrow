@@ -46,13 +46,16 @@ Medical-school researchers waste weeks sourcing data: they can't inspect quality
 
 ## Tools used & how
 
-| Tool                                      | How it's used                                                                                                      |
-| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| **PayPal** (Orders/Payments API, sandbox) | Escrow via authorize-then-capture; per-query billing (`lib/paypal/client.ts`, `app/api/orders`, `app/api/billing`) |
-| **LLM API** (hosted)                      | Dataset matching, natural-language → query translation, and privacy screening (`lib/ai/*`)                         |
-| **AG Grid**                               | Interactive dataset catalog and query-result tables in the researcher/vendor UIs                                   |
-| **Render**                                | One-click Blueprint deploy via [`render.yaml`](./render.yaml): seeded SQLite demo, `/api/health` check             |
-| **Postman**                               | API collection to exercise and demo every endpoint ([`postman/`](./postman))                                       |
+| Tool                                      | How it's used                                                                                                                                                                      |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PayPal** (Orders/Payments API, sandbox) | Escrow via authorize-then-capture; per-query billing (`lib/paypal/client.ts`, `app/api/orders`, `app/api/billing`)                                                                 |
+| **PayPal** (Payouts + Webhooks)           | Vendor payouts minus a 10% fee (`lib/escrow/fees.ts`); verified, deduped webhooks at `/api/webhooks/paypal`; `PayPal-Request-Id` idempotency on every write                        |
+| **Claude on Amazon Bedrock**              | Dataset ranking, question → query plan, tighten-only privacy review, sample check, and the procurement agent (`lib/llm`, `lib/ai`, `lib/agent`); opt-in via `LLM_PROVIDER=bedrock` |
+| **OpenAPI 3.1**                           | Contract for every route (`openapi/openapi.yaml`, served at `/api/openapi`) with drift tests; Postman collection generated from it                                                 |
+| **Zapier** (outbound webhooks)            | Every escrow transition POSTs a signed event to `OUTBOUND_WEBHOOK_URL` (`lib/events/outbound.ts`)                                                                                  |
+| **AG Grid**                               | Interactive dataset catalog and query-result tables in the researcher/vendor UIs                                                                                                   |
+| **Render**                                | One-click Blueprint deploy via [`render.yaml`](./render.yaml): seeded SQLite demo, `/api/health` check                                                                             |
+| **Postman**                               | API collection to exercise and demo every endpoint ([`postman/`](./postman))                                                                                                       |
 
 ## Architecture
 
