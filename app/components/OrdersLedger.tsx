@@ -268,10 +268,12 @@ export default function OrdersLedger() {
 
   const columns = useMemo<ColDef<OrderRow>[]>(
     () => [
+      // minWidths sum to 920px so all seven columns fit the ~930px card at a
+      // 1280px viewport without horizontal scroll; flex shares any extra.
       {
         field: "id",
         headerName: "Order",
-        minWidth: 170,
+        minWidth: 130,
         cellClass: "font-mono text-xs",
         filter: "agTextColumnFilter",
         tooltipField: "id",
@@ -279,28 +281,28 @@ export default function OrdersLedger() {
       {
         field: "dataset_id",
         headerName: "Dataset",
-        minWidth: 190,
+        minWidth: 150,
         filter: "agTextColumnFilter",
         tooltipField: "dataset_id",
       },
       {
         field: "buyer_email",
         headerName: "Buyer",
-        minWidth: 190,
+        minWidth: 150,
         filter: "agTextColumnFilter",
         tooltipField: "buyer_email",
       },
       {
         field: "status",
         headerName: "Status",
-        minWidth: 150,
+        minWidth: 120,
         filter: "agTextColumnFilter",
         cellRenderer: StatusCell,
       },
       {
         field: "amount_cents",
         headerName: "Amount",
-        minWidth: 130,
+        minWidth: 100,
         type: "rightAligned",
         cellClass: "font-mono tabular-nums",
         filter: "agNumberColumnFilter",
@@ -315,7 +317,7 @@ export default function OrdersLedger() {
       {
         colId: "created",
         headerName: "Created",
-        minWidth: 190,
+        minWidth: 175,
         initialSort: "desc",
         filter: "agDateColumnFilter",
         filterParams: { comparator: compareDay },
@@ -331,7 +333,7 @@ export default function OrdersLedger() {
       {
         colId: "updated",
         headerName: "Updated",
-        minWidth: 130,
+        minWidth: 95,
         filter: false,
         cellClass: "text-zinc-500",
         valueGetter: (p) =>
