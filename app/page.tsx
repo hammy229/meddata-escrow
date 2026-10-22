@@ -47,9 +47,11 @@ const STEPS: Array<{ n: string; title: string; body: string }> = [
   },
 ];
 
-const TOOLS: Array<{ slug: string; label: string }> = [
+// `src` overrides the Simple Icons CDN; it no longer serves any AWS mark, so
+// AWS uses a neutral local cloud glyph instead of a 404.
+const TOOLS: Array<{ slug: string; label: string; src?: string }> = [
   { slug: "paypal", label: "PayPal" },
-  { slug: "amazonwebservices", label: "AWS" },
+  { slug: "aws", label: "AWS", src: "/cloud.svg" },
   { slug: "anthropic", label: "Anthropic Claude" },
   { slug: "nextdotjs", label: "Next.js" },
 ];
@@ -249,7 +251,7 @@ export default function Home() {
               className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3.5 py-1.5 text-sm text-zinc-600 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300"
             >
               <img
-                src={`https://cdn.simpleicons.org/${t.slug}`}
+                src={t.src ?? `https://cdn.simpleicons.org/${t.slug}`}
                 alt=""
                 width={16}
                 height={16}
