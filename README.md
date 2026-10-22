@@ -93,6 +93,32 @@ The server, not the client, decides who pays what and who sees what:
   fixed server fee (`PER_QUERY_FEE_CENTS`). Rejected or suppressed queries are
   never billed.
 
+### AI & the procurement agent
+
+Claude on Amazon Bedrock is opt-in (`LLM_PROVIDER=bedrock`, client in
+`lib/llm/client.ts`). Every AI step has a deterministic fallback, so the full
+app — including the agent — runs with no AWS access.
+
+- **Matching** — Claude ranks catalog datasets for a study; keyword scoring is
+  the fallback (`lib/ai/matcher`).
+- **Questions → plans, never SQL** — Claude emits a typed query plan that
+  `compilePlan` turns into SQL; the model never writes SQL itself.
+- **Privacy second opinion** — Claude can only _tighten_ the rule-based privacy
+  verdict, never loosen it.
+- **Sample check** — a quality check on a dataset sample before money moves
+  (`lib/ai/sample-check.ts`, `POST /api/match { sampleCheck }`).
+
+**Procurement agent** (`lib/agent`, `POST /api/agent`): give it a study and a
+budget and it searches, inspects, sample-checks and opens an escrow order using
+four tools — `search_datasets`, `get_dataset`, `check_sample`,
+`create_escrow_order`. The guardrails live in code, not the prompt: an order is
+refused unless the dataset exists, its listed price fits the budget, a
+_passing_ sample check ran in the same run, and no order was placed yet. The
+agent can only open a `MATCHED` order; it has no tool to authorize, capture or
+pay out — the human buyer still approves in PayPal. Runs are capped at 8 model
+turns, fall back to a scripted planner when the LLM is off, and every step is
+stored in `agent_runs` (`GET /api/agent?runId=`).
+
 ### API reference
 
 | Method & path                                                 | Purpose                                                                             |
