@@ -10,14 +10,19 @@ portable).
 
 ## Components
 
-| Layer         | Location                                           | Responsibility                                    |
-| ------------- | -------------------------------------------------- | ------------------------------------------------- |
-| Researcher UI | `app/researcher`                                   | Describe a study, browse matches, query, purchase |
-| Vendor UI     | `app/vendor`                                       | List datasets, manage catalog, review orders      |
-| API           | `app/api/{match,query,orders,billing}`             | Request handlers                                  |
-| AI            | `lib/ai/{matcher,nl2query,privacy-guard}`          | Matching, NL→query, privacy screening             |
-| Payments      | `lib/paypal/client`                                | Authorize / capture / void / per-query billing    |
-| Data          | `lib/db/{schema.sql,seed.ts}`, `data/catalog.json` | Schema + seed                                     |
+| Layer         | Location                                                                    | Responsibility                                    |
+| ------------- | --------------------------------------------------------------------------- | ------------------------------------------------- |
+| Researcher UI | `app/researcher`                                                            | Describe a study, browse matches, query, purchase |
+| Vendor UI     | `app/vendor`                                                                | List datasets, manage catalog, review orders      |
+| API           | `app/api/{match,query,orders,billing,agent,webhooks/paypal,openapi,health}` | Request handlers                                  |
+| LLM           | `lib/llm/client`                                                            | Claude on Bedrock (opt-in), structured outputs    |
+| AI            | `lib/ai/{matcher,nl2query,privacy-guard,sample-check}`                      | Matching, NL→plan→SQL, privacy, sample check      |
+| Agent         | `lib/agent/{tools,run,store}`                                               | Guardrailed procurement tool loop + run audit     |
+| Escrow        | `lib/escrow/{state-machine,service,fees,paypal-webhooks}`                   | Transitions, fee split, inbound webhooks          |
+| Payments      | `lib/paypal/client`                                                         | Authorize / capture / void / payouts / verify     |
+| Events        | `lib/events/outbound`                                                       | Signed outbound webhook per transition            |
+| HTTP          | `proxy.ts`, `lib/http`                                                      | Security headers, rate limits, body caps, req ids |
+| Data          | `lib/db/{schema.sql,seed.ts}`, `data/catalog.json`                          | Schema + seed                                     |
 
 ## Escrow flow
 
@@ -70,6 +75,10 @@ operations and results pass through the privacy guard before returning.
 - `POST /api/query` — plain-English query → privacy-safe aggregate; requires a
   paid, delivered order and meters each answer
 - `GET|POST /api/billing` — per-query usage and spend for an order
+- `POST /api/agent` — run the procurement agent; `GET /api/agent?runId=`
+  replays a stored run
+- `POST /api/webhooks/paypal` — signature-verified, deduped PayPal events
+- `GET /api/openapi` — the OpenAPI 3.1 contract
 - `GET /api/health` — uptime check (DB + mock/live mode)
 
 See the README's "Trust guarantees" and "API reference" for the full contract.
@@ -77,7 +86,9 @@ See the README's "Trust guarantees" and "API reference" for the full contract.
 ## Data model
 
 See [`../lib/db/schema.sql`](../lib/db/schema.sql): `vendors`, `datasets`,
-`orders`, `query_usage`, `order_events` (append-only audit trail).
+`orders`, `query_usage`, `order_events` (append-only audit trail),
+`paypal_webhook_events` (webhook dedupe), plus `agent_runs` (created by
+`lib/agent/store`).
 
 ## Deployment (Render)
 
