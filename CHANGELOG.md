@@ -2,6 +2,61 @@
 
 All notable changes to MedData Escrow. Newest first.
 
+## 2026-10-21 (later) — Claude on Bedrock, real PayPal money moves, API contract
+
+The second half of the day turned the mock-first core into something that can
+talk to real services, without breaking the creds-free demo.
+
+### AI (Claude on Bedrock)
+
+- **Provider seam** — `lib/llm/client.ts` adds a Claude-on-Bedrock client with
+  structured outputs, opt-in via `LLM_PROVIDER=bedrock`. Every caller keeps a
+  deterministic fallback, so the app runs identically with no AWS access.
+- **Dataset ranking** with Claude; keyword matching remains the fallback.
+- **Query plans, never LLM SQL** — Claude turns a question into a typed plan
+  that `compilePlan` compiles; the model never writes SQL.
+- **Second-opinion privacy screen** that can only tighten a verdict, never
+  loosen it.
+- **Sample quality check** before buying (`POST /api/match { sampleCheck }`).
+- **Procurement agent** — `POST /api/agent` runs a tool loop with budget and
+  sample-check guardrails and a scripted fallback; runs are persisted in
+  `agent_runs` and readable via `GET /api/agent?runId=`.
+
+### PayPal
+
+- Escrow transitions moved into one service (`lib/escrow/service.ts`).
+- Every PayPal write carries a `PayPal-Request-Id`, so retries are idempotent.
+- Vendors are paid through the **Payouts API** with a 10% platform fee
+  (`lib/escrow/fees.ts`; vendor + fee always equals the capture).
+- `POST /api/webhooks/paypal` verifies signatures with PayPal, dedupes by event
+  id, and applies only legal state-machine transitions.
+- Escrow transitions emit **signed outbound webhooks** (Zapier-ready).
+
+### API contract
+
+- OpenAPI 3.1 spec for every route (`openapi/openapi.yaml`), served at
+  `GET /api/openapi`, with drift tests against the route files.
+- Generated, runnable Postman collection (`npm run postman:gen`).
+
+### Security
+
+- Strict security headers and CSP on every response.
+- Rate limits on the expensive routes and request body caps (32 KB; 256 KB
+  for webhooks), enforced in `proxy.ts`.
+- An `X-Request-Id` on every API response.
+
+### UI (AG Grid)
+
+- Dataset matches, vendor orders and the vendor ledger in AG Grid, with
+  saved column state and CSV export; the sample check and a "how this answer
+  was computed" panel on the researcher side.
+
+### Fixed
+
+- The Render blueprint now deploys on the free plan.
+- The ledger total row no longer leaks into CSV exports; user sort and column
+  widths survive grid re-renders.
+
 ## 2026-10-21 — Trust hardening, audit trail UI, earnings & spend
 
 A security and product pass: the server now enforces who pays what and who
