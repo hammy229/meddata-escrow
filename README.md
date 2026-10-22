@@ -63,13 +63,18 @@ See [`docs/architecture.md`](docs/architecture.md) for the full design and the e
 
 ```
 Researcher UI ─▶ /api/match   ─▶ lib/ai/matcher          (rank vendor datasets)
-             ─▶ /api/orders  ─▶ lib/paypal/client        (authorize → sample check → capture/void)
-             ─▶ /api/query   ─▶ lib/ai/nl2query          (NL → safe query)
-                              └▶ lib/ai/privacy-guard     (screen query + results)
-             ─▶ /api/billing ─▶ lib/paypal/client        (per-query charge)
+                              └▶ lib/ai/sample-check      (pre-purchase sample check)
+             ─▶ /api/agent   ─▶ lib/agent/run            (tool loop → escrow order, guardrailed)
+             ─▶ /api/orders  ─▶ lib/escrow/service       (state machine + lib/paypal/client)
+             ─▶ /api/query   ─▶ lib/ai/nl2query          (NL → plan → safe SQL)
+                              └▶ lib/ai/privacy-guard     (screen question, SQL + results)
+             ─▶ /api/billing ─▶ lib/db/usage             (per-query charge)
+PayPal       ─▶ /api/webhooks/paypal ─▶ lib/escrow/paypal-webhooks (verified, deduped)
+Escrow       ─▶ lib/events/outbound  (signed webhook per transition → Zapier)
 Vendor UI    ─▶ manage catalog (data/catalog.json → DB via lib/db)
 Data layer   ─▶ lib/db/schema.sql  (SQLite via node:sqlite; portable SQL)
              ─▶ order_events        (append-only audit trail, one row per transition)
+             ─▶ agent_runs          (every agent step, replayable)
 ```
 
 Every escrow transition is recorded in an append-only `order_events` trail,
