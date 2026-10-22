@@ -2,6 +2,32 @@
 
 All notable changes to MedData Escrow. Newest first.
 
+## 2026-10-22 — The agent gets a face; coverage and docs catch up
+
+### Added
+
+- **"Or let the agent buy it"** on the researcher workspace: set a budget and
+  watch the procurement agent's steps, guardrail refusals, recommendation and
+  the escrow order it opens, with the PayPal approve link (`AgentRun`).
+
+### Fixed
+
+- The landing "Built with" strip showed a broken AWS logo (Simple Icons
+  dropped every AWS mark); it now uses a local glyph.
+- Agent step summaries now show counts for lists and skip long prose.
+
+### Tests
+
+- Direct specs for query-usage persistence, mock-mode ids, and every PayPal
+  webhook mapping branch (dispute-time resolution, auth creation, malformed
+  payloads). 273 → 290 tests.
+
+### Docs
+
+- README: AI & agent section, full API table, sponsor tools, redrawn
+  architecture map, agent screenshot. Architecture doc, demo script and a
+  Devpost draft (`docs/devpost.md`) brought up to date.
+
 ## 2026-10-21 (later) — Claude on Bedrock, real PayPal money moves, API contract
 
 The second half of the day turned the mock-first core into something that can
