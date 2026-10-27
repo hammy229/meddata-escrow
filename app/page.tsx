@@ -1,6 +1,6 @@
-/* eslint-disable @next/next/no-img-element */
 // MedData Escrow landing page. Server component, no client JS.
-// Tailwind v4 + Hanken Grotesk, single PayPal-blue accent on zinc, auto dark mode.
+// Editorial layout: Spectral headlines, Inter Tight body, hairline rules on
+// warm paper, one PayPal-blue accent, auto dark mode.
 
 import Link from "next/link";
 
@@ -67,394 +67,397 @@ const STEPS: Array<{ n: string; title: string; body: string }> = [
   },
 ];
 
-// `src` overrides the Simple Icons CDN; it no longer serves any AWS mark, so
-// AWS uses a neutral local cloud glyph instead of a 404.
-const TOOLS: Array<{ slug: string; label: string; src?: string }> = [
-  { slug: "paypal", label: "PayPal" },
-  { slug: "aws", label: "AWS", src: "/cloud.svg" },
-  { slug: "anthropic", label: "Anthropic Claude" },
-  { slug: "nextdotjs", label: "Next.js" },
+const NAV: Array<{ href: string; label: string }> = [
+  { href: "/", label: "Home" },
+  { href: "/researcher", label: "Researchers" },
+  { href: "/vendor", label: "Vendors" },
+  { href: "#how", label: "How it works" },
 ];
+
+const AUDIENCES: Array<{ label: string; title: string; body: string }> = [
+  {
+    label: "For researchers",
+    title: "Ask in English. Pay on arrival.",
+    body: "Describe a study, compare ranked matches, and only pay once the data shows up and the sample checks out.",
+  },
+  {
+    label: "For vendors",
+    title: "Real money before you ship.",
+    body: "The buyer's funds are already held in PayPal, so you deliver knowing the payment exists.",
+  },
+  {
+    label: "For both sides",
+    title: "No one trusts first.",
+    body: "Capture waits for the buyer's confirmation. A failed sample voids the hold and nobody is charged.",
+  },
+];
+
+const GUARANTEES: Array<{ t: string; d: string }> = [
+  {
+    t: "Authorize, then capture",
+    d: "PayPal Orders v2 holds the funds. Capture happens on delivery, void on failure.",
+  },
+  {
+    t: "48-hour confirmation window",
+    d: "Inside PayPal's honor period. Lapsed windows auto-capture; stale holds reauthorize.",
+  },
+  {
+    t: "Webhooks are the source of truth",
+    d: "Every state change verifies a signed PayPal webhook before it is trusted.",
+  },
+];
+
+// Shared text-link style: underlined label + arrow, no button chrome.
+const TEXT_LINK =
+  "group inline-flex items-center gap-1 border-b border-ink pb-0.5 text-[0.95rem] text-ink transition-colors hover:border-pp-600 hover:text-pp-600 dark:hover:border-pp-400 dark:hover:text-pp-400";
 
 export default function Home() {
   return (
-    <div className="relative min-h-[100dvh] overflow-x-hidden bg-white text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
-      {/* Ambient accent glow + faint grid behind the hero */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[620px] bg-[radial-gradient(60%_60%_at_78%_-10%,rgba(0,112,224,0.15),transparent_70%)]"
-      />
-      <div
-        aria-hidden
-        className="hero-grid pointer-events-none absolute inset-x-0 top-0 -z-10 h-[620px]"
-      />
-
-      {/* Nav */}
-      <header className="sticky top-0 z-40 border-b border-zinc-200/70 bg-white/75 backdrop-blur-xl dark:border-zinc-800/70 dark:bg-zinc-950/70">
-        <nav className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2.5 font-semibold tracking-tight"
-          >
-            <span className="grid h-8 w-8 place-items-center rounded-lg bg-pp-600 text-white shadow-sm shadow-pp-600/30">
-              <ShieldCheck className="h-[18px] w-[18px]" />
-            </span>
-            MedData
-            <span className="font-normal text-zinc-500 dark:text-zinc-400">
-              Escrow
-            </span>
-          </Link>
-          <div className="hidden items-center gap-7 text-sm text-zinc-600 dark:text-zinc-400 md:flex">
-            <a
-              href="#how"
-              className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100"
-            >
-              How it works
-            </a>
+    <div className="relative min-h-[100dvh] overflow-x-hidden bg-paper text-ink">
+      {/* Vertical rail nav on wide screens */}
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[72px] flex-col items-center justify-between border-r border-rule bg-paper py-8 lg:flex">
+        <Link href="/" aria-label="MedData Escrow home">
+          <Mark className="h-6 w-6" />
+        </Link>
+        <nav className="flex flex-col items-center gap-9 text-sm text-muted">
+          {NAV.map((n) => (
             <Link
-              href="/researcher"
-              className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100"
+              key={n.label}
+              href={n.href}
+              className="[writing-mode:vertical-rl] rotate-180 transition-colors hover:text-ink aria-[current=page]:text-ink"
+              aria-current={n.href === "/" ? "page" : undefined}
             >
-              For researchers
+              {n.label}
             </Link>
-            <Link
-              href="/vendor"
-              className="transition-colors hover:text-zinc-900 dark:hover:text-zinc-100"
-            >
-              For vendors
+          ))}
+        </nav>
+        <span className="[writing-mode:vertical-rl] rotate-180 font-mono text-[0.7rem] text-muted">
+          &rsquo;26
+        </span>
+      </aside>
+
+      {/* Top bar on small screens */}
+      <header className="sticky top-0 z-40 border-b border-rule bg-paper/85 backdrop-blur lg:hidden">
+        <nav className="flex h-14 items-center justify-between px-5">
+          <Link href="/" className="inline-flex items-center gap-2">
+            <Mark className="h-5 w-5" />
+            <span className="text-sm">MedData Escrow</span>
+          </Link>
+          <div className="flex gap-5 text-sm text-muted">
+            <Link href="/researcher" className="hover:text-ink">
+              Researchers
+            </Link>
+            <Link href="/vendor" className="hover:text-ink">
+              Vendors
             </Link>
           </div>
-          <Link
-            href="/researcher"
-            className="rounded-full bg-pp-600 px-4 py-2 text-sm font-medium text-white shadow-sm shadow-pp-600/30 transition-all hover:bg-pp-500 hover:shadow-md hover:shadow-pp-600/30 active:translate-y-px"
-          >
-            Browse datasets
-          </Link>
         </nav>
       </header>
 
-      {/* Hero */}
-      <section className="mx-auto grid max-w-6xl items-center gap-12 px-5 pt-16 pb-20 lg:grid-cols-[1.05fr_1fr] lg:pt-24 lg:pb-28">
-        <div className="reveal">
-          <span className="inline-flex items-center gap-2 rounded-full border border-pp-200 bg-pp-50 px-3 py-1 text-xs font-medium text-pp-700 dark:border-pp-500/30 dark:bg-pp-500/10 dark:text-pp-300">
-            <ShieldCheck className="h-3.5 w-3.5" />
-            PayPal-protected data procurement
-          </span>
-          <h1 className="mt-5 text-[2.75rem] font-bold leading-[1.02] tracking-[-0.03em] md:text-[3.5rem] lg:text-[4rem]">
-            Research data you can trust,{" "}
-            <span className="text-pp-600 dark:text-pp-400">
-              paid for only once it is delivered.
-            </span>
-          </h1>
-          <p className="mt-6 max-w-xl text-lg leading-relaxed text-zinc-600 dark:text-zinc-400">
-            MedData Escrow matches your study to vetted datasets and holds
-            payment in PayPal until the delivery is confirmed.
-          </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Link
-              href="/researcher"
-              className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-pp-600 px-6 font-medium text-white shadow-lg shadow-pp-600/25 transition-all hover:bg-pp-500 hover:shadow-xl hover:shadow-pp-600/30 active:translate-y-px"
-            >
-              Browse datasets
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-            <Link
-              href="/vendor"
-              className="inline-flex h-12 items-center justify-center rounded-full border border-zinc-300 bg-white px-6 font-medium text-zinc-900 shadow-sm transition-all hover:border-zinc-400 hover:bg-zinc-50 active:translate-y-px dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:border-zinc-600 dark:hover:bg-zinc-800"
-            >
-              List a dataset
-            </Link>
-          </div>
-          {/* proof row — the escrow guarantees in one line, no vanity metrics */}
-          <dl className="mt-9 flex flex-wrap gap-x-7 gap-y-3 text-sm">
-            {[
-              "Funds held, not captured",
-              "48-hour confirmation window",
-              "Void on a failed sample",
-            ].map((fact) => (
-              <div key={fact} className="flex items-center gap-2">
-                <Check className="h-4 w-4 text-pp-600 dark:text-pp-400" />
-                <dt className="text-zinc-600 dark:text-zinc-400">{fact}</dt>
-              </div>
-            ))}
-          </dl>
-        </div>
-
-        {/* Signature visual: a real escrow order frozen in its held state —
-            amount, a buyer -> vendor held-funds track, and the live lifecycle.
-            The actual product states, not a decorative mockup. */}
-        <div className="reveal overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50/80 shadow-xl shadow-zinc-900/5 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-900/60 dark:shadow-black/20 [animation-delay:120ms]">
-          {/* order header */}
-          <div className="flex items-center justify-between border-b border-zinc-200 px-6 py-4 dark:border-zinc-800">
-            <span className="font-mono text-xs tracking-wide text-zinc-400">
-              ESCROW · ORDER #MD-4821
-            </span>
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-pp-300 bg-pp-50 px-2.5 py-1 font-mono text-[0.7rem] font-medium text-pp-700 dark:border-pp-500/40 dark:bg-pp-500/10 dark:text-pp-300">
-              <span className="held-dot h-1.5 w-1.5 rounded-full bg-pp-500" />
-              FUNDS HELD
-            </span>
-          </div>
-
-          {/* amount + dataset */}
-          <div className="px-6 pt-6">
-            <p className="text-sm text-zinc-500">
-              De-identified cardiology cohort
+      <main className="lg:pl-[72px]">
+        {/* Hero */}
+        <section className="mx-auto grid max-w-6xl items-center gap-14 px-5 pt-16 pb-24 sm:px-10 lg:grid-cols-[1.1fr_1fr] lg:pt-28 lg:pb-36">
+          <div className="reveal">
+            <h1 className="font-serif text-[3rem] leading-[1.04] font-normal sm:text-[4rem] lg:text-[4.75rem]">
+              Medical research data, paid for once it arrives.
+            </h1>
+            <p className="mt-8 max-w-md text-[1.05rem] leading-relaxed font-light text-muted">
+              We match your study to vetted datasets and hold the payment in
+              PayPal until you confirm the delivery.
             </p>
-            <p className="mt-1 font-mono text-4xl font-semibold tabular-nums tracking-tight">
-              $4,200<span className="text-2xl text-zinc-400">.00</span>
-            </p>
-          </div>
-
-          {/* held-funds track: authorized ——(held)——→ released on delivery */}
-          <div className="px-6 pt-6">
-            <div className="flex items-center justify-between text-xs text-zinc-400">
-              <span>Buyer authorized</span>
-              <span>Vendor, on delivery</span>
+            <div className="mt-10 flex flex-wrap gap-8">
+              <Link href="/researcher" className={TEXT_LINK}>
+                Browse datasets
+                <span className="transition-transform group-hover:translate-x-0.5">
+                  &rarr;
+                </span>
+              </Link>
+              <Link href="/vendor" className={TEXT_LINK}>
+                List a dataset
+                <span className="transition-transform group-hover:translate-x-0.5">
+                  &rarr;
+                </span>
+              </Link>
             </div>
-            <div className="mt-2 flex items-center gap-2">
-              <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-pp-500" />
-              <span className="h-[3px] flex-1 rounded-full bg-gradient-to-r from-pp-500 to-pp-500/25 dark:from-pp-400 dark:to-pp-400/20" />
-              <span className="held-dot h-2.5 w-2.5 shrink-0 rounded-full border-2 border-pp-400 bg-white dark:bg-zinc-950" />
-            </div>
-            <p className="mt-3 text-xs leading-relaxed text-zinc-500">
-              Held in PayPal from authorization. Captured only when the buyer
-              confirms the sample — a failed sample voids the hold.
-            </p>
           </div>
 
-          {/* lifecycle ledger */}
-          <div className="mt-6 border-t border-zinc-200 bg-white/60 px-6 py-5 dark:border-zinc-800 dark:bg-zinc-950/40">
-            <p className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
-              <Lock className="h-3.5 w-3.5" />
-              Escrow lifecycle
-            </p>
-            <ol className="space-y-1">
-              {FLOW.map((row, i) => {
-                const current = row.state === "AUTHORIZED";
-                return (
-                  <li key={row.state} className="flex items-center gap-3 py-1">
-                    <span className="w-4 text-right font-mono text-[0.7rem] tabular-nums text-zinc-400">
-                      {i + 1}
-                    </span>
-                    <span
-                      className={[
-                        "rounded-md px-2.5 py-1 font-mono text-xs",
-                        current
-                          ? "bg-pp-600 text-white"
-                          : row.held
-                            ? "bg-pp-50 text-pp-700 dark:bg-pp-500/10 dark:text-pp-300"
-                            : "text-zinc-500 dark:text-zinc-400",
-                      ].join(" ")}
-                    >
-                      {row.state}
-                    </span>
-                    <span className="truncate text-xs text-zinc-400 dark:text-zinc-500">
-                      {row.note}
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
-        </div>
-      </section>
+          <DatasetField />
+        </section>
 
-      {/* Built with */}
-      <section className="border-y border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/40">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-8 gap-y-5 px-5 py-8">
-          <span className="text-xs font-medium uppercase tracking-wider text-zinc-500">
-            Built with
-          </span>
-          {TOOLS.map((t) => (
-            <span
-              key={t.slug}
-              className="inline-flex items-center gap-2 rounded-full border border-zinc-200 bg-white px-3.5 py-1.5 text-sm text-zinc-600 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300"
-            >
-              <img
-                src={t.src ?? `https://cdn.simpleicons.org/${t.slug}`}
-                alt=""
-                width={16}
-                height={16}
-                className="h-4 w-4"
-              />
-              {t.label}
-            </span>
-          ))}
-        </div>
-      </section>
-
-      {/* How it works — a lifecycle timeline that rhymes with the hero ledger */}
-      <section
-        id="how"
-        className="mx-auto grid max-w-6xl gap-12 px-5 py-20 lg:grid-cols-[0.85fr_1.15fr] lg:py-28"
-      >
-        <div className="lg:sticky lg:top-24 lg:self-start">
-          <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
-            From a plain-English request to a paid-out vendor.
-          </h2>
-          <p className="mt-5 max-w-sm text-zinc-600 dark:text-zinc-400">
-            Six states, one honest rule: the money moves last. Each step is a
-            real transition in the escrow machine.
+        {/* Statement */}
+        <section className="mx-auto max-w-6xl px-5 pb-24 sm:px-10 lg:pb-36">
+          <p className="max-w-4xl font-serif text-[1.85rem] leading-[1.3] font-light sm:text-[2.4rem]">
+            MedData Escrow sits between the lab and the data vendor. Claude
+            reads the study request, ranks the datasets that fit, and PayPal
+            holds the money &mdash; so the vendor knows it&rsquo;s real and the
+            buyer never pays for data that doesn&rsquo;t show up.
           </p>
-        </div>
+        </section>
 
-        <ol className="relative">
-          {/* connecting spine behind the nodes */}
-          <span
-            aria-hidden
-            className="absolute left-[15px] top-2 bottom-8 w-px bg-gradient-to-b from-pp-300 via-zinc-200 to-transparent dark:from-pp-500/50 dark:via-zinc-800"
-          />
-          {STEPS.map((s) => (
-            <li
-              key={s.n}
-              className="relative grid grid-cols-[32px_1fr] gap-x-5 pb-10 last:pb-0"
-            >
-              <span className="z-10 grid h-8 w-8 place-items-center rounded-full border border-pp-300 bg-white font-mono text-xs font-medium text-pp-700 shadow-sm dark:border-pp-500/40 dark:bg-zinc-950 dark:text-pp-300">
-                {s.n}
-              </span>
-              <div className="pt-1">
-                <h3 className="text-lg font-semibold">{s.title}</h3>
-                <p className="mt-1.5 max-w-md text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-                  {s.body}
+        {/* Audiences: three columns split by hairlines */}
+        <section className="border-t border-rule">
+          <div className="mx-auto grid max-w-6xl px-5 py-20 sm:px-10 md:grid-cols-3 lg:py-28">
+            {AUDIENCES.map((a, i) => (
+              <div
+                key={a.label}
+                className={[
+                  "py-6 md:py-0",
+                  i > 0
+                    ? "border-t border-rule md:border-t-0 md:border-l md:pl-8"
+                    : "",
+                  i < AUDIENCES.length - 1 ? "md:pr-8" : "",
+                ].join(" ")}
+              >
+                <p className="font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase">
+                  {a.label}
+                </p>
+                <h3 className="mt-4 font-serif text-[1.4rem] font-normal">
+                  {a.title}
+                </h3>
+                <p className="mt-3 text-[0.95rem] leading-relaxed font-light text-muted">
+                  {a.body}
                 </p>
               </div>
-            </li>
-          ))}
-        </ol>
-      </section>
+            ))}
+          </div>
+        </section>
 
-      {/* Trust / why escrow */}
-      <section className="border-t border-zinc-200 bg-zinc-50/60 dark:border-zinc-800 dark:bg-zinc-900/40">
-        <div className="mx-auto grid max-w-6xl gap-12 px-5 py-20 lg:grid-cols-2 lg:py-28">
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight md:text-4xl">
+        {/* How it works: numbered steps beside the live escrow states */}
+        <section id="how" className="border-t border-rule">
+          <div className="mx-auto grid max-w-6xl gap-16 px-5 py-20 sm:px-10 lg:grid-cols-[1fr_1fr] lg:py-28">
+            <div>
+              <p className="font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase">
+                How it works
+              </p>
+              <h2 className="mt-4 font-serif text-[2.2rem] leading-tight font-normal sm:text-[2.75rem]">
+                The money moves last.
+              </h2>
+              <ol className="mt-10">
+                {STEPS.map((s) => (
+                  <li
+                    key={s.n}
+                    className="grid grid-cols-[2.5rem_1fr] gap-x-4 border-t border-rule py-5"
+                  >
+                    <span className="pt-1 font-mono text-xs text-muted">
+                      {s.n}
+                    </span>
+                    <div>
+                      <h3 className="text-[1.02rem] font-medium tracking-normal">
+                        {s.title}
+                      </h3>
+                      <p className="mt-1 text-[0.92rem] leading-relaxed font-light text-muted">
+                        {s.body}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            {/* The real escrow states, one order frozen at AUTHORIZED */}
+            <div className="lg:sticky lg:top-16 lg:self-start">
+              <div className="flex items-baseline justify-between border-b border-ink pb-3">
+                <span className="font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase">
+                  Order MD-4821
+                </span>
+                <span className="inline-flex items-center gap-2 font-mono text-[0.7rem] tracking-[0.18em] text-pp-600 uppercase dark:text-pp-400">
+                  <span className="held-dot h-1.5 w-1.5 rounded-full bg-pp-600 dark:bg-pp-400" />
+                  Funds held
+                </span>
+              </div>
+              <p className="mt-6 text-sm font-light text-muted">
+                De-identified cardiology cohort
+              </p>
+              <p className="mt-1 font-serif text-5xl font-light tabular-nums">
+                $4,200<span className="text-muted">.00</span>
+              </p>
+              <ol className="mt-8">
+                {FLOW.map((row, i) => {
+                  const current = row.state === "AUTHORIZED";
+                  return (
+                    <li
+                      key={row.state}
+                      className="grid grid-cols-[1.5rem_8.5rem_1fr] items-baseline gap-x-3 border-t border-rule py-3"
+                    >
+                      <span className="font-mono text-[0.7rem] text-muted">
+                        {i + 1}
+                      </span>
+                      <span
+                        className={[
+                          "font-mono text-xs",
+                          current
+                            ? "text-pp-600 dark:text-pp-400"
+                            : row.held
+                              ? "text-ink"
+                              : "text-muted",
+                        ].join(" ")}
+                      >
+                        {current ? "\u2192 " : ""}
+                        {row.state}
+                      </span>
+                      <span className="text-[0.85rem] font-light text-muted">
+                        {row.note}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          </div>
+        </section>
+
+        {/* Guarantees */}
+        <section className="border-t border-rule">
+          <div className="mx-auto grid max-w-6xl gap-12 px-5 py-20 sm:px-10 lg:grid-cols-[1fr_1.4fr] lg:py-28">
+            <h2 className="font-serif text-[2.2rem] leading-tight font-normal sm:text-[2.75rem]">
               Neither side has to trust the other first.
             </h2>
-            <p className="mt-5 max-w-lg text-zinc-600 dark:text-zinc-400">
-              Payment is authorized up front but captured only after the buyer
-              confirms the sample. The vendor knows the money is real before
-              shipping. The buyer never pays for data that does not arrive.
-            </p>
+            <dl>
+              {GUARANTEES.map((g) => (
+                <div
+                  key={g.t}
+                  className="border-t border-rule py-6 first:border-t-0 first:pt-0"
+                >
+                  <dt className="font-serif text-[1.3rem]">{g.t}</dt>
+                  <dd className="mt-2 text-[0.95rem] leading-relaxed font-light text-muted">
+                    {g.d}
+                  </dd>
+                </div>
+              ))}
+            </dl>
           </div>
-          <dl className="grid gap-px overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-200 shadow-lg shadow-zinc-900/5 dark:border-zinc-800 dark:bg-zinc-800 dark:shadow-black/20">
-            {[
-              {
-                t: "Authorize, then capture",
-                d: "PayPal Orders v2 holds the funds. Capture happens on delivery, void on failure.",
-              },
-              {
-                t: "48-hour confirmation window",
-                d: "Inside PayPal's honor period. Lapsed windows auto-capture; stale holds reauthorize.",
-              },
-              {
-                t: "Webhooks are the source of truth",
-                d: "Every state change verifies a signed PayPal webhook before it is trusted.",
-              },
-            ].map((row) => (
-              <div
-                key={row.t}
-                className="bg-white p-6 transition-colors hover:bg-pp-50/50 dark:bg-zinc-950 dark:hover:bg-pp-500/5"
-              >
-                <dt className="flex items-center gap-2 font-semibold">
-                  <Check className="h-4 w-4 text-pp-600 dark:text-pp-400" />
-                  {row.t}
-                </dt>
-                <dd className="mt-1.5 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-                  {row.d}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      </section>
+        </section>
 
-      {/* Two audiences */}
-      <section className="mx-auto grid max-w-6xl gap-6 px-5 py-20 md:grid-cols-2 lg:py-28">
-        <div className="group rounded-2xl border border-zinc-200 p-8 shadow-sm transition-all hover:-translate-y-0.5 hover:border-pp-300 hover:shadow-lg hover:shadow-pp-600/5 dark:border-zinc-800 dark:hover:border-pp-500/40">
-          <h3 className="text-xl font-semibold">For researchers</h3>
-          <p className="mt-3 text-zinc-600 dark:text-zinc-400">
-            Describe a study, compare ranked matches, and buy access with
-            payment protected end to end.
-          </p>
-          <Link
-            href="/researcher"
-            className="mt-6 inline-flex items-center gap-1.5 font-medium text-pp-700 hover:underline dark:text-pp-400"
-          >
-            Open the researcher workspace
-            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-        </div>
-        <div className="group rounded-2xl border border-zinc-200 p-8 shadow-sm transition-all hover:-translate-y-0.5 hover:border-pp-300 hover:shadow-lg hover:shadow-pp-600/5 dark:border-zinc-800 dark:hover:border-pp-500/40">
-          <h3 className="text-xl font-semibold">For vendors</h3>
-          <p className="mt-3 text-zinc-600 dark:text-zinc-400">
-            List datasets, deliver on demand, and get paid out as soon as the
-            buyer confirms the sample.
-          </p>
-          <Link
-            href="/vendor"
-            className="mt-6 inline-flex items-center gap-1.5 font-medium text-pp-700 hover:underline dark:text-pp-400"
-          >
-            Open the vendor workspace
-            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-        </div>
-      </section>
+        {/* Closing line */}
+        <section className="border-t border-rule">
+          <div className="mx-auto flex max-w-6xl flex-col gap-8 px-5 py-20 sm:px-10 md:flex-row md:items-end md:justify-between lg:py-28">
+            <h2 className="max-w-xl font-serif text-[2.2rem] leading-tight font-normal sm:text-[2.75rem]">
+              Start with a dataset request.
+            </h2>
+            <div className="flex flex-wrap gap-8">
+              <Link href="/researcher" className={TEXT_LINK}>
+                Open the researcher workspace
+                <span className="transition-transform group-hover:translate-x-0.5">
+                  &rarr;
+                </span>
+              </Link>
+              <Link href="/vendor" className={TEXT_LINK}>
+                Open the vendor workspace
+                <span className="transition-transform group-hover:translate-x-0.5">
+                  &rarr;
+                </span>
+              </Link>
+            </div>
+          </div>
+        </section>
 
-      {/* Final CTA — a confident PayPal-blue band to close */}
-      <section className="px-5 py-16 lg:py-24">
-        <div className="relative mx-auto max-w-6xl overflow-hidden rounded-3xl bg-gradient-to-br from-pp-600 to-pp-900 px-8 py-16 shadow-xl shadow-pp-900/25 sm:px-12 lg:py-20">
-          {/* layered radial sheen for depth, not a flat fill */}
-          <div
-            aria-hidden
-            className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_120%_at_85%_-10%,rgba(255,255,255,0.22),transparent_60%)]"
-          />
-          <ShieldCheck
-            aria-hidden
-            className="pointer-events-none absolute -right-8 -bottom-10 h-56 w-56 text-white/10"
-          />
-          <div className="relative flex flex-col items-start gap-7 sm:flex-row sm:items-center sm:justify-between">
+        {/* Footer */}
+        <footer className="border-t border-rule">
+          <div className="mx-auto grid max-w-6xl gap-8 px-5 py-12 text-sm font-light text-muted sm:px-10 md:grid-cols-3 md:items-start">
             <div>
-              <h2 className="text-3xl font-bold tracking-tight text-white md:text-4xl">
-                Start with a dataset request.
-              </h2>
-              <p className="mt-3 max-w-md text-pp-50/90">
-                Describe your study and let the escrow do the trusting — free to
-                try, no keys, no card.
+              <span className="inline-flex items-center gap-2 font-normal text-ink">
+                <Mark className="h-4 w-4" />
+                MedData Escrow
+              </span>
+              <p className="mt-2">
+                Research data, held in escrow until it arrives.
               </p>
             </div>
-            <Link
-              href="/researcher"
-              className="inline-flex h-12 shrink-0 items-center justify-center gap-2 rounded-full bg-white px-7 font-semibold text-pp-700 shadow-lg shadow-pp-900/20 transition-all hover:bg-pp-50 active:translate-y-px"
-            >
-              Browse datasets
-              <ArrowRight className="h-4 w-4" />
-            </Link>
+            <div className="flex flex-wrap gap-x-6 gap-y-2 md:justify-center">
+              {NAV.map((n) => (
+                <Link key={n.label} href={n.href} className="hover:text-ink">
+                  {n.label}
+                </Link>
+              ))}
+              <a
+                href="https://github.com/hammy229/meddata-escrow"
+                className="hover:text-ink"
+              >
+                GitHub
+              </a>
+            </div>
+            <div className="md:text-right">
+              <p>Built with PayPal, AWS Bedrock, Claude, and Next.js</p>
+              <p className="mt-1">PayPal AI Hackathon 2026</p>
+            </div>
           </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-zinc-200 dark:border-zinc-800">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-5 py-10 text-sm text-zinc-500 sm:flex-row sm:items-center sm:justify-between">
-          <span>MedData Escrow · PayPal AI Hackathon 2026</span>
-          <div className="flex gap-6">
-            <a
-              href="#how"
-              className="hover:text-zinc-900 dark:hover:text-zinc-200"
-            >
-              How it works
-            </a>
-            <a
-              href="https://github.com/hammy229/meddata-escrow"
-              className="hover:text-zinc-900 dark:hover:text-zinc-200"
-            >
-              GitHub
-            </a>
-          </div>
-        </div>
-      </footer>
+        </footer>
+      </main>
     </div>
   );
+}
+
+// Hero illustration: a field of datasets fading from solid to outline, with
+// the one the AI matched (and whose funds are held) picked out in blue.
+function DatasetField() {
+  const rows = [4, 5, 4, 5];
+  const MATCH = { r: 2, c: 1 };
+  return (
+    <figure className="reveal relative mx-auto w-full max-w-[460px] [animation-delay:120ms]">
+      <div
+        aria-hidden
+        className="dataset-grid pointer-events-none absolute -inset-10"
+      />
+      <div className="relative flex flex-col items-center gap-7 py-8">
+        {rows.map((count, r) => (
+          <div key={r} className="flex gap-9">
+            {Array.from({ length: count }, (_, c) => {
+              const match = r === MATCH.r && c === MATCH.c;
+              // solid in the first row, fading to outlines further down
+              const fill = Math.max(0, 1 - (r * 5 + c) / 11);
+              return (
+                <Cylinder
+                  key={c}
+                  fill={match ? 0 : fill}
+                  className={
+                    match
+                      ? "h-9 w-8 text-pp-600 dark:text-pp-400"
+                      : "h-9 w-8 text-ink"
+                  }
+                />
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <figcaption className="relative mt-2 text-center font-mono text-[0.7rem] tracking-[0.14em] text-muted uppercase">
+        18 datasets &middot; 1 match &middot; funds held
+      </figcaption>
+    </figure>
+  );
+}
+
+function Cylinder({ fill, className }: { fill: number; className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 32 36"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      className={className}
+      aria-hidden
+    >
+      <path
+        d="M4 7v22c0 2.8 5.4 5 12 5s12-2.2 12-5V7"
+        fill="currentColor"
+        fillOpacity={fill * 0.85}
+      />
+      <ellipse
+        cx="16"
+        cy="7"
+        rx="12"
+        ry="5"
+        fill="currentColor"
+        fillOpacity={fill}
+      />
+      <path d="M4 18c0 2.8 5.4 5 12 5s12-2.2 12-5" />
+    </svg>
+  );
+}
+
+// The MedData mark: a shield with a check, drawn at one stroke weight.
+function Mark({ className }: { className?: string }) {
+  return <ShieldCheck className={className} />;
 }
 
 /* ---- Inline icons: one stroke weight, currentColor, no emoji ---- */
@@ -472,59 +475,6 @@ function ShieldCheck({ className }: { className?: string }) {
     >
       <path d="M12 3 5 6v5.5c0 4 2.9 7.3 7 8.5 4.1-1.2 7-4.5 7-8.5V6l-7-3Z" />
       <path d="m9 11.8 2.1 2.1L15.2 9.8" />
-    </svg>
-  );
-}
-
-function ArrowRight({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.7}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <path d="M4 12h15" />
-      <path d="m13 6 6 6-6 6" />
-    </svg>
-  );
-}
-
-function Lock({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.7}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <rect x="4.5" y="10" width="15" height="10" rx="2.2" />
-      <path d="M8 10V7.5a4 4 0 0 1 8 0V10" />
-    </svg>
-  );
-}
-
-function Check({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <path d="m5 12.5 4.5 4.5L19 7" />
     </svg>
   );
 }
