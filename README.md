@@ -33,8 +33,6 @@ Medical-school researchers waste weeks sourcing data: they can't inspect quality
 | ------------------------------------------------------------- | ----------------------------------------------------------- |
 | ![Landing page, light theme](docs/screenshots/home-light.png) | ![Landing page, dark theme](docs/screenshots/home-dark.png) |
 
-<img src="docs/screenshots/home-mobile.png" alt="Landing page on mobile" width="320" />
-
 **Procurement agent** — a $60 budget: search → inspect → sample check → a
 `MATCHED` escrow order the buyer approves in PayPal (mock mode, synthetic data).
 
