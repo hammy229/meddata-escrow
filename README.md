@@ -40,6 +40,11 @@ Medical-school researchers waste weeks sourcing data: they can't inspect quality
 
 ![Researcher workspace: the agent's steps, recommendation and opened escrow order](docs/screenshots/researcher-agent.png)
 
+**Vendor workspace**: listings, where the money sits (held, captured, paid
+out), incoming orders with dispute buttons, and the full ledger.
+
+![Vendor workspace: listing stats, earnings, incoming orders and the order ledger](docs/screenshots/vendor-workspace.png)
+
 ## How it works (6-step flow)
 
 1. **Describe** — A researcher describes their study in plain English.
