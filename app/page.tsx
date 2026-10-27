@@ -7,11 +7,31 @@ import Link from "next/link";
 // The real product states, in order, each with a one-line plain meaning.
 // AUTHORIZED is the "current" state the hero order is frozen at.
 const FLOW: Array<{ state: string; held: boolean; note: string }> = [
-  { state: "MATCHED", held: false, note: "AI ranked this dataset to the study" },
-  { state: "AUTHORIZED", held: true, note: "PayPal holds the funds — none captured" },
-  { state: "DELIVERED", held: true, note: "Secure download link ships to the buyer" },
-  { state: "CAPTURED", held: false, note: "Buyer confirms — the held funds release" },
-  { state: "PAID_OUT", held: false, note: "Vendor is paid; a failed sample voids" },
+  {
+    state: "MATCHED",
+    held: false,
+    note: "AI ranked this dataset to the study",
+  },
+  {
+    state: "AUTHORIZED",
+    held: true,
+    note: "PayPal holds the funds — none captured",
+  },
+  {
+    state: "DELIVERED",
+    held: true,
+    note: "Secure download link ships to the buyer",
+  },
+  {
+    state: "CAPTURED",
+    held: false,
+    note: "Buyer confirms — the held funds release",
+  },
+  {
+    state: "PAID_OUT",
+    held: false,
+    note: "Vendor is paid; a failed sample voids",
+  },
 ];
 
 const STEPS: Array<{ n: string; title: string; body: string }> = [
