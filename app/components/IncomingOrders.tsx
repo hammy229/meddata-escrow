@@ -29,7 +29,7 @@ const POLL_MS = 5000;
 // accent so the book is scannable at a glance.
 const STATE_BADGE: Record<string, string> = {
   MATCHED:
-    "border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400",
+    "border-rule bg-zinc-50 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400",
   AUTHORIZED:
     "border-pp-300 bg-pp-50 text-pp-800 dark:border-pp-500/40 dark:bg-pp-500/10 dark:text-pp-300",
   DELIVERED:
@@ -68,7 +68,7 @@ function StateBadge({ status }: { status: string }) {
 }
 
 const resolveBtn =
-  "rounded-full px-3 py-1.5 text-xs font-medium transition-colors active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40";
+  "rounded-[3px] px-3 py-1.5 text-xs transition-colors active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40";
 
 export default function IncomingOrders() {
   const [orders, setOrders] = useState<OrderRow[]>([]);
@@ -158,13 +158,13 @@ export default function IncomingOrders() {
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted">
           {loading
             ? "Loading orders…"
             : `${orders.length} order${orders.length === 1 ? "" : "s"}` +
               (disputeCount > 0 ? ` · ${disputeCount} disputed` : "")}
         </p>
-        <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+        <label className="flex items-center gap-2 text-sm text-muted">
           <input
             type="checkbox"
             checked={disputesOnly}
@@ -176,15 +176,15 @@ export default function IncomingOrders() {
       </div>
 
       {error && (
-        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+        <div className="mb-4 rounded-[3px] border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
           {error}
         </div>
       )}
 
-      {note && <p className="mb-4 text-sm text-zinc-500">{note}</p>}
+      {note && <p className="mb-4 text-sm text-muted">{note}</p>}
 
       {!loading && rows.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-zinc-300 p-8 text-center text-sm text-zinc-500 dark:border-zinc-700">
+        <p className="rounded-[3px] border border-dashed border-zinc-300 p-8 text-center text-sm text-muted dark:border-zinc-700">
           {disputesOnly
             ? "No disputed orders."
             : "No orders yet. Orders appear here once a buyer authorizes escrow."}
@@ -193,7 +193,7 @@ export default function IncomingOrders() {
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
             <thead>
-              <tr className="border-b border-zinc-200 text-left text-xs uppercase tracking-wider text-zinc-500 dark:border-zinc-800">
+              <tr className="border-b border-rule text-left text-xs uppercase tracking-wider text-muted">
                 <th className="py-2 pr-4 font-medium">Order</th>
                 <th className="py-2 pr-4 font-medium">Dataset</th>
                 <th className="py-2 pr-4 font-medium">Buyer</th>
@@ -209,27 +209,19 @@ export default function IncomingOrders() {
                 const panelId = `history-${o.id}`;
                 return (
                   <Fragment key={o.id}>
-                    <tr
-                      className={
-                        expanded
-                          ? ""
-                          : "border-b border-zinc-100 dark:border-zinc-900"
-                      }
-                    >
-                      <td className="py-3 pr-4 font-mono text-xs text-zinc-500">
+                    <tr className={expanded ? "" : "border-b border-rule"}>
+                      <td className="py-3 pr-4 font-mono text-xs text-muted">
                         {o.id}
                       </td>
                       <td className="py-3 pr-4">{o.dataset_id}</td>
-                      <td className="py-3 pr-4 text-zinc-600 dark:text-zinc-400">
-                        {o.buyer_email}
-                      </td>
+                      <td className="py-3 pr-4 text-muted">{o.buyer_email}</td>
                       <td className="py-3 pr-4 tabular-nums">
                         {usd(o.amount_cents)}
                       </td>
                       <td className="py-3 pr-4">
                         <StateBadge status={o.status} />
                       </td>
-                      <td className="py-3 pr-4 text-xs text-zinc-500">
+                      <td className="py-3 pr-4 text-xs text-muted">
                         {when(o.updated_at ?? o.created_at)}
                       </td>
                       <td className="py-3">
@@ -239,7 +231,7 @@ export default function IncomingOrders() {
                               <button
                                 onClick={() => resolve(o.id, "capture")}
                                 disabled={busyId !== null}
-                                className={`${resolveBtn} bg-pp-600 text-white hover:bg-pp-500`}
+                                className={`${resolveBtn} bg-ink text-paper hover:bg-pp-600`}
                               >
                                 {busyId === o.id
                                   ? "Resolving…"
@@ -261,7 +253,7 @@ export default function IncomingOrders() {
                             onClick={() => toggleHistory(o.id)}
                             aria-expanded={expanded}
                             aria-controls={panelId}
-                            className={`${resolveBtn} whitespace-nowrap border border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900`}
+                            className={`${resolveBtn} whitespace-nowrap border border-ink/25 text-ink hover:border-ink`}
                           >
                             {expanded ? "Hide history" : "History"}
                           </button>
@@ -274,11 +266,11 @@ export default function IncomingOrders() {
                     <tr
                       id={panelId}
                       hidden={!expanded}
-                      className="border-b border-zinc-100 dark:border-zinc-900"
+                      className="border-b border-rule"
                     >
                       <td colSpan={7} className="pb-5 pl-4 pt-1">
                         {expanded && (
-                          <div className="reveal max-w-2xl rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+                          <div className="reveal max-w-2xl rounded-[3px] border border-rule bg-foreground/[0.025] p-4">
                             <OrderTimeline
                               orderId={o.id}
                               refreshKey={`${o.status}:${o.updated_at}:${acted[o.id] ?? 0}`}

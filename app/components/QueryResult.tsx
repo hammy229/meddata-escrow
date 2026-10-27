@@ -55,8 +55,8 @@ const numberFmt = new Intl.NumberFormat(undefined, {
 
 function Chip({ label, value }: { label: string; value: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-2.5 py-1 text-xs dark:border-zinc-800 dark:bg-zinc-950">
-      <span className="text-zinc-500">{label}</span>
+    <span className="inline-flex items-center gap-1.5 rounded-lg border border-rule bg-paper px-2.5 py-1 text-xs">
+      <span className="text-muted">{label}</span>
       <span className="font-mono font-medium text-zinc-800 dark:text-zinc-200">
         {value}
       </span>
@@ -115,7 +115,7 @@ export default function QueryResult({
   return (
     <div className="reveal mt-4 space-y-4">
       {compiled && (
-        <div className="rounded-xl border border-zinc-200 bg-zinc-50/60 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
+        <div className="rounded-[3px] border border-rule bg-foreground/[0.025] p-4">
           <div className="flex flex-wrap items-center gap-2">
             <h3 className="mr-1 text-sm font-semibold">
               How this was computed
@@ -140,7 +140,7 @@ export default function QueryResult({
               <Chip label="Grouped by" value={plan.groupBy ?? "none"} />
             </div>
           )}
-          <pre className="mt-3 overflow-x-auto rounded-lg border border-zinc-200 bg-white p-3 font-mono text-xs text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
+          <pre className="mt-3 overflow-x-auto rounded-lg border border-rule bg-paper p-3 font-mono text-xs text-zinc-700 dark:text-zinc-300">
             {compiled.sql}
           </pre>
         </div>
@@ -149,14 +149,14 @@ export default function QueryResult({
       {rows && (
         <div>
           <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-muted">
               {rows.length} row{rows.length === 1 ? "" : "s"}
             </p>
             <button
               type="button"
               onClick={exportCsv}
               disabled={rows.length === 0}
-              className="inline-flex items-center gap-1.5 rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+              className="inline-flex items-center gap-1.5 rounded-[3px] border border-ink/25 px-3 py-1.5 text-xs text-ink transition-colors hover:border-ink active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
             >
               <Download className="h-3.5 w-3.5" />
               Export CSV

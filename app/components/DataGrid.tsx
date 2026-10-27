@@ -23,31 +23,32 @@ import {
 // CSV export and grid state. No Enterprise modules.
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-// Match the grid to the site: PayPal-blue accent, Hanken/JetBrains fonts, zinc
-// borders, generous row height, and a soft wrapper radius.
+// Match the grid to the site: PayPal-blue accent, Inter Tight text, hairline
+// borders on warm paper, generous row height, and a near-square wrapper.
 const shared = {
   accentColor: "#0070e0",
   fontFamily: "var(--font-sans)",
   cellFontFamily: "var(--font-sans)",
-  headerFontWeight: 600,
+  headerFontWeight: 500,
   rowHeight: 46,
   headerHeight: 46,
-  wrapperBorderRadius: 12,
+  wrapperBorderRadius: 3,
   fontSize: 14,
 };
 
 const lightTheme = themeQuartz.withPart(colorSchemeLight).withParams({
   ...shared,
-  borderColor: "#e4e4e7",
-  headerBackgroundColor: "#fafafa",
+  backgroundColor: "#fafaf7",
+  borderColor: "#e4e3dd",
+  headerBackgroundColor: "#f3f2ed",
   rowHoverColor: "color-mix(in srgb, #0070e0 7%, transparent)",
   selectedRowBackgroundColor: "color-mix(in srgb, #0070e0 14%, transparent)",
 });
 const darkTheme = themeQuartz.withPart(colorSchemeDark).withParams({
   ...shared,
-  backgroundColor: "#0c0c0f",
-  borderColor: "#27272a",
-  headerBackgroundColor: "#131316",
+  backgroundColor: "#0e0e0c",
+  borderColor: "#272724",
+  headerBackgroundColor: "#151513",
   rowHoverColor: "color-mix(in srgb, #0070e0 12%, transparent)",
   selectedRowBackgroundColor: "color-mix(in srgb, #0070e0 24%, transparent)",
 });

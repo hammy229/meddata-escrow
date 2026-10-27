@@ -113,7 +113,7 @@ export default function OrderTimeline({
 
   if (state.status === "loading") {
     return (
-      <p className="text-sm text-zinc-500" role="status">
+      <p className="text-sm text-muted" role="status">
         Loading audit trail…
       </p>
     );
@@ -140,7 +140,7 @@ export default function OrderTimeline({
 
   if (state.events.length === 0) {
     return (
-      <p className="text-sm text-zinc-500">
+      <p className="text-sm text-muted">
         No escrow events recorded for this order yet.
       </p>
     );
@@ -188,15 +188,15 @@ export default function OrderTimeline({
                   <time
                     dateTime={d.toISOString()}
                     title={d.toLocaleString()}
-                    className="text-xs text-zinc-500"
+                    className="text-xs text-muted"
                   >
                     {relative(d)}
                   </time>
                 ) : (
-                  <span className="text-xs text-zinc-500">{ev.created_at}</span>
+                  <span className="text-xs text-muted">{ev.created_at}</span>
                 )}
               </div>
-              <p className="mt-0.5 font-mono text-xs text-zinc-500">
+              <p className="mt-0.5 font-mono text-xs text-muted">
                 {ev.from_state ? (
                   <>
                     {ev.from_state}
@@ -209,7 +209,7 @@ export default function OrderTimeline({
                 )}
               </p>
               {ev.note && (
-                <blockquote className="mt-2 border-l-2 border-zinc-200 pl-3 text-sm text-zinc-600 italic dark:border-zinc-700 dark:text-zinc-400">
+                <blockquote className="mt-2 border-l-2 border-rule pl-3 text-sm text-zinc-600 italic dark:border-zinc-700 dark:text-zinc-400">
                   “{ev.note}”
                 </blockquote>
               )}

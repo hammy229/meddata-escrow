@@ -40,8 +40,7 @@ function usd(cents: number): string {
   });
 }
 
-const tile =
-  "rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/40";
+const tile = "border-t border-rule pt-4";
 
 type Load =
   | { status: "loading" }
@@ -94,7 +93,7 @@ export default function EarningsSummary({
   if (state.status === "error") {
     return (
       <p
-        className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+        className="inline-flex flex-wrap items-center gap-1.5 rounded-[3px] border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
         role="alert"
       >
         <AlertTriangle className="h-4 w-4 shrink-0" />
@@ -150,10 +149,10 @@ export default function EarningsSummary({
 
   return (
     <div aria-busy={state.status === "loading"}>
-      <dl className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-x-8 gap-y-6 lg:grid-cols-4">
         {tiles.map((t) => (
           <div key={t.label} className={tile}>
-            <dt className="flex items-center gap-2 text-xs uppercase tracking-wider text-zinc-500">
+            <dt className="flex items-center gap-2 font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase">
               {t.held && (t.cents ?? 0) > 0 && (
                 <span
                   aria-hidden
@@ -163,33 +162,33 @@ export default function EarningsSummary({
               {t.label}
             </dt>
             <dd
-              className={`mt-1 font-mono text-2xl font-bold tracking-tight ${
+              className={`mt-2 font-serif text-3xl font-light tabular-nums ${
                 t.accent ? "text-pp-600 dark:text-pp-400" : ""
               }`}
             >
               {value(t.cents)}
             </dd>
-            <dd className="mt-0.5 text-xs text-zinc-500">{t.hint}</dd>
+            <dd className="mt-1 text-xs font-light text-muted">{t.hint}</dd>
           </div>
         ))}
       </dl>
 
       <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-2 text-sm">
-        <span className="mr-1 text-xs uppercase tracking-wider text-zinc-500">
+        <span className="mr-1 font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase">
           Orders by state
         </span>
         {state.status === "loading" ? (
-          <span className="text-zinc-500" role="status">
+          <span className="text-muted" role="status">
             Loading…
           </span>
         ) : counts.length === 0 ? (
-          <span className="text-zinc-500">No orders yet.</span>
+          <span className="text-muted">No orders yet.</span>
         ) : (
           <ul className="flex flex-wrap gap-2" aria-label="Orders by state">
             {counts.map((st) => (
               <li
                 key={st.key}
-                className="inline-flex items-center gap-1.5 rounded-full border border-zinc-200 px-2.5 py-0.5 text-xs text-zinc-700 dark:border-zinc-800 dark:text-zinc-300"
+                className="inline-flex items-center gap-1.5 rounded-full border border-rule px-2.5 py-0.5 text-xs text-zinc-700 dark:text-zinc-300"
               >
                 <span
                   aria-hidden

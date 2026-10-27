@@ -78,7 +78,7 @@ export function SourceBadge({
       className={
         ai
           ? "inline-flex items-center gap-1.5 rounded-full border border-pp-300 bg-pp-50 px-2.5 py-0.5 text-xs font-medium text-pp-800 dark:border-pp-500/40 dark:bg-pp-500/10 dark:text-pp-300"
-          : "inline-flex items-center gap-1.5 rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-0.5 text-xs font-medium text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400"
+          : "inline-flex items-center gap-1.5 rounded-full border border-rule bg-zinc-50 px-2.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400"
       }
     >
       <span
@@ -169,7 +169,7 @@ export default function MatchesGrid({
             value={quick}
             onChange={(e) => setQuick(e.target.value)}
             placeholder="Filter matches…"
-            className="w-full rounded-full border border-zinc-300 bg-white py-1.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-pp-500 focus:ring-4 focus:ring-pp-500/15 dark:border-zinc-700 dark:bg-zinc-950"
+            className="w-full rounded-[3px] border border-ink/20 bg-paper py-1.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-pp-500 focus:ring-2 focus:ring-pp-500/15 dark:border-zinc-700"
           />
         </label>
       </div>

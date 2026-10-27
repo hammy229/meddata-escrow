@@ -112,7 +112,7 @@ export default function AgentRun({
     <div>
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm">
-          <span className="text-zinc-600 dark:text-zinc-400">Budget (USD)</span>
+          <span className="text-muted">Budget (USD)</span>
           <input
             type="number"
             min="1"
@@ -131,7 +131,7 @@ export default function AgentRun({
           {running ? "Agent working…" : "Let the agent buy it"}
         </button>
         {!study.trim() && (
-          <span className="text-sm text-zinc-500">
+          <span className="text-sm text-muted">
             Describe your study above first.
           </span>
         )}
@@ -165,7 +165,7 @@ export default function AgentRun({
                 className={
                   s.error
                     ? "rounded-lg border border-amber-300 bg-amber-50/70 px-3 py-2 text-sm dark:border-amber-500/40 dark:bg-amber-500/10"
-                    : "rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-800"
+                    : "rounded-lg border border-rule px-3 py-2 text-sm"
                 }
               >
                 <div className="flex items-center gap-2 font-medium">
@@ -174,7 +174,7 @@ export default function AgentRun({
                   </span>
                   {TOOL_LABELS[s.tool] ?? s.tool}
                 </div>
-                <p className="mt-0.5 truncate text-zinc-500">
+                <p className="mt-0.5 truncate text-muted">
                   {s.error
                     ? `Refused: ${s.error}`
                     : summarize(s.output) || summarize(s.input)}
@@ -191,13 +191,13 @@ export default function AgentRun({
           </p>
 
           {run.order && (
-            <div className="rounded-xl border border-pp-200 bg-pp-50/60 p-4 dark:border-pp-500/30 dark:bg-pp-500/5">
+            <div className="rounded-[3px] border border-pp-200 bg-pp-50/60 p-4 dark:border-pp-500/30 dark:bg-pp-500/5">
               <p className="inline-flex items-center gap-1.5 text-sm font-semibold text-pp-800 dark:text-pp-300">
                 <Check className="h-4 w-4" />
                 Order {run.order.orderId} opened · {usd(run.order.amountCents)}{" "}
                 · {run.order.escrowState}
               </p>
-              <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              <p className="mt-1 text-sm text-muted">
                 Nothing is charged yet: approve in PayPal to hold the funds in
                 escrow.
               </p>

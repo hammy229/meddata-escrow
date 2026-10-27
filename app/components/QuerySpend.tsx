@@ -102,7 +102,7 @@ export default function QuerySpend({
 
   if (state.status === "loading") {
     return (
-      <p className="text-sm text-zinc-500" role="status">
+      <p className="text-sm text-muted" role="status">
         Loading query spend…
       </p>
     );
@@ -134,7 +134,7 @@ export default function QuerySpend({
     <div>
       <p className="text-sm" role="status">
         <span className="font-mono font-semibold">{queryCount}</span>{" "}
-        <span className="text-zinc-500">
+        <span className="text-muted">
           {queryCount === 1 ? "query" : "queries"}
         </span>
         <span aria-hidden className="text-zinc-400">
@@ -144,16 +144,16 @@ export default function QuerySpend({
         <span className="font-mono font-semibold text-pp-600 dark:text-pp-400">
           {usd(totalCents)}
         </span>{" "}
-        <span className="text-zinc-500">billed to this order</span>
+        <span className="text-muted">billed to this order</span>
       </p>
 
       {recent.length === 0 ? (
-        <p className="mt-2 text-sm text-zinc-500">
+        <p className="mt-2 text-sm text-muted">
           No queries billed yet. Each answered query is charged to this order.
         </p>
       ) : (
         <ol
-          className="mt-3 divide-y divide-zinc-100 rounded-xl border border-zinc-200 dark:divide-zinc-800/70 dark:border-zinc-800"
+          className="mt-3 divide-y divide-rule rounded-[3px] border border-rule"
           aria-label={`Latest ${recent.length} billed queries`}
         >
           {recent.map((u) => {
@@ -170,12 +170,12 @@ export default function QuerySpend({
                   <time
                     dateTime={d.toISOString()}
                     title={d.toLocaleString()}
-                    className="shrink-0 text-xs text-zinc-500"
+                    className="shrink-0 text-xs text-muted"
                   >
                     {relative(d)}
                   </time>
                 ) : (
-                  <span className="shrink-0 text-xs text-zinc-500">
+                  <span className="shrink-0 text-xs text-muted">
                     {u.created_at}
                   </span>
                 )}
@@ -188,7 +188,7 @@ export default function QuerySpend({
         </ol>
       )}
       {queryCount > recent.length && (
-        <p className="mt-2 text-xs text-zinc-500">
+        <p className="mt-2 text-xs text-muted">
           Showing the latest {recent.length} of {queryCount}.
         </p>
       )}

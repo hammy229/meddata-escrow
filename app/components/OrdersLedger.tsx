@@ -171,7 +171,7 @@ const LEDGER_COL_DEF: ColDef<OrderRow> = {
 };
 
 const toolBtn =
-  "inline-flex items-center gap-1.5 rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-50 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900";
+  "inline-flex items-center gap-1.5 rounded-[3px] border border-ink/25 px-3 py-1.5 text-xs text-ink transition-colors hover:border-ink active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40";
 
 interface Totals {
   count: number;
@@ -335,7 +335,7 @@ export default function OrdersLedger() {
         headerName: "Updated",
         minWidth: 95,
         filter: false,
-        cellClass: "text-zinc-500",
+        cellClass: "text-muted",
         valueGetter: (p) =>
           parseTs(p.data?.updated_at ?? p.data?.created_at)?.getTime() ?? null,
         valueFormatter: (p) =>
@@ -373,11 +373,11 @@ export default function OrdersLedger() {
             value={quick}
             onChange={(e) => setQuick(e.target.value)}
             placeholder="Search orders, buyers, datasets…"
-            className="w-full rounded-full border border-zinc-300 bg-white py-1.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-pp-500 focus:ring-4 focus:ring-pp-500/15 dark:border-zinc-700 dark:bg-zinc-950"
+            className="w-full rounded-[3px] border border-ink/20 bg-paper py-1.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-pp-500 focus:ring-2 focus:ring-pp-500/15 dark:border-zinc-700"
           />
         </label>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-zinc-500">
+          <span className="text-xs text-muted">
             {totals.count} of {orders.length} shown
           </span>
           <button
@@ -404,7 +404,7 @@ export default function OrdersLedger() {
       {error && (
         <p
           role="alert"
-          className="mb-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
+          className="mb-3 rounded-[3px] border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300"
         >
           {error}
         </p>

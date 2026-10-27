@@ -26,7 +26,7 @@ export default function SampleCheckCard({
     ? "border-pp-200 bg-pp-50/60 dark:border-pp-500/30 dark:bg-pp-500/5"
     : "border-amber-300 bg-amber-50/70 dark:border-amber-500/40 dark:bg-amber-500/10";
   return (
-    <div className={`reveal rounded-xl border p-4 ${tone}`} role="status">
+    <div className={`reveal rounded-[3px] border p-4 ${tone}`} role="status">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <span
           className={
@@ -53,7 +53,7 @@ export default function SampleCheckCard({
         />
       </div>
       {check.findings.length > 0 && (
-        <ul className="mt-3 list-inside list-disc space-y-1 text-sm text-zinc-600 dark:text-zinc-400">
+        <ul className="mt-3 list-inside list-disc space-y-1 text-sm text-muted">
           {check.findings.map((f, i) => (
             <li key={i}>{f}</li>
           ))}
