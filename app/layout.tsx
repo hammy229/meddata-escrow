@@ -1,14 +1,21 @@
 import type { Metadata, Viewport } from "next";
-import { Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
+import { Inter_Tight, JetBrains_Mono, Spectral } from "next/font/google";
 import "./globals.css";
 
-// Display/UI face — a warm, precise grotesque that reads as trustworthy
-// without the default-starter feel. Mono carries the escrow states, ids, and
-// money, so it ships with tabular figures (see globals.css).
-const sans = Hanken_Grotesk({
+// Editorial pairing: Spectral (serif) sets the headlines, Inter Tight carries
+// body and UI text. Mono carries the escrow states, ids, and money, so it
+// ships with tabular figures (see globals.css).
+const serif = Spectral({
+  variable: "--font-serif",
+  subsets: ["latin"],
+  weight: ["300", "400", "500"],
+  display: "swap",
+});
+
+const sans = Inter_Tight({
   variable: "--font-sans",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+  weight: ["300", "400", "500", "600", "700"],
   display: "swap",
 });
 
@@ -24,8 +31,8 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 // Match the browser UI chrome (mobile address bar) to the page background.
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+    { media: "(prefers-color-scheme: light)", color: "#fafaf7" },
+    { media: "(prefers-color-scheme: dark)", color: "#0e0e0c" },
   ],
 };
 
@@ -65,7 +72,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${sans.variable} ${mono.variable} h-full antialiased`}
+      className={`${serif.variable} ${sans.variable} ${mono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

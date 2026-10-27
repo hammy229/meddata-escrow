@@ -1,8 +1,11 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #18181b;
+  /* Warm paper + near-black ink, with hairline rules between sections. */
+  --background: #fafaf7;
+  --foreground: #111111;
+  --muted: #5c5c57;
+  --rule: #e4e3dd;
   /* PayPal-blue accent ramp, used by hand-authored surfaces below. */
   --accent: #0070e0;
   --accent-strong: #005bbd;
@@ -13,6 +16,11 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-paper: var(--background);
+  --color-ink: var(--foreground);
+  --color-muted: var(--muted);
+  --color-rule: var(--rule);
+  --font-serif: var(--font-serif), ui-serif, Georgia, serif;
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-mono), ui-monospace, "SF Mono", Menlo, monospace;
 
@@ -32,8 +40,10 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #09090b;
-    --foreground: #ededed;
+    --background: #0e0e0c;
+    --foreground: #ecebe6;
+    --muted: #9c9b94;
+    --rule: #272724;
     --accent: #529bf0;
     --accent-strong: #2280e6;
     --accent-soft: rgba(0, 112, 224, 0.16);
@@ -69,6 +79,10 @@ h2,
 h3 {
   letter-spacing: -0.03em;
   text-wrap: balance;
+}
+/* Serif headlines read best a little looser than the grotesque did. */
+.font-serif {
+  letter-spacing: -0.015em;
 }
 
 /* Mono is used for money, ids, and escrow states — align the figures. */
@@ -162,24 +176,6 @@ a {
   }
 }
 
-/* Faint grid texture behind the hero, masked so it fades out at the edges. */
-.hero-grid {
-  background-image:
-    linear-gradient(
-      to right,
-      color-mix(in srgb, var(--foreground) 5%, transparent) 1px,
-      transparent 1px
-    ),
-    linear-gradient(
-      to bottom,
-      color-mix(in srgb, var(--foreground) 5%, transparent) 1px,
-      transparent 1px
-    );
-  background-size: 46px 46px;
-  -webkit-mask-image: radial-gradient(70% 55% at 72% 0%, #000 0%, transparent 72%);
-  mask-image: radial-gradient(70% 55% at 72% 0%, #000 0%, transparent 72%);
-}
-
 /* ---- AG Grid: clickable rows + highlight the picked dataset match. ---- */
 .ag-row.cursor-pointer {
   cursor: pointer;
@@ -190,4 +186,14 @@ a {
 /* Vendor ledger: the pinned total row reads as a footer. */
 .ag-row.ledger-total {
   font-weight: 600;
+}
+
+/* Landing hero: faint square grid behind the dataset field, faded at the edges. */
+.dataset-grid {
+  background-image:
+    linear-gradient(to right, var(--rule) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--rule) 1px, transparent 1px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(closest-side, #000 30%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 30%, transparent 100%);
 }
