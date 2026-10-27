@@ -461,7 +461,7 @@ export default function ResearcherPage() {
           <ArrowLeft className="h-4 w-4" />
           MedData Escrow
         </Link>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight">
+        <h1 className="mt-3 font-serif text-4xl font-normal">
           Researcher workspace
         </h1>
         <p className="mt-2 max-w-2xl text-zinc-600 dark:text-zinc-400">
