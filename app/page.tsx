@@ -3,6 +3,8 @@
 // warm paper, one PayPal-blue accent, auto dark mode.
 
 import Link from "next/link";
+import { ShieldCheck } from "./components/icons";
+import SiteNav, { NAV } from "./components/SiteNav";
 
 // The real product states, in order, each with a one-line plain meaning.
 // AUTHORIZED is the "current" state the hero order is frozen at.
@@ -67,13 +69,6 @@ const STEPS: Array<{ n: string; title: string; body: string }> = [
   },
 ];
 
-const NAV: Array<{ href: string; label: string }> = [
-  { href: "/", label: "Home" },
-  { href: "/researcher", label: "Researchers" },
-  { href: "/vendor", label: "Vendors" },
-  { href: "#how", label: "How it works" },
-];
-
 const AUDIENCES: Array<{ label: string; title: string; body: string }> = [
   {
     label: "For researchers",
@@ -114,45 +109,7 @@ const TEXT_LINK =
 export default function Home() {
   return (
     <div className="relative min-h-[100dvh] overflow-x-hidden bg-paper text-ink">
-      {/* Vertical rail nav on wide screens */}
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[72px] flex-col items-center justify-between border-r border-rule bg-paper py-8 lg:flex">
-        <Link href="/" aria-label="MedData Escrow home">
-          <Mark className="h-6 w-6" />
-        </Link>
-        <nav className="flex flex-col items-center gap-9 text-sm text-muted">
-          {NAV.map((n) => (
-            <Link
-              key={n.label}
-              href={n.href}
-              className="[writing-mode:vertical-rl] rotate-180 transition-colors hover:text-ink aria-[current=page]:text-ink"
-              aria-current={n.href === "/" ? "page" : undefined}
-            >
-              {n.label}
-            </Link>
-          ))}
-        </nav>
-        <span className="[writing-mode:vertical-rl] rotate-180 font-mono text-[0.7rem] text-muted">
-          &rsquo;26
-        </span>
-      </aside>
-
-      {/* Top bar on small screens */}
-      <header className="sticky top-0 z-40 border-b border-rule bg-paper/85 backdrop-blur lg:hidden">
-        <nav className="flex h-14 items-center justify-between px-5">
-          <Link href="/" className="inline-flex items-center gap-2">
-            <Mark className="h-5 w-5" />
-            <span className="text-sm">MedData Escrow</span>
-          </Link>
-          <div className="flex gap-5 text-sm text-muted">
-            <Link href="/researcher" className="hover:text-ink">
-              Researchers
-            </Link>
-            <Link href="/vendor" className="hover:text-ink">
-              Vendors
-            </Link>
-          </div>
-        </nav>
-      </header>
+      <SiteNav current="/" />
 
       <main className="lg:pl-[72px]">
         {/* Hero */}
@@ -356,7 +313,7 @@ export default function Home() {
           <div className="mx-auto grid max-w-6xl gap-8 px-5 py-12 text-sm font-light text-muted sm:px-10 md:grid-cols-3 md:items-start">
             <div>
               <span className="inline-flex items-center gap-2 font-normal text-ink">
-                <Mark className="h-4 w-4" />
+                <ShieldCheck className="h-4 w-4" />
                 MedData Escrow
               </span>
               <p className="mt-2">
@@ -451,30 +408,6 @@ function Cylinder({ fill, className }: { fill: number; className?: string }) {
         fillOpacity={fill}
       />
       <path d="M4 18c0 2.8 5.4 5 12 5s12-2.2 12-5" />
-    </svg>
-  );
-}
-
-// The MedData mark: a shield with a check, drawn at one stroke weight.
-function Mark({ className }: { className?: string }) {
-  return <ShieldCheck className={className} />;
-}
-
-/* ---- Inline icons: one stroke weight, currentColor, no emoji ---- */
-function ShieldCheck({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.7}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden
-    >
-      <path d="M12 3 5 6v5.5c0 4 2.9 7.3 7 8.5 4.1-1.2 7-4.5 7-8.5V6l-7-3Z" />
-      <path d="m9 11.8 2.1 2.1L15.2 9.8" />
     </svg>
   );
 }
