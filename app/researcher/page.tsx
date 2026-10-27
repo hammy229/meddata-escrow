@@ -9,6 +9,7 @@
 // this file only calls them.
 import { useState } from "react";
 import Link from "next/link";
+import SiteNav from "../components/SiteNav";
 import MatchesGrid, {
   type Match,
   type MatchSource,
@@ -77,7 +78,7 @@ function EscrowStepper({
                 ? "border-pp-300 bg-pp-50 text-pp-800 dark:border-pp-500/40 dark:bg-pp-500/10 dark:text-pp-300"
                 : reached
                   ? "border-pp-600 bg-pp-600 text-white dark:border-pp-500 dark:bg-pp-500"
-                  : "border-zinc-200 bg-white text-zinc-400 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-600",
+                  : "border-rule bg-paper text-zinc-400 dark:text-zinc-600",
             ].join(" ")}
           >
             {s}
@@ -99,21 +100,19 @@ function EscrowStepper({
 }
 
 const primaryBtn =
-  "inline-flex items-center gap-2 rounded-full bg-pp-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm shadow-pp-600/30 transition-all hover:bg-pp-500 hover:shadow-md hover:shadow-pp-600/30 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none";
+  "inline-flex items-center gap-2 rounded-[3px] bg-ink px-5 py-2.5 text-sm text-paper transition-colors hover:bg-pp-600 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-ink";
 const dangerBtn =
-  "inline-flex items-center gap-2 rounded-full border border-rose-300 px-5 py-2.5 text-sm font-medium text-rose-700 transition-all hover:bg-rose-50 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/10";
+  "inline-flex items-center gap-2 rounded-[3px] border border-rose-300 px-5 py-2.5 text-sm text-rose-700 transition-colors hover:bg-rose-50 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/10";
 
 const secondaryBtn =
-  "inline-flex items-center gap-2 rounded-full border border-zinc-300 px-5 py-2.5 text-sm font-medium text-zinc-700 transition-all hover:bg-zinc-50 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900";
+  "inline-flex items-center gap-2 rounded-[3px] border border-ink/25 px-5 py-2.5 text-sm text-ink transition-colors hover:border-ink active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40";
 const warnBtn =
-  "inline-flex items-center gap-2 rounded-full border border-amber-400 px-5 py-2.5 text-sm font-medium text-amber-800 transition-all hover:bg-amber-50 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-500/50 dark:text-amber-300 dark:hover:bg-amber-500/10";
+  "inline-flex items-center gap-2 rounded-[3px] border border-amber-400 px-5 py-2.5 text-sm text-amber-800 transition-colors hover:bg-amber-50 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40 dark:border-amber-500/50 dark:text-amber-300 dark:hover:bg-amber-500/10";
 
-const sectionCard =
-  "rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm shadow-zinc-900/5 dark:border-zinc-800 dark:bg-zinc-900/40 dark:shadow-black/20";
+const sectionCard = "border-t border-rule pt-8 pb-10";
 const inputBase =
-  "w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-sm outline-none transition-colors focus:border-pp-500 focus:ring-4 focus:ring-pp-500/15 dark:border-zinc-700 dark:bg-zinc-950";
-const stepBadge =
-  "grid h-7 w-7 place-items-center rounded-lg bg-pp-50 font-mono text-xs font-semibold text-pp-700 dark:bg-pp-500/10 dark:text-pp-400";
+  "w-full rounded-[3px] border border-ink/20 bg-paper px-4 py-3 text-sm outline-none transition-colors focus:border-pp-500 focus:ring-2 focus:ring-pp-500/15";
+const stepBadge = "font-mono text-[0.7rem] tracking-[0.18em] text-muted";
 
 export default function ResearcherPage() {
   const [description, setDescription] = useState("");
@@ -452,329 +451,356 @@ export default function ResearcherPage() {
     escrow === "DELIVERED" || escrow === "CAPTURED" || escrow === "PAID_OUT";
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10">
-      <div className="mb-8">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1.5 text-sm text-zinc-500 transition-colors hover:text-zinc-900 dark:hover:text-zinc-200"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          MedData Escrow
-        </Link>
-        <h1 className="mt-3 font-serif text-4xl font-normal">
-          Researcher workspace
-        </h1>
-        <p className="mt-2 max-w-2xl text-zinc-600 dark:text-zinc-400">
-          Describe your study, compare ranked dataset matches, buy access with
-          payment held in escrow, then run privacy-safe aggregate queries.
-        </p>
-      </div>
-
-      {/* Step 1 — describe the study */}
-      <section className={sectionCard}>
-        <div className="flex items-center gap-2.5">
-          <span className={stepBadge}>01</span>
-          <h2 className="text-lg font-semibold">Describe your study</h2>
-        </div>
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          placeholder="e.g. Synthetic cardiology cohort with medications and observations for a readmission model."
-          rows={4}
-          className={`mt-4 resize-y ${inputBase}`}
-        />
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button
-            onClick={runMatch}
-            disabled={matching || !description.trim()}
-            className={primaryBtn}
+    <>
+      <SiteNav current="/researcher" />
+      <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-12 sm:px-10 lg:box-content lg:pl-[calc(72px+2.5rem)]">
+        <div className="mb-12">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-ink"
           >
-            <Search className="h-4 w-4" />
-            {matching ? "Matching…" : "Find datasets"}
-          </button>
-          {matchError && (
-            <span className="inline-flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-400">
-              <AlertTriangle className="h-4 w-4" />
-              {matchError}
-            </span>
-          )}
-        </div>
-      </section>
-
-      {/* Shortcut — hand the whole search → check → order loop to the agent */}
-      <section className={`mt-6 ${sectionCard}`}>
-        <div className="flex items-center gap-2.5">
-          <span className={stepBadge}>AI</span>
-          <h2 className="text-lg font-semibold">Or let the agent buy it</h2>
-        </div>
-        <p className="mt-2 max-w-2xl text-sm text-zinc-600 dark:text-zinc-400">
-          The agent searches, sample-checks and opens an escrow order within
-          your budget. Guardrails are enforced in code: it can&apos;t exceed the
-          budget, skip the sample check, or release any money.
-        </p>
-        <div className="mt-4">
-          <AgentRun
-            study={description}
-            primaryBtn={secondaryBtn}
-            inputBase={inputBase}
-          />
-        </div>
-      </section>
-
-      {/* Step 2 — ranked matches */}
-      {matches.length > 0 && (
-        <section className={`mt-6 ${sectionCard}`}>
-          <div className="flex items-center gap-2.5">
-            <span className={stepBadge}>02</span>
-            <h2 className="text-lg font-semibold">Ranked matches</h2>
-            <span className="text-sm text-zinc-500">
-              · click a row (or focus it and press Space) to select
-            </span>
-          </div>
-          <div className="mt-4">
-            <MatchesGrid
-              matches={matches}
-              source={matchSource}
-              onSelect={selectMatch}
-            />
-          </div>
-        </section>
-      )}
-
-      {/* Step 3 — escrow / buy + full lifecycle */}
-      {selected && (
-        <section className={`mt-6 ${sectionCard}`}>
-          <div className="flex items-center gap-2.5">
-            <span className={stepBadge}>03</span>
-            <h2 className="text-lg font-semibold">Escrow</h2>
-          </div>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="font-medium">{selected.title}</p>
-              <p className="text-sm text-zinc-500">
-                {selected.datasetId} · {usd(selected.priceCents)}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {escrow === "MATCHED" && !voided && !check && (
-                <button
-                  onClick={runSampleCheck}
-                  disabled={checking || busyAction !== null}
-                  className={primaryBtn}
-                >
-                  <ShieldCheck className="h-4 w-4" />
-                  {checking ? "Checking sample…" : "Check sample"}
-                </button>
-              )}
-              {escrow === "MATCHED" && !voided && (
-                <button
-                  onClick={buyEscrow}
-                  disabled={busyAction !== null || checking}
-                  className={
-                    !check ? secondaryBtn : check.passed ? primaryBtn : warnBtn
-                  }
-                >
-                  {check && !check.passed && (
-                    <AlertTriangle className="h-4 w-4" />
-                  )}
-                  {busyAction === "buy"
-                    ? "Authorizing…"
-                    : `${check && !check.passed ? "Buy anyway" : "Buy (escrow)"} · ${usd(selected.priceCents)}`}
-                </button>
-              )}
-              {escrow === "AUTHORIZED" && !voided && !disputed && (
-                <>
-                  <button
-                    onClick={() => advanceEscrow("deliver")}
-                    disabled={busyAction !== null}
-                    className={primaryBtn}
-                  >
-                    {busyAction === "deliver"
-                      ? "Delivering…"
-                      : "Deliver dataset"}
-                  </button>
-                  <button
-                    onClick={disputeEscrow}
-                    disabled={busyAction !== null}
-                    className={dangerBtn}
-                  >
-                    {busyAction === "dispute" ? "Disputing…" : "Raise dispute"}
-                  </button>
-                  <button
-                    onClick={voidEscrow}
-                    disabled={busyAction !== null}
-                    className={dangerBtn}
-                  >
-                    {busyAction === "void"
-                      ? "Voiding…"
-                      : "Void (sample failed)"}
-                  </button>
-                </>
-              )}
-              {escrow === "DELIVERED" && !disputed && (
-                <>
-                  <button
-                    onClick={() => advanceEscrow("capture")}
-                    disabled={busyAction !== null}
-                    className={primaryBtn}
-                  >
-                    {busyAction === "capture"
-                      ? "Releasing…"
-                      : "Confirm & release payment"}
-                  </button>
-                  <button
-                    onClick={disputeEscrow}
-                    disabled={busyAction !== null}
-                    className={dangerBtn}
-                  >
-                    {busyAction === "dispute" ? "Disputing…" : "Raise dispute"}
-                  </button>
-                </>
-              )}
-              {disputed && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
-                  <AlertTriangle className="h-4 w-4" />
-                  Dispute pending vendor resolution
-                </span>
-              )}
-              {escrow === "CAPTURED" && !disputed && (
-                <button
-                  onClick={() => advanceEscrow("payout")}
-                  disabled={busyAction !== null}
-                  className={primaryBtn}
-                >
-                  {busyAction === "payout" ? "Paying out…" : "Pay out vendor"}
-                </button>
-              )}
-              {escrow === "PAID_OUT" && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-pp-300 bg-pp-50 px-4 py-2 text-sm font-medium text-pp-800 dark:border-pp-500/40 dark:bg-pp-500/10 dark:text-pp-300">
-                  <Check className="h-4 w-4" />
-                  Vendor paid out
-                </span>
-              )}
-            </div>
-          </div>
-          {escrow === "MATCHED" && !check && !checkError && (
-            <p className="mt-3 text-sm text-zinc-500">
-              Check the vendor&apos;s sample for quality and privacy issues
-              before you pay.
-            </p>
-          )}
-          {checkError && (
-            <p
-              role="alert"
-              className="mt-4 inline-flex items-center gap-1.5 text-sm text-amber-700 dark:text-amber-400"
-            >
-              <AlertTriangle className="h-4 w-4 shrink-0" />
-              {checkError}
-            </p>
-          )}
-          {check && (
-            <div className="mt-4">
-              <SampleCheckCard
-                check={check}
-                warnBeforeBuy={escrow === "MATCHED"}
-              />
-            </div>
-          )}
-          <div className="mt-5">
-            <EscrowStepper state={escrow} voided={voided} disputed={disputed} />
-          </div>
-          {escrowNote && (
-            <p className="mt-4 text-sm text-zinc-500">{escrowNote}</p>
-          )}
-          {approveUrl && (
-            <a
-              href={approveUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-2 inline-flex text-sm font-medium text-pp-700 hover:underline dark:text-pp-400"
-            >
-              Open PayPal approval →
-            </a>
-          )}
-          {orderId && (
-            <div className="mt-6 border-t border-zinc-200 pt-5 dark:border-zinc-800">
-              <h3 className="mb-3 text-sm font-semibold">Audit trail</h3>
-              <OrderTimeline
-                key={orderId}
-                orderId={orderId}
-                refreshKey={timelineKey}
-              />
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* Step 4 — privacy-safe query (available once the dataset is delivered) */}
-      {selected && delivered && !voided && !disputed && (
-        <section className={`mt-6 ${sectionCard}`}>
-          <div className="flex items-center gap-2.5">
-            <span className={stepBadge}>04</span>
-            <h2 className="text-lg font-semibold">Run a privacy-safe query</h2>
-          </div>
-          <p className="mt-2 text-sm text-zinc-500">
-            Only aggregate questions are allowed. Row-level or PII requests, and
-            small cells, are rejected by the privacy guard.
+            <ArrowLeft className="h-4 w-4" />
+            MedData Escrow
+          </Link>
+          <h1 className="mt-6 font-serif text-[2.75rem] leading-tight font-normal">
+            Researcher workspace
+          </h1>
+          <p className="mt-3 max-w-2xl font-light text-muted">
+            Describe your study, compare ranked dataset matches, buy access with
+            payment held in escrow, then run privacy-safe aggregate queries.
           </p>
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-            <input
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") runQuery();
-              }}
-              placeholder="e.g. Count of patients by condition"
-              className={`flex-1 ${inputBase} py-2.5`}
-            />
+        </div>
+
+        {/* Step 1 — describe the study */}
+        <section className={sectionCard}>
+          <div className="flex items-baseline gap-4">
+            <span className={stepBadge}>01</span>
+            <h2 className="font-serif text-[1.6rem] font-normal">
+              Describe your study
+            </h2>
+          </div>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="e.g. Synthetic cardiology cohort with medications and observations for a readmission model."
+            rows={4}
+            className={`mt-4 resize-y ${inputBase}`}
+          />
+          <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
-              onClick={runQuery}
-              disabled={querying || !question.trim()}
+              onClick={runMatch}
+              disabled={matching || !description.trim()}
               className={primaryBtn}
             >
-              {querying ? "Querying…" : "Run query"}
+              <Search className="h-4 w-4" />
+              {matching ? "Matching…" : "Find datasets"}
             </button>
+            {matchError && (
+              <span className="inline-flex items-center gap-1.5 text-sm text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="h-4 w-4" />
+                {matchError}
+              </span>
+            )}
           </div>
+        </section>
 
-          {queryError && (
-            <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-500/40 dark:bg-amber-500/10">
-              <p className="inline-flex items-center gap-1.5 font-medium text-amber-800 dark:text-amber-300">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                {queryError}
-              </p>
-              {queryReasons.length > 0 && (
-                <ul className="mt-2 list-inside list-disc text-amber-700 dark:text-amber-400">
-                  {queryReasons.map((r, i) => (
-                    <li key={i}>{r}</li>
-                  ))}
-                </ul>
-              )}
+        {/* Shortcut — hand the whole search → check → order loop to the agent */}
+        <section className={sectionCard}>
+          <div className="flex items-baseline gap-4">
+            <span className={stepBadge}>AI</span>
+            <h2 className="font-serif text-[1.6rem] font-normal">
+              Or let the agent buy it
+            </h2>
+          </div>
+          <p className="mt-2 max-w-2xl text-sm text-muted">
+            The agent searches, sample-checks and opens an escrow order within
+            your budget. Guardrails are enforced in code: it can&apos;t exceed
+            the budget, skip the sample check, or release any money.
+          </p>
+          <div className="mt-4">
+            <AgentRun
+              study={description}
+              primaryBtn={secondaryBtn}
+              inputBase={inputBase}
+            />
+          </div>
+        </section>
+
+        {/* Step 2 — ranked matches */}
+        {matches.length > 0 && (
+          <section className={sectionCard}>
+            <div className="flex items-baseline gap-4">
+              <span className={stepBadge}>02</span>
+              <h2 className="font-serif text-[1.6rem] font-normal">
+                Ranked matches
+              </h2>
+              <span className="text-sm text-muted">
+                · click a row (or focus it and press Space) to select
+              </span>
             </div>
-          )}
-
-          <QueryResult
-            compiled={compiled}
-            rows={results}
-            fileStem={selected.datasetId}
-          />
-          {results && queryCharge !== null && (
-            <p className="mt-2 text-xs text-zinc-500">
-              Billed {usd(queryCharge)} to this order.
-            </p>
-          )}
-
-          {orderId && (
-            <div className="mt-6 border-t border-zinc-200 pt-5 dark:border-zinc-800">
-              <h3 className="mb-3 text-sm font-semibold">Query spend</h3>
-              <QuerySpend
-                key={orderId}
-                orderId={orderId}
-                refreshKey={spendKey}
+            <div className="mt-4">
+              <MatchesGrid
+                matches={matches}
+                source={matchSource}
+                onSelect={selectMatch}
               />
             </div>
-          )}
-        </section>
-      )}
-    </main>
+          </section>
+        )}
+
+        {/* Step 3 — escrow / buy + full lifecycle */}
+        {selected && (
+          <section className={sectionCard}>
+            <div className="flex items-baseline gap-4">
+              <span className={stepBadge}>03</span>
+              <h2 className="font-serif text-[1.6rem] font-normal">Escrow</h2>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="font-medium">{selected.title}</p>
+                <p className="text-sm text-muted">
+                  {selected.datasetId} · {usd(selected.priceCents)}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {escrow === "MATCHED" && !voided && !check && (
+                  <button
+                    onClick={runSampleCheck}
+                    disabled={checking || busyAction !== null}
+                    className={primaryBtn}
+                  >
+                    <ShieldCheck className="h-4 w-4" />
+                    {checking ? "Checking sample…" : "Check sample"}
+                  </button>
+                )}
+                {escrow === "MATCHED" && !voided && (
+                  <button
+                    onClick={buyEscrow}
+                    disabled={busyAction !== null || checking}
+                    className={
+                      !check
+                        ? secondaryBtn
+                        : check.passed
+                          ? primaryBtn
+                          : warnBtn
+                    }
+                  >
+                    {check && !check.passed && (
+                      <AlertTriangle className="h-4 w-4" />
+                    )}
+                    {busyAction === "buy"
+                      ? "Authorizing…"
+                      : `${check && !check.passed ? "Buy anyway" : "Buy (escrow)"} · ${usd(selected.priceCents)}`}
+                  </button>
+                )}
+                {escrow === "AUTHORIZED" && !voided && !disputed && (
+                  <>
+                    <button
+                      onClick={() => advanceEscrow("deliver")}
+                      disabled={busyAction !== null}
+                      className={primaryBtn}
+                    >
+                      {busyAction === "deliver"
+                        ? "Delivering…"
+                        : "Deliver dataset"}
+                    </button>
+                    <button
+                      onClick={disputeEscrow}
+                      disabled={busyAction !== null}
+                      className={dangerBtn}
+                    >
+                      {busyAction === "dispute"
+                        ? "Disputing…"
+                        : "Raise dispute"}
+                    </button>
+                    <button
+                      onClick={voidEscrow}
+                      disabled={busyAction !== null}
+                      className={dangerBtn}
+                    >
+                      {busyAction === "void"
+                        ? "Voiding…"
+                        : "Void (sample failed)"}
+                    </button>
+                  </>
+                )}
+                {escrow === "DELIVERED" && !disputed && (
+                  <>
+                    <button
+                      onClick={() => advanceEscrow("capture")}
+                      disabled={busyAction !== null}
+                      className={primaryBtn}
+                    >
+                      {busyAction === "capture"
+                        ? "Releasing…"
+                        : "Confirm & release payment"}
+                    </button>
+                    <button
+                      onClick={disputeEscrow}
+                      disabled={busyAction !== null}
+                      className={dangerBtn}
+                    >
+                      {busyAction === "dispute"
+                        ? "Disputing…"
+                        : "Raise dispute"}
+                    </button>
+                  </>
+                )}
+                {disputed && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+                    <AlertTriangle className="h-4 w-4" />
+                    Dispute pending vendor resolution
+                  </span>
+                )}
+                {escrow === "CAPTURED" && !disputed && (
+                  <button
+                    onClick={() => advanceEscrow("payout")}
+                    disabled={busyAction !== null}
+                    className={primaryBtn}
+                  >
+                    {busyAction === "payout" ? "Paying out…" : "Pay out vendor"}
+                  </button>
+                )}
+                {escrow === "PAID_OUT" && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-pp-300 bg-pp-50 px-4 py-2 text-sm font-medium text-pp-800 dark:border-pp-500/40 dark:bg-pp-500/10 dark:text-pp-300">
+                    <Check className="h-4 w-4" />
+                    Vendor paid out
+                  </span>
+                )}
+              </div>
+            </div>
+            {escrow === "MATCHED" && !check && !checkError && (
+              <p className="mt-3 text-sm text-muted">
+                Check the vendor&apos;s sample for quality and privacy issues
+                before you pay.
+              </p>
+            )}
+            {checkError && (
+              <p
+                role="alert"
+                className="mt-4 inline-flex items-center gap-1.5 text-sm text-amber-700 dark:text-amber-400"
+              >
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                {checkError}
+              </p>
+            )}
+            {check && (
+              <div className="mt-4">
+                <SampleCheckCard
+                  check={check}
+                  warnBeforeBuy={escrow === "MATCHED"}
+                />
+              </div>
+            )}
+            <div className="mt-5">
+              <EscrowStepper
+                state={escrow}
+                voided={voided}
+                disputed={disputed}
+              />
+            </div>
+            {escrowNote && (
+              <p className="mt-4 text-sm text-muted">{escrowNote}</p>
+            )}
+            {approveUrl && (
+              <a
+                href={approveUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-2 inline-flex text-sm font-medium text-pp-700 hover:underline dark:text-pp-400"
+              >
+                Open PayPal approval →
+              </a>
+            )}
+            {orderId && (
+              <div className="mt-6 border-t border-rule pt-5">
+                <h3 className="mb-3 font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase">
+                  Audit trail
+                </h3>
+                <OrderTimeline
+                  key={orderId}
+                  orderId={orderId}
+                  refreshKey={timelineKey}
+                />
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Step 4 — privacy-safe query (available once the dataset is delivered) */}
+        {selected && delivered && !voided && !disputed && (
+          <section className={sectionCard}>
+            <div className="flex items-baseline gap-4">
+              <span className={stepBadge}>04</span>
+              <h2 className="font-serif text-[1.6rem] font-normal">
+                Run a privacy-safe query
+              </h2>
+            </div>
+            <p className="mt-2 text-sm text-muted">
+              Only aggregate questions are allowed. Row-level or PII requests,
+              and small cells, are rejected by the privacy guard.
+            </p>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <input
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") runQuery();
+                }}
+                placeholder="e.g. Count of patients by condition"
+                className={`flex-1 ${inputBase} py-2.5`}
+              />
+              <button
+                onClick={runQuery}
+                disabled={querying || !question.trim()}
+                className={primaryBtn}
+              >
+                {querying ? "Querying…" : "Run query"}
+              </button>
+            </div>
+
+            {queryError && (
+              <div className="mt-4 rounded-[3px] border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-500/40 dark:bg-amber-500/10">
+                <p className="inline-flex items-center gap-1.5 font-medium text-amber-800 dark:text-amber-300">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  {queryError}
+                </p>
+                {queryReasons.length > 0 && (
+                  <ul className="mt-2 list-inside list-disc text-amber-700 dark:text-amber-400">
+                    {queryReasons.map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            <QueryResult
+              compiled={compiled}
+              rows={results}
+              fileStem={selected.datasetId}
+            />
+            {results && queryCharge !== null && (
+              <p className="mt-2 text-xs text-muted">
+                Billed {usd(queryCharge)} to this order.
+              </p>
+            )}
+
+            {orderId && (
+              <div className="mt-6 border-t border-rule pt-5">
+                <h3 className="mb-3 font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase">
+                  Query spend
+                </h3>
+                <QuerySpend
+                  key={orderId}
+                  orderId={orderId}
+                  refreshKey={spendKey}
+                />
+              </div>
+            )}
+          </section>
+        )}
+      </main>
+    </>
   );
 }

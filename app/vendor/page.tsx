@@ -2,11 +2,12 @@
 // datasets a vendor has for sale: title, tags, record count, and price. The
 // catalog is read server-side; the grid renders on the client.
 import Link from "next/link";
+import SiteNav from "../components/SiteNav";
 import VendorCatalog, { type CatalogRow } from "../components/VendorCatalog";
 import IncomingOrders from "../components/IncomingOrders";
 import EarningsSummary from "../components/EarningsSummary";
 import OrdersLedger from "../components/OrdersLedger";
-import { ArrowLeft, Database } from "../components/icons";
+import { ArrowLeft } from "../components/icons";
 
 interface CatalogEntry {
   id: string;
@@ -34,88 +35,95 @@ export default function VendorPage() {
     : 0;
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-10">
-      <div className="mb-8">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-1.5 text-sm text-zinc-500 transition-colors hover:text-zinc-900 dark:hover:text-zinc-200"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          MedData Escrow
-        </Link>
-        <h1 className="mt-3 font-serif text-4xl font-normal">
-          Vendor workspace
-        </h1>
-        <p className="mt-2 max-w-2xl text-zinc-600 dark:text-zinc-400">
-          Your listed datasets. Buyers discover these through AI matching and
-          pay into escrow; funds are released once delivery is confirmed.
-        </p>
-      </div>
-
-      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/40">
-          <p className="text-xs uppercase tracking-wider text-zinc-500">
-            Listings
-          </p>
-          <p className="mt-1 text-2xl font-bold tracking-tight">
-            {rows.length}
+    <>
+      <SiteNav current="/vendor" />
+      <main className="mx-auto w-full max-w-5xl flex-1 px-5 py-12 sm:px-10 lg:box-content lg:pl-[calc(72px+2.5rem)]">
+        <div className="mb-12">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-sm text-muted transition-colors hover:text-ink"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            MedData Escrow
+          </Link>
+          <h1 className="mt-6 font-serif text-[2.75rem] leading-tight font-normal">
+            Vendor workspace
+          </h1>
+          <p className="mt-3 max-w-2xl font-light text-muted">
+            Your listed datasets. Buyers discover these through AI matching and
+            pay into escrow; funds are released once delivery is confirmed.
           </p>
         </div>
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/40">
-          <p className="text-xs uppercase tracking-wider text-zinc-500">
-            Total records
-          </p>
-          <p className="mt-1 font-mono text-2xl font-bold tracking-tight">
-            {totalRecords.toLocaleString()}
-          </p>
+
+        <div className="grid grid-cols-2 border-t border-rule pb-6 sm:grid-cols-3">
+          <div className="py-5 pr-6 not-first:border-l not-first:border-rule not-first:pl-6">
+            <p className="font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase">
+              Listings
+            </p>
+            <p className="mt-2 font-serif text-4xl font-light tabular-nums">
+              {rows.length}
+            </p>
+          </div>
+          <div className="py-5 pr-6 not-first:border-l not-first:border-rule not-first:pl-6">
+            <p className="font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase">
+              Total records
+            </p>
+            <p className="mt-2 font-serif text-4xl font-light tabular-nums">
+              {totalRecords.toLocaleString()}
+            </p>
+          </div>
+          <div className="col-span-2 border-t border-rule py-5 sm:col-span-1 sm:border-t-0 sm:border-l sm:pl-6">
+            <p className="font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase">
+              Average price
+            </p>
+            <p className="mt-2 font-serif text-4xl font-light tabular-nums text-pp-600 dark:text-pp-400">
+              ${(avgPriceCents / 100).toFixed(2)}
+            </p>
+          </div>
         </div>
-        <div className="col-span-2 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:col-span-1 dark:border-zinc-800 dark:bg-zinc-900/40">
-          <p className="text-xs uppercase tracking-wider text-zinc-500">
-            Average price
+
+        <section className="border-t border-rule pt-8 pb-10">
+          <h2 className="mb-6 font-serif text-[1.6rem] font-normal">Catalog</h2>
+          <VendorCatalog rows={rows} />
+        </section>
+
+        <section className="border-t border-rule pt-8 pb-10">
+          <h2 className="mb-1 font-serif text-[1.6rem] font-normal">
+            Earnings
+          </h2>
+          <p className="mb-6 text-sm font-light text-muted">
+            Where your money sits across every order, from held in escrow to
+            paid out.
           </p>
-          <p className="mt-1 font-mono text-2xl font-bold tracking-tight text-pp-600 dark:text-pp-400">
-            ${(avgPriceCents / 100).toFixed(2)}
+          <EarningsSummary />
+        </section>
+
+        <section className="border-t border-rule pt-8 pb-10">
+          <div className="mb-1 flex items-center gap-2">
+            <h2 className="font-serif text-[1.6rem] font-normal">
+              Incoming orders
+            </h2>
+          </div>
+          <p className="mb-6 text-sm font-light text-muted">
+            Live escrow state for every order. Resolve a disputed order by
+            releasing the held funds to you (capture) or refunding the buyer
+            (void).
           </p>
-        </div>
-      </div>
+          <IncomingOrders />
+        </section>
 
-      <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm shadow-zinc-900/5 dark:border-zinc-800 dark:bg-zinc-900/40 dark:shadow-black/20">
-        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
-          <Database className="h-5 w-5 text-pp-600 dark:text-pp-400" />
-          Catalog
-        </h2>
-        <VendorCatalog rows={rows} />
-      </section>
-
-      <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm shadow-zinc-900/5 dark:border-zinc-800 dark:bg-zinc-900/40 dark:shadow-black/20">
-        <h2 className="mb-1 text-lg font-semibold">Earnings</h2>
-        <p className="mb-4 text-sm text-zinc-500">
-          Where your money sits across every order, from held in escrow to paid
-          out.
-        </p>
-        <EarningsSummary />
-      </section>
-
-      <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm shadow-zinc-900/5 dark:border-zinc-800 dark:bg-zinc-900/40 dark:shadow-black/20">
-        <div className="mb-1 flex items-center gap-2">
-          <h2 className="text-lg font-semibold">Incoming orders</h2>
-        </div>
-        <p className="mb-4 text-sm text-zinc-500">
-          Live escrow state for every order. Resolve a disputed order by
-          releasing the held funds to you (capture) or refunding the buyer
-          (void).
-        </p>
-        <IncomingOrders />
-      </section>
-
-      <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm shadow-zinc-900/5 dark:border-zinc-800 dark:bg-zinc-900/40 dark:shadow-black/20">
-        <h2 className="mb-1 text-lg font-semibold">All orders</h2>
-        <p className="mb-4 text-sm text-zinc-500">
-          The full ledger. Filter by status, amount or date, search everything,
-          and export what you see. The total row sums the filtered orders.
-        </p>
-        <OrdersLedger />
-      </section>
-    </main>
+        <section className="border-t border-rule pt-8 pb-10">
+          <h2 className="mb-1 font-serif text-[1.6rem] font-normal">
+            All orders
+          </h2>
+          <p className="mb-6 text-sm font-light text-muted">
+            The full ledger. Filter by status, amount or date, search
+            everything, and export what you see. The total row sums the filtered
+            orders.
+          </p>
+          <OrdersLedger />
+        </section>
+      </main>
+    </>
   );
 }
