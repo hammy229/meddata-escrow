@@ -2,7 +2,7 @@
 
 // Vendor order ledger: every order in a filterable AG Grid (Community only).
 // IncomingOrders above it is the action queue; this is the book of record —
-// floating column filters (status text, amount number, created date), a quick
+// floating column filters (status checkboxes, amount number, created date), a quick
 // filter, pagination, CSV export, and a pinned total row that always reflects
 // the rows currently passing the filters. Polls GET /api/orders on the same
 // 5s cadence as IncomingOrders. The vendor's column layout, sort and filters
@@ -23,6 +23,7 @@ import type {
 } from "ag-grid-community";
 import type { AgGridReact, CustomCellRendererProps } from "ag-grid-react";
 import DataGrid from "./DataGrid";
+import StatusSetFilter from "./StatusSetFilter";
 import { Download, Search } from "./icons";
 
 // Mirrors lib/db/client OrderRow (raw DB rows from GET /api/orders). Kept
@@ -296,7 +297,7 @@ export default function OrdersLedger() {
         field: "status",
         headerName: "Status",
         minWidth: 120,
-        filter: "agTextColumnFilter",
+        filter: StatusSetFilter,
         cellRenderer: StatusCell,
       },
       {
