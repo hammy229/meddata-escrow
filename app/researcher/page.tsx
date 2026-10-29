@@ -15,6 +15,7 @@ import MatchesGrid, {
   type MatchSource,
 } from "../components/MatchesGrid";
 import CompareMatches from "../components/CompareMatches";
+import OrderReceipt from "../components/OrderReceipt";
 import OrderTimeline from "../components/OrderTimeline";
 import QueryResult, {
   type AggregateRow,
@@ -819,6 +820,14 @@ export default function ResearcherPage() {
               >
                 Open PayPal approval →
               </a>
+            )}
+            {orderId && (
+              <OrderReceipt
+                key={orderId}
+                orderId={orderId}
+                status={escrow}
+                refreshKey={timelineKey}
+              />
             )}
             {orderId && (
               <div className="mt-6 border-t border-rule pt-5">
