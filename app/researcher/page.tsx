@@ -14,6 +14,7 @@ import MatchesGrid, {
   type Match,
   type MatchSource,
 } from "../components/MatchesGrid";
+import CompareMatches from "../components/CompareMatches";
 import OrderTimeline from "../components/OrderTimeline";
 import QueryResult, {
   type AggregateRow,
@@ -23,6 +24,7 @@ import SampleCheckCard, {
   type SampleCheck,
 } from "../components/SampleCheckCard";
 import QuerySpend from "../components/QuerySpend";
+import { MAX_COMPARE } from "../../lib/ui/compare";
 import AgentRun from "../components/AgentRun";
 import {
   ArrowLeft,
@@ -121,6 +123,10 @@ export default function ResearcherPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [matchSource, setMatchSource] = useState<MatchSource>("keyword");
   const [selected, setSelected] = useState<Match | null>(null);
+  // Rows ticked for side-by-side comparison; matchRun remounts the grid so
+  // ticks never outlive the result list they came from.
+  const [compare, setCompare] = useState<Match[]>([]);
+  const [matchRun, setMatchRun] = useState(0);
 
   // Pre-purchase sample quality + privacy check for the selected match.
   // Tagged with its dataset so a late response for a previously selected
@@ -171,6 +177,8 @@ export default function ResearcherPage() {
     setMatching(true);
     setMatchError(null);
     setSelected(null);
+    setCompare([]);
+    setMatchRun((n) => n + 1);
     resetEscrow();
     try {
       const res = await fetch("/api/match", {
@@ -535,14 +543,24 @@ export default function ResearcherPage() {
                 Ranked matches
               </h2>
               <span className="text-sm text-muted">
-                · click a row (or focus it and press Space) to select
+                · click a row to select it, or tick up to {MAX_COMPARE} to
+                compare
               </span>
             </div>
             <div className="mt-4">
               <MatchesGrid
+                key={matchRun}
                 matches={matches}
                 source={matchSource}
                 onSelect={selectMatch}
+                onCompareChange={setCompare}
+              />
+              <CompareMatches
+                picks={compare}
+                onChoose={(id) => {
+                  const m = compare.find((c) => c.datasetId === id);
+                  if (m) selectMatch(m);
+                }}
               />
             </div>
           </section>

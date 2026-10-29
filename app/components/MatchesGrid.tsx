@@ -3,10 +3,12 @@
 // Ranked dataset matches (researcher step 2). Built on the shared DataGrid
 // wrapper with Community-only features: a score bar renderer, currency
 // formatting, rationale tooltips, a quick-filter box, text/number column
-// filters and single-row selection that drives the "pick a match" flow.
-import { useMemo, useState } from "react";
+// filters, a click on a row that drives the "pick a match" flow, and checkboxes
+// that collect up to three rows for side-by-side comparison.
+import { useMemo, useRef, useState } from "react";
 import type { ColDef } from "ag-grid-community";
 import type { CustomCellRendererProps } from "ag-grid-react";
+import { reconcileCompare } from "../../lib/ui/compare";
 import DataGrid from "./DataGrid";
 import { Search } from "./icons";
 
@@ -17,9 +19,14 @@ export interface Match {
   title: string;
   priceCents: number;
   source?: "llm" | "keyword";
+  /** Row count from the catalog, when the match response carries it. */
+  recordCount?: number;
 }
 
 export type MatchSource = "llm" | "keyword";
+
+// AG Grid's id for the checkbox column.
+const SELECTION_COL = "ag-Grid-SelectionColumn";
 
 function usd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -94,12 +101,16 @@ export default function MatchesGrid({
   matches,
   source,
   onSelect,
+  onCompareChange,
 }: {
   matches: Match[];
   source: MatchSource;
   onSelect: (m: Match) => void;
+  /** Called with the ticked rows (at most three, in tick order). */
+  onCompareChange?: (picks: Match[]) => void;
 }) {
   const [quick, setQuick] = useState("");
+  const picked = useRef<string[]>([]);
 
   const columns = useMemo<ColDef<Match>[]>(() => {
     const top = Math.max(0, ...matches.map((m) => m.score));
@@ -182,14 +193,38 @@ export default function MatchesGrid({
           quickFilterText: quick,
           tooltipShowMode: "whenTruncated",
           rowClass: "cursor-pointer",
+          // Checkboxes only collect rows to compare; a click elsewhere on the
+          // row still picks that match for purchase.
           rowSelection: {
-            mode: "singleRow",
-            checkboxes: false,
-            enableClickSelection: true,
+            mode: "multiRow",
+            checkboxes: true,
+            headerCheckbox: false,
+            enableClickSelection: false,
+          },
+          onCellClicked: (e) => {
+            if (e.column.getColId() === SELECTION_COL) return;
+            if (e.data) onSelect(e.data);
           },
           onSelectionChanged: (e) => {
-            const [row] = e.api.getSelectedRows();
-            if (row) onSelect(row);
+            const rows = e.api.getSelectedRows();
+            const ids = reconcileCompare(
+              picked.current,
+              rows.map((r) => r.datasetId),
+            );
+            // A fourth tick is undone straight away.
+            const extra = e.api
+              .getSelectedNodes()
+              .filter((n) => n.data && !ids.includes(n.data.datasetId));
+            if (extra.length > 0) {
+              e.api.setNodesSelected({ nodes: extra, newValue: false });
+              return;
+            }
+            picked.current = ids;
+            onCompareChange?.(
+              ids
+                .map((id) => matches.find((m) => m.datasetId === id))
+                .filter((m): m is Match => !!m),
+            );
           },
         }}
       />
