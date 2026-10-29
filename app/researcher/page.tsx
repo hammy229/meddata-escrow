@@ -24,6 +24,7 @@ import SampleCheckCard, {
   type SampleCheck,
 } from "../components/SampleCheckCard";
 import QuerySpend from "../components/QuerySpend";
+import { escrowRequest } from "../../lib/ui/escrow-response";
 import { suggestQuestions } from "../../lib/query/suggestions";
 import { MAX_COMPARE } from "../../lib/ui/compare";
 import AgentRun from "../components/AgentRun";
@@ -144,6 +145,8 @@ export default function ResearcherPage() {
   const [orderId, setOrderId] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [escrowNote, setEscrowNote] = useState<string | null>(null);
+  // A real failure from the orders API, shown as is (never turned into success).
+  const [escrowError, setEscrowError] = useState<string | null>(null);
   const [approveUrl, setApproveUrl] = useState<string | null>(null);
   // Bumped after every PATCH so the audit timeline refetches live.
   const [timelineKey, setTimelineKey] = useState(0);
@@ -166,6 +169,7 @@ export default function ResearcherPage() {
     setDisputed(false);
     setOrderId(null);
     setEscrowNote(null);
+    setEscrowError(null);
     setApproveUrl(null);
     setResults(null);
     setQueryError(null);
@@ -249,17 +253,18 @@ export default function ResearcherPage() {
   }
 
   // Buy = create the order then authorize it, so the escrow reaches AUTHORIZED
-  // (funds held). Falls back to an optimistic "mock" advance if the orders
-  // service isn't wired yet (no PayPal creds), so the demo stays unblocked.
+  // (funds held). A server error is shown as is and nothing advances; only a
+  // request that never gets a response falls back to the labelled offline demo.
   async function buyEscrow() {
     if (!selected) return;
     setBusyAction("buy");
     setEscrowNote(null);
+    setEscrowError(null);
     setApproveUrl(null);
     setVoided(false);
     setDisputed(false);
     try {
-      const res = await fetch("/api/orders", {
+      const created = await escrowRequest("/api/orders", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -267,12 +272,18 @@ export default function ResearcherPage() {
           amount: selected.priceCents / 100,
         }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || typeof data.orderId !== "string") {
+      if (created.kind === "offline") {
         setEscrow("AUTHORIZED");
-        setEscrowNote(
-          `Escrow authorize mocked for demo (${data?.error ?? res.status}).`,
-        );
+        setEscrowNote("Escrow authorize mocked for demo (service offline).");
+        return;
+      }
+      if (created.kind === "error") {
+        setEscrowError(`Could not open the order: ${created.message}`);
+        return;
+      }
+      const data = created.data;
+      if (typeof data.orderId !== "string") {
+        setEscrowError("Could not open the order: no order id came back.");
         return;
       }
       setOrderId(data.orderId);
@@ -280,7 +291,7 @@ export default function ResearcherPage() {
 
       // Authorize the created order -> AUTHORIZED. The server derives the `from`
       // state and PayPal ids from the stored row, so we only send orderId.
-      const auth = await fetch("/api/orders", {
+      const auth = await escrowRequest("/api/orders", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -288,22 +299,18 @@ export default function ResearcherPage() {
           orderId: data.orderId,
         }),
       });
-      const adata = await auth.json().catch(() => ({}));
-      if (auth.ok) {
-        setEscrow(adata.escrowState ?? "AUTHORIZED");
-        const mock = data.mock || adata.mock ? " (mock mode)" : "";
+      if (auth.kind === "ok") {
+        setEscrow(auth.data.escrowState ?? "AUTHORIZED");
+        const mock = data.mock || auth.data.mock ? " (mock mode)" : "";
         setEscrowNote(
           `Order ${data.orderId} authorized — funds held in escrow.${mock}`,
         );
+      } else if (auth.kind === "error") {
+        setEscrowError(`Could not authorize the order: ${auth.message}`);
       } else {
         setEscrow("AUTHORIZED");
-        setEscrowNote(
-          `Escrow authorize mocked for demo (${adata?.error ?? auth.status}).`,
-        );
+        setEscrowNote("Escrow authorize mocked for demo (service offline).");
       }
-    } catch {
-      setEscrow("AUTHORIZED");
-      setEscrowNote("Escrow authorize mocked for demo (service offline).");
     } finally {
       setBusyAction(null);
       setTimelineKey((k) => k + 1);
@@ -314,8 +321,9 @@ export default function ResearcherPage() {
   async function advanceEscrow(action: keyof typeof ADVANCE) {
     const nextState = ADVANCE[action];
     setBusyAction(action);
+    setEscrowError(null);
     try {
-      const res = await fetch("/api/orders", {
+      const out = await escrowRequest("/api/orders", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -323,20 +331,16 @@ export default function ResearcherPage() {
           orderId,
         }),
       });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setEscrow(data.escrowState ?? nextState);
-        if (data.mock) setEscrowNote(`${action} confirmed (mock mode).`);
+      if (out.kind === "ok") {
+        setEscrow(out.data.escrowState ?? nextState);
+        if (out.data.mock) setEscrowNote(`${action} confirmed (mock mode).`);
         else setEscrowNote(null);
+      } else if (out.kind === "error") {
+        setEscrowError(`Could not ${action}: ${out.message}`);
       } else {
         setEscrow(nextState);
-        setEscrowNote(
-          `${action} mocked for demo (${data?.error ?? res.status}).`,
-        );
+        setEscrowNote(`${action} mocked for demo (service offline).`);
       }
-    } catch {
-      setEscrow(nextState);
-      setEscrowNote(`${action} mocked for demo (service offline).`);
     } finally {
       setBusyAction(null);
       setTimelineKey((k) => k + 1);
@@ -346,18 +350,27 @@ export default function ResearcherPage() {
   // Void the authorization (sample failed) -> VOIDED, buyer not charged.
   async function voidEscrow() {
     setBusyAction("void");
+    setEscrowError(null);
     try {
-      await fetch("/api/orders", {
+      const out = await escrowRequest("/api/orders", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action: "void",
           orderId,
         }),
-      }).catch(() => undefined);
-    } finally {
+      });
+      if (out.kind === "error") {
+        setEscrowError(`Could not void the authorization: ${out.message}`);
+        return;
+      }
       setVoided(true);
-      setEscrowNote("Authorization voided — the buyer was not charged.");
+      setEscrowNote(
+        out.kind === "ok"
+          ? "Authorization voided — the buyer was not charged."
+          : "Authorization voided for demo (service offline).",
+      );
+    } finally {
       setBusyAction(null);
       setTimelineKey((k) => k + 1);
     }
@@ -367,8 +380,9 @@ export default function ResearcherPage() {
   // from their workspace: capture (release to vendor) or void (refund buyer).
   async function disputeEscrow() {
     setBusyAction("dispute");
+    setEscrowError(null);
     try {
-      const res = await fetch("/api/orders", {
+      const out = await escrowRequest("/api/orders", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -376,16 +390,16 @@ export default function ResearcherPage() {
           orderId,
         }),
       });
-      const data = await res.json().catch(() => ({}));
+      if (out.kind === "error") {
+        setEscrowError(`Could not raise the dispute: ${out.message}`);
+        return;
+      }
       setDisputed(true);
       setEscrowNote(
-        res.ok
+        out.kind === "ok"
           ? "Dispute raised — awaiting resolution in the vendor workspace."
-          : `Dispute raised for demo (${data?.error ?? res.status}).`,
+          : "Dispute raised for demo (service offline).",
       );
-    } catch {
-      setDisputed(true);
-      setEscrowNote("Dispute raised for demo (service offline).");
     } finally {
       setBusyAction(null);
       setTimelineKey((k) => k + 1);
@@ -718,6 +732,15 @@ export default function ResearcherPage() {
                 disputed={disputed}
               />
             </div>
+            {escrowError && (
+              <p
+                role="alert"
+                className="mt-4 inline-flex items-center gap-1.5 text-sm text-amber-700 dark:text-amber-400"
+              >
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                {escrowError}
+              </p>
+            )}
             {escrowNote && (
               <p className="mt-4 text-sm text-muted">{escrowNote}</p>
             )}
