@@ -24,6 +24,7 @@ import SampleCheckCard, {
   type SampleCheck,
 } from "../components/SampleCheckCard";
 import QuerySpend from "../components/QuerySpend";
+import { suggestQuestions } from "../../lib/query/suggestions";
 import { MAX_COMPARE } from "../../lib/ui/compare";
 import AgentRun from "../components/AgentRun";
 import {
@@ -775,6 +776,20 @@ export default function ResearcherPage() {
               >
                 {querying ? "Querying…" : "Run query"}
               </button>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted">Try:</span>
+              {suggestQuestions(selected.datasetId).map((q) => (
+                <button
+                  key={q}
+                  type="button"
+                  onClick={() => setQuestion(q)}
+                  className="rounded-full border border-rule bg-paper px-3 py-1 text-xs text-ink transition-colors hover:border-ink active:translate-y-px"
+                >
+                  {q}
+                </button>
+              ))}
             </div>
 
             {queryError && (
