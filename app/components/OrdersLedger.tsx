@@ -6,7 +6,8 @@
 // filter, pagination, CSV export, and a pinned total row that always reflects
 // the rows currently passing the filters. Polls GET /api/orders on the same
 // 5s cadence as IncomingOrders. The vendor's column layout, sort and filters
-// persist in localStorage, with a "Reset view" escape hatch.
+// persist in localStorage, with a "Reset view" escape hatch. Clicking a row
+// opens its OrderDetail panel; a status cell flashes when a poll changes it.
 import {
   useCallback,
   useEffect,
@@ -23,6 +24,7 @@ import type {
 } from "ag-grid-community";
 import type { AgGridReact, CustomCellRendererProps } from "ag-grid-react";
 import DataGrid from "./DataGrid";
+import OrderDetail from "./OrderDetail";
 import StatusSetFilter from "./StatusSetFilter";
 import { Download, Search } from "./icons";
 
@@ -39,6 +41,7 @@ interface OrderRow {
 }
 
 const POLL_MS = 5000;
+const TOTAL_ID = "Total";
 
 // SQLite CURRENT_TIMESTAMP is UTC without a zone ("2026-10-21 12:00:00").
 function parseTs(ts: string | null | undefined): Date | null {
@@ -190,6 +193,7 @@ export default function OrdersLedger() {
   // key bumped by "Reset view" to remount the grid with its defaults.
   const [savedView, setSavedView] = useState<GridState | undefined>(readView);
   const [gridKey, setGridKey] = useState(0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [customized, setCustomized] = useState(() => savedView !== undefined);
   // False on the server and during hydration, so the button's markup matches
   // before localStorage is consulted.
@@ -252,10 +256,12 @@ export default function OrdersLedger() {
     );
   }, []);
 
+  const selected = orders.find((o) => o.id === selectedId) ?? null;
+
   const pinnedBottom = useMemo(
     () => [
       {
-        id: "Total",
+        id: TOTAL_ID,
         dataset_id: `${totals.count} order${totals.count === 1 ? "" : "s"}`,
         buyer_email: "",
         status: "",
@@ -298,6 +304,7 @@ export default function OrdersLedger() {
         headerName: "Status",
         minWidth: 120,
         filter: StatusSetFilter,
+        enableCellChangeFlash: true,
         cellRenderer: StatusCell,
       },
       {
@@ -413,6 +420,11 @@ export default function OrdersLedger() {
 
       <DataGrid<OrderRow>
         key={gridKey}
+        selectedRowId={selectedId ?? undefined}
+        onRowClicked={(row) => {
+          // The pinned total row is a summary, not an order.
+          if (row.id !== TOTAL_ID) setSelectedId(row.id);
+        }}
         gridRef={gridRef}
         rowData={orders}
         columnDefs={columns}
@@ -439,6 +451,14 @@ export default function OrdersLedger() {
           },
         }}
       />
+
+      {selected && (
+        <OrderDetail
+          order={selected}
+          refreshKey={`${selected.status}|${selected.updated_at}`}
+          onClose={() => setSelectedId(null)}
+        />
+      )}
     </div>
   );
 }
