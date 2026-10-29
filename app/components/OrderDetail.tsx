@@ -2,10 +2,11 @@
 
 // Side panel for one ledger order (client component): the escrow audit trail
 // (OrderTimeline), the vendor/platform fee split, and the authorization window
-// when GET /api/orders?id= reports one. Opened by clicking a ledger row; Escape
+// while PayPal is holding the funds (GET /api/orders?id= `authorization`). Opened by clicking a ledger row; Escape
 // or the close button dismisses it. The ledger bumps `refreshKey` on each poll
 // so the trail and the status stay live while the panel is open.
 import { useEffect, useState } from "react";
+import type { AuthWindow } from "../../lib/escrow/auth-window";
 import { platformFeeCents, vendorPayoutCents } from "../../lib/escrow/fees";
 import OrderTimeline from "./OrderTimeline";
 
@@ -18,13 +19,6 @@ export interface DetailOrder {
   amount_cents: number;
 }
 
-// The authorization window, when the API provides one. Field names are read
-// loosely (camelCase or snake_case) and the section is skipped if no usable
-// timestamp is present.
-interface AuthorizationInfo {
-  [key: string]: unknown;
-}
-
 function usd(cents: number): string {
   return `$${(cents / 100).toLocaleString(undefined, {
     minimumFractionDigits: 2,
@@ -32,18 +26,15 @@ function usd(cents: number): string {
   })}`;
 }
 
-function pickDate(a: AuthorizationInfo, keys: string[]): Date | null {
-  for (const k of keys) {
-    const v = a[k];
-    if (typeof v !== "string" && typeof v !== "number") continue;
-    const d = new Date(v);
-    if (!Number.isNaN(d.getTime())) return d;
-  }
-  return null;
-}
+// What each authorization window state means for the vendor.
+const WINDOW_LABEL: Record<AuthWindow["state"], string> = {
+  honor: "Within PayPal's 3-day honor period",
+  valid: "Held, capture before it expires",
+  expired: "Expired, PayPal released the hold",
+};
 
-function fmt(d: Date): string {
-  return d.toLocaleString(undefined, {
+function fmt(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
   });
@@ -58,9 +49,7 @@ export default function OrderDetail({
   refreshKey?: unknown;
   onClose: () => void;
 }) {
-  const [authorization, setAuthorization] = useState<AuthorizationInfo | null>(
-    null,
-  );
+  const [authorization, setAuthorization] = useState<AuthWindow | null>(null);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -93,19 +82,6 @@ export default function OrderDetail({
 
   const fee = platformFeeCents(order.amount_cents);
   const payout = vendorPayoutCents(order.amount_cents);
-  const from = authorization
-    ? pickDate(authorization, ["createdAt", "created_at", "startsAt", "start"])
-    : null;
-  const until = authorization
-    ? pickDate(authorization, [
-        "expiresAt",
-        "expires_at",
-        "honorUntil",
-        "honor_until",
-        "validUntil",
-        "expires",
-      ])
-    : null;
 
   return (
     <aside
@@ -155,25 +131,30 @@ export default function OrderDetail({
         </dl>
       </section>
 
-      {(from || until) && (
+      {authorization && (
         <section className="mt-6 border-t border-rule pt-4">
           <h4 className="font-serif text-lg font-normal">
             Authorization window
           </h4>
           <dl className="mt-3 space-y-1.5 text-sm">
-            {from && (
-              <div className="flex justify-between gap-4">
-                <dt className="text-muted">Authorized</dt>
-                <dd>{fmt(from)}</dd>
-              </div>
-            )}
-            {until && (
-              <div className="flex justify-between gap-4">
-                <dt className="text-muted">Funds held until</dt>
-                <dd>{fmt(until)}</dd>
-              </div>
-            )}
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted">Authorized</dt>
+              <dd>{fmt(authorization.authorizedAt)}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted">Honor period ends</dt>
+              <dd>{fmt(authorization.honorUntil)}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-muted">Funds held until</dt>
+              <dd>{fmt(authorization.expiresAt)}</dd>
+            </div>
           </dl>
+          <p className="mt-3 text-xs text-muted">
+            {WINDOW_LABEL[authorization.state]}
+            {authorization.state !== "expired" &&
+              ` · ${authorization.daysLeft} day${authorization.daysLeft === 1 ? "" : "s"} left`}
+          </p>
         </section>
       )}
 
