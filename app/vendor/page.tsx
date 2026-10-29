@@ -7,6 +7,7 @@ import VendorCatalog from "../components/VendorCatalog";
 import IncomingOrders from "../components/IncomingOrders";
 import EarningsSummary from "../components/EarningsSummary";
 import OrdersLedger from "../components/OrdersLedger";
+import WebhookSimulator from "../components/WebhookSimulator";
 import { ArrowLeft } from "../components/icons";
 
 export default function VendorPage() {
@@ -69,6 +70,8 @@ export default function VendorPage() {
           </p>
           <OrdersLedger />
         </section>
+
+        <WebhookSimulator />
       </main>
     </>
   );
