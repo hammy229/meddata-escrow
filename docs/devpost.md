@@ -18,15 +18,21 @@ Escrow applies it to data, with AI doing the procurement legwork.
 ## What it does
 
 1. A researcher describes a study in plain English.
-2. Claude ranks catalog datasets for it (keyword fallback with no AWS).
+2. Claude ranks catalog datasets for it (keyword fallback with no AWS). The
+   researcher can compare up to three matches side by side before picking one.
 3. A sample quality + privacy check runs **before** any money moves.
-4. PayPal **authorizes** the listed price — funds are held, not captured.
+4. PayPal **authorizes** the listed price, so funds are held, not captured. The
+   hold is honored for 3 days and stays valid for up to 29, and the order shows
+   how many days are left.
 5. The dataset is delivered; the buyer confirms and PayPal **captures**, or
    voids / disputes. The vendor is paid out through PayPal Payouts minus a 10%
-   platform fee.
+   platform fee. Every order ends with a receipt that shows the fee, the
+   payout and the query charges.
 6. After purchase the researcher asks questions in plain English and gets
-   privacy-safe aggregates only, metered per answer. Raw records never leave
-   the vendor.
+   privacy-safe aggregates only, metered per answer, each with a one-sentence
+   summary. A question that would expose identifiers is refused with a safe
+   rewrite the researcher can try in one click. Raw records never leave the
+   vendor.
 
 Or the researcher hands the whole loop to the **procurement agent**: give it
 a study and a budget and it searches, inspects, sample-checks and opens a
@@ -42,12 +48,25 @@ PayPal escrow order — then stops, because only the human approves payment.
 - **Claude on Amazon Bedrock** (opt-in): dataset ranking, question → typed
   query plan (the model never writes SQL), a privacy second opinion that can
   only tighten, the sample check, and the agent's tool loop.
+- **Number-guarded answers.** Claude may reword the one-sentence answer summary,
+  but any figure it adds that the rows do not contain is dropped in favor of
+  the rule-based sentence. A rewrite for a refused question has to pass the
+  same privacy screen before it is offered.
 - **Escrow state machine** (`MATCHED → AUTHORIZED → DELIVERED → CAPTURED →
 PAID_OUT`, plus dispute/void) with an append-only audit trail of every
   transition.
 - **AG Grid** for matches, vendor orders and the ledger; **OpenAPI 3.1** spec
   with drift tests and a generated **Postman** collection; **Render** blueprint;
   signed outbound webhooks for **Zapier**.
+- **Hold window, receipts and a webhook simulator.** `lib/escrow/auth-window`
+  works out the 3-day honor period and 29-day validity from the authorize
+  event. The receipt keeps platform fee plus vendor payout equal to the price.
+  The vendor page has a mock PayPal webhook simulator that posts through the
+  same webhook route, accepted only in mock mode.
+- **AG Grid beyond the defaults.** A custom set filter for order status,
+  checkbox row selection for the compare view, inline price editing in the
+  catalog, cell renderers for match scores, query bars and status, and a flash
+  when a live poll changes an order's status.
 
 ## Challenges
 

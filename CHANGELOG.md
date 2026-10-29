@@ -2,6 +2,65 @@
 
 All notable changes to MedData Escrow. Newest first.
 
+## 2026-10-29: Buyers compare, vendors reprice, the agent shows its work
+
+### Added
+
+- **Researcher workspace.** Compare up to three matches side by side (checkboxes
+  on the match grid, with inline bars for the numbers). Each dataset gets
+  starter questions. A refused question comes with a safe rewrite and a "Try
+  instead" button. Every answer carries a one-sentence summary. A receipt card
+  appears after capture, and an order that has not been approved can be
+  cancelled.
+- **Vendor workspace.** The order ledger has a status checkbox filter and an
+  order details drawer with the fee split and the PayPal hold window. Prices
+  are edited inline in the catalog and saved through the new datasets API, so
+  the next order charges the new price. A mock PayPal webhook simulator lets
+  you drive the escrow from the vendor side with no PayPal account.
+- **Escrow and PayPal.** `cancel` moves a `MATCHED` order to `CANCELLED` with no
+  PayPal call, since nothing was held. In mock mode the approve link opens a
+  local checkout page (`/checkout/mock`). A buyer who asks again for the same
+  dataset gets their unapproved order back, unless the price has changed since.
+  Each held order shows its PayPal authorization window (honored for 3 days,
+  valid for up to 29, with days left). `GET /api/orders?id=..&receipt=1`
+  returns a receipt. `POST /api/demo/reset` clears the demo data in mock mode.
+- **AI and agent.** Safe rewrites for refused questions, and one-sentence answer
+  summaries that fall back to plain rule-based wording if the model adds a
+  number the rows do not contain. Every agent run returns a ranked shortlist
+  with a short reason per candidate. Each run has a shareable replay page at
+  `/agent/<runId>`.
+
+### Fixed
+
+- Failed escrow actions show the real error instead of a success message.
+- The approval link is hidden once funds are held. It used to lead to a
+  checkout page where Approve would fail with a 409.
+- The vendor order panel reads the real PayPal hold window from the API. It
+  used to guess field names and never found the authorization time.
+- Match results use the database price, so a repriced listing shows its new
+  price right away. The compare table shows each dataset's record count instead
+  of "Not listed".
+- A second click on Buy no longer creates a second PayPal order for the same
+  buyer and dataset.
+
+### Tests
+
+- `npm test` runs 404 tests, up from 290 this morning. New specs cover the
+  datasets API and price rules, demo reset, order reuse and cancel, the
+  authorization window, receipts, mock webhook events, the shortlist and replay,
+  answer summaries and rewrites, and the compare and status filter helpers.
+
+### Docs
+
+- README: features, the full API reference (datasets, reset, cancel, receipts,
+  authorization window, shortlist, summaries), project structure and the
+  browser walkthrough.
+- OpenAPI spec bumped to 0.3.0 with every new endpoint and field documented,
+  and the Postman collection regenerated from it. The `x-status: preview`
+  markers are gone, since every documented operation is implemented.
+- Devpost draft, demo script (new beats for compare, checkout, receipt, reprice
+  and the webhook simulator), architecture and API docs brought up to date.
+
 ## 2026-10-22 — The agent gets a face; coverage and docs catch up
 
 ### Added

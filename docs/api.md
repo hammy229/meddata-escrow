@@ -16,14 +16,15 @@ openapi/openapi.yaml ──┬── GET /api/openapi            (served JSON / 
 - Covers every route under `app/api/**`, with the request bodies, response
   bodies and status codes the route code and its tests actually produce, plus
   realistic examples.
-- Shared shapes live under `components.schemas`: `OrderRow`, `OrderEventRow`,
-  `UsageRow`, `OrderSummary`, the `EscrowState` enum (all 8 states) and
+- Shared shapes live under `components.schemas`: `Dataset`, `OrderRow`,
+  `OrderEventRow`, `AuthorizationWindow`, `Receipt`, `UsageRow`,
+  `OrderSummary`, `ShortlistItem`, the `EscrowState` enum (all 8 states) and
   `Error` (`{ error, reasons? }`).
 - `operationId`s are camelCase (`createOrder`, `advanceOrder`, `runQuery`, …).
   SDK generators use them as method names.
-- Operations whose code has not landed yet are marked `x-status: preview`:
-  `POST /api/agent`, `POST /api/webhooks/paypal`, and the `source` /
-  `sampleCheck` additions to `/api/match`.
+- Every documented operation has a route handler. An operation whose code is
+  not on the branch yet can be marked `x-status: preview` instead, which the
+  drift guard allows. None are marked today.
 
 **Drift guard.** `scripts/openapi/spec.test.ts` runs in `npm test`. It fails
 when a `route.ts` exports a method the spec lacks, or when the spec documents
@@ -96,11 +97,14 @@ Command names and flags can vary between CLI versions. Check
 
 **Notes for SDK users.**
 
-- `GET /api/orders` returns one of three shapes depending on the query string
-  (`OrderListResponse`, `OrderDetailResponse`, `OrderSummaryResponse`), so it
-  is modelled as a `oneOf`.
+- `GET /api/orders` returns one of four shapes depending on the query string
+  (`OrderListResponse`, `OrderDetailResponse`, `OrderReceiptResponse`,
+  `OrderSummaryResponse`), so it is modelled as a `oneOf`. A detail response
+  always carries `authorization`, which is `null` unless funds are held.
 - In mock mode (`PAYPAL_MODE=mock`), responses add `mock: true` and use
   `MOCK-*` PayPal ids. In live mode, PayPal failures pass PayPal's status
   through (the `default` response).
-- Preview operations may change shape before they ship. Regenerate SDKs after
-  their routes land.
+- `POST /api/orders` can return `200` (an existing unapproved order, with
+  `reused: true`) or `201` (a new order). Mock-mode approve links are relative
+  (`/checkout/mock?...`), so `approveUrl` is typed `uri-reference`.
+- Regenerate SDKs after the spec changes. `info.version` is 0.3.0.

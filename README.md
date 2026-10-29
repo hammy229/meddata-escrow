@@ -108,6 +108,13 @@ The server, not the client, decides who pays what and who sees what:
 - **Metered per answer.** Each answered query is billed against the order at a
   fixed server fee (`PER_QUERY_FEE_CENTS`). Rejected or suppressed queries are
   never billed.
+- **Honor window.** While PayPal holds the funds, the order shows its
+  authorization window: honored for 3 days, valid for up to 29, with the days
+  left (`lib/escrow/auth-window.ts`). Past day 29 the hold has to be
+  reauthorized.
+- **Receipts add up.** `GET /api/orders?id=<id>&receipt=1` splits the amount
+  into the platform fee and the vendor payout, which always sum to the price.
+  The total adds per-query charges. A voided or cancelled order shows zeros.
 
 ### AI & the procurement agent
 
@@ -123,6 +130,11 @@ app — including the agent — runs with no AWS access.
   verdict, never loosen it.
 - **Sample check** — a quality check on a dataset sample before money moves
   (`lib/ai/sample-check.ts`, `POST /api/match { sampleCheck }`).
+- **Safe rewrites and summaries**: a refused question comes back with a
+  rephrasing that goes through the same privacy screen before it is offered
+  (`suggestRewrite`). Each answer gets a one-sentence summary
+  (`lib/ai/answer-summary.ts`); if Claude's wording adds a number the rows do
+  not contain, the rule-based sentence is used instead.
 
 **Procurement agent** (`lib/agent`, `POST /api/agent`): give it a study and a
 budget and it searches, inspects, sample-checks and opens an escrow order using
@@ -133,27 +145,33 @@ _passing_ sample check ran in the same run, and no order was placed yet. The
 agent can only open a `MATCHED` order; it has no tool to authorize, capture or
 pay out — the human buyer still approves in PayPal. Runs are capped at 8 model
 turns, fall back to a scripted planner when the LLM is off, and every step is
-stored in `agent_runs` (`GET /api/agent?runId=`).
+stored in `agent_runs` (`GET /api/agent?runId=`). Each run also returns a
+`shortlist` of the candidates it looked at, best first, with a short reason
+for each. `/agent/<runId>` shows the same run as a shareable replay page.
 
 ### API reference
 
-| Method & path                                                 | Purpose                                                                             |
-| ------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `POST /api/match` `{ description }`                           | Rank catalog datasets for a study description                                       |
-| `POST /api/orders` `{ datasetId, amount? }`                   | Create an escrow order at the listed price (`MATCHED`)                              |
-| `PATCH /api/orders` `{ orderId, action, resolution?, note? }` | Advance escrow: `authorize · deliver · capture · payout · void · dispute · resolve` |
-| `GET /api/orders` `?status= &datasetId= &buyerEmail=`         | List orders (newest first)                                                          |
-| `GET /api/orders?id=<id>&events=1`                            | One order plus its audit timeline                                                   |
-| `GET /api/orders?summary=1[&datasetId=]`                      | Vendor earnings: counts by status, held / captured / paid-out / released cents      |
-| `POST /api/query` `{ orderId, datasetId, question }`          | Plain-English question → privacy-safe aggregate, metered (`usage` in response)      |
-| `GET /api/billing?orderId=<id>`                               | An order's per-query usage, `queryCount`, `totalCents`                              |
-| `POST /api/billing` `{ orderId, question }`                   | Record one query charge (fee is server-set; `409` without data access)              |
-| `POST /api/match` `{ sampleCheck, description? }`             | Pre-purchase sample quality check on one dataset                                    |
-| `POST /api/agent` `{ study, budgetCents }`                    | Run the procurement agent; returns `runId`, steps, recommendation, order            |
-| `GET /api/agent?runId=<id>`                                   | Replay a stored agent run (audit)                                                   |
-| `POST /api/webhooks/paypal`                                   | Signature-verified, deduped PayPal events applied to escrow state                   |
-| `GET /api/openapi`                                            | The OpenAPI 3.1 spec (`openapi/openapi.yaml`)                                       |
-| `GET /api/health`                                             | Uptime check: `{ status, mode, db }` (Render health check)                          |
+| Method & path                                                 | Purpose                                                                                                                                             |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/match` `{ description }`                           | Rank catalog datasets for a study description (each match carries `priceCents` and `recordCount`)                                                   |
+| `GET /api/datasets`                                           | Catalog with the database prices (what orders charge), record counts and tags                                                                       |
+| `PATCH /api/datasets` `{ datasetId, priceCents }`             | Reprice a listing: whole cents, $1.00 to $10,000.00 (`422` otherwise)                                                                               |
+| `POST /api/match` `{ sampleCheck, description? }`             | Pre-purchase sample quality check on one dataset                                                                                                    |
+| `POST /api/orders` `{ datasetId, amount?, buyerEmail? }`      | Create an escrow order at the listed price (`MATCHED`); `200` with `reused: true` if an unapproved order exists                                     |
+| `PATCH /api/orders` `{ orderId, action, resolution?, note? }` | Advance escrow: `authorize · deliver · capture · payout · void · dispute · cancel · resolve`                                                        |
+| `GET /api/orders` `?status= &datasetId= &buyerEmail=`         | List orders (newest first)                                                                                                                          |
+| `GET /api/orders?id=<id>[&events=1]`                          | One order with its `authorization` window (while funds are held) and optional audit timeline                                                        |
+| `GET /api/orders?id=<id>&receipt=1`                           | Receipt: amount, platform fee, vendor payout, query charges, total                                                                                  |
+| `GET /api/orders?summary=1[&datasetId=]`                      | Vendor earnings: counts by status, held / captured / paid-out / released cents                                                                      |
+| `POST /api/query` `{ orderId, datasetId, question }`          | Plain-English question → privacy-safe aggregate with a one-sentence `summary`, metered (`usage` in response); a `403` may carry a safe `suggestion` |
+| `GET /api/billing?orderId=<id>`                               | An order's per-query usage, `queryCount`, `totalCents`                                                                                              |
+| `POST /api/billing` `{ orderId, question }`                   | Record one query charge (fee is server-set; `409` without data access)                                                                              |
+| `POST /api/agent` `{ study, budgetCents }`                    | Run the procurement agent; returns `runId`, steps, recommendation, `shortlist`, order                                                               |
+| `GET /api/agent?runId=<id>`                                   | Replay a stored agent run (audit), with its `shortlist`                                                                                             |
+| `POST /api/webhooks/paypal`                                   | Signature-verified, deduped PayPal events applied to escrow state                                                                                   |
+| `POST /api/demo/reset`                                        | Mock mode only: clears orders, events, usage and agent runs, then reseeds the catalog (`404` otherwise)                                             |
+| `GET /api/openapi`                                            | The OpenAPI 3.1 spec (`openapi/openapi.yaml`)                                                                                                       |
+| `GET /api/health`                                             | Uptime check: `{ status, mode, db }` (Render health check)                                                                                          |
 
 Errors are always `{ error }` (plus `reasons` on privacy rejections).
 
@@ -222,10 +240,16 @@ npm run demo -- --sandbox "heart disease cohort"   # real sandbox calls (.env.lo
 ```
 
 **Try the full flow in the browser (no credentials):** `npm run dev:mock`, then
-open [`/researcher`](http://localhost:3000/researcher) — describe a study, pick a
-ranked match, **Buy (escrow)**, then walk the escrow arc with the on-page buttons
-(**Deliver → Confirm & release → Pay out vendor**) and run a privacy-safe query.
-[`/vendor`](http://localhost:3000/vendor) shows the dataset catalog.
+open [`/researcher`](http://localhost:3000/researcher). Describe a study, tick up
+to three matches to compare them, and pick one. **Buy (escrow)** opens the local
+checkout page at `/checkout/mock`, which stands in for PayPal's approval page.
+Then walk the escrow arc with the on-page buttons (**Deliver → Confirm & release →
+Pay out vendor**), run a privacy-safe query, and read the receipt card. A
+refused question offers a **Try instead** rewrite. Cancel is available until the
+order is approved. [`/vendor`](http://localhost:3000/vendor) shows the catalog
+(edit a price inline and the next order charges it), the status filter, the
+order drawer and a PayPal webhook simulator. To start over between takes, call
+`POST /api/demo/reset` (mock mode only).
 
 The escrow lifecycle is a pure state machine in `lib/escrow/state-machine.ts`
 (`MATCHED → AUTHORIZED → DELIVERED → CAPTURED → PAID_OUT`, with
@@ -242,20 +266,28 @@ verification pass (AI-Toolkit plugin + PayPal MCP).
 ```
 meddata-escrow/
 ├─ app/
-│  ├─ researcher/            # researcher workspace (browse, query, buy)
-│  ├─ vendor/                # vendor workspace (manage listings)
+│  ├─ researcher/            # researcher workspace (browse, compare, query, buy)
+│  ├─ vendor/                # vendor workspace (catalog, ledger, order drawer, webhook simulator)
+│  ├─ agent/[runId]/         # shareable replay of one procurement agent run
+│  ├─ checkout/mock/         # local stand-in for PayPal's approval page (mock mode)
 │  └─ api/
 │     ├─ match/              # POST  — match datasets to a study description
-│     ├─ orders/             # GET/POST/PATCH — list + escrow lifecycle (authorize → capture/void/payout, dispute/resolve); GET ?events= returns the audit timeline
-│     ├─ query/              # POST  — plain-English query (paid order required; privacy-safe aggregate, metered)
+│     ├─ datasets/           # GET/PATCH: catalog with database prices; reprice a listing
+│     ├─ orders/             # GET/POST/PATCH: list + escrow lifecycle (authorize → capture/void/payout, dispute/resolve, cancel); GET ?events= returns the audit timeline, ?receipt=1 the fee receipt
+│     ├─ query/              # POST: plain-English query (paid order required; privacy-safe aggregate, metered, one-sentence summary)
 │     ├─ billing/            # GET/POST — per-query usage + spend
+│     ├─ agent/              # POST/GET: procurement agent runs (with shortlist)
+│     ├─ demo/reset/         # POST: mock mode only, resets the demo data
 │     └─ health/             # GET   — uptime check
 ├─ lib/
-│  ├─ ai/                    # matcher, nl2query, privacy-guard
-│  ├─ query/                 # mock vendor-side executor, per-query pricing
-│  ├─ escrow/                # escrow state machine + data-access rule
+│  ├─ ai/                    # matcher, nl2query, privacy-guard (incl. safe rewrites), answer-summary
+│  ├─ agent/                 # procurement tool loop, run store, shortlist, replay
+│  ├─ query/                 # mock vendor-side executor, per-query pricing, query suggestions
+│  ├─ escrow/                # escrow state machine, data-access rule, authorization window, receipts, mock webhook events
+│  ├─ catalog/               # listing price rules (whole cents, $1 to $10,000)
+│  ├─ ui/                    # pure helpers for the grids: compare, bar scale, status filter, escrow messages
 │  ├─ paypal/                # PayPal Orders/Payments client
-│  └─ db/                    # SQLite persistence layer (client.ts, usage.ts), schema.sql, seed.ts
+│  └─ db/                    # SQLite persistence layer (client.ts, usage.ts, datasets.ts, reset.ts), schema.sql, seed.ts
 ├─ data/catalog.json         # dataset catalog (synthetic)
 ├─ scripts/                  # generate-data.sh (Synthea), seed.sh
 ├─ docs/                     # architecture, paypal-flow, privacy, demo-script, checklist
