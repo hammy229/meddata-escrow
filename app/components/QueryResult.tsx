@@ -3,10 +3,12 @@
 // Answer panel for a privacy-safe query (researcher step 4). Explains how the
 // answer was computed — who planned it, the plan as chips, the plain-English
 // explanation and the exact aggregate SQL — then shows the rows in an AG Grid
-// with numeric formatting and a Community CSV export.
+// with numeric formatting, inline bars on grouped results and a Community CSV
+// export.
 import { useMemo, useRef } from "react";
 import type { ColDef } from "ag-grid-community";
-import type { AgGridReact } from "ag-grid-react";
+import type { AgGridReact, CustomCellRendererProps } from "ag-grid-react";
+import { barFor, barMax } from "../../lib/ui/bar-scale";
 import DataGrid from "./DataGrid";
 import { SourceBadge } from "./MatchesGrid";
 import { Download } from "./icons";
@@ -53,6 +55,28 @@ const numberFmt = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 2,
 });
 
+// Number on top of a proportional bar. The number carries the meaning; the bar
+// only helps scanning a grouped result, so it is hidden from assistive tech.
+function BarCell(
+  props: CustomCellRendererProps<AggregateRow, number> & { max: number },
+) {
+  const { value, max } = props;
+  if (typeof value !== "number") return null;
+  const bar = barFor(value, max);
+  return (
+    <span className="relative flex h-full items-center justify-end">
+      {bar && (
+        <span
+          aria-hidden="true"
+          className={`absolute inset-y-2 left-0 rounded-[2px] ${bar.negative ? "bg-rose-200 dark:bg-rose-500/30" : "bg-pp-100 dark:bg-pp-500/25"}`}
+          style={{ width: `${bar.pct}%` }}
+        />
+      )}
+      <span className="relative">{numberFmt.format(value)}</span>
+    </span>
+  );
+}
+
 function Chip({ label, value }: { label: string; value: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 rounded-lg border border-rule bg-paper px-2.5 py-1 text-xs">
@@ -82,6 +106,9 @@ export default function QueryResult({
   // locale-formatted on screen, but export raw so the CSV stays numeric.
   const columns = useMemo<ColDef<AggregateRow>[]>(() => {
     const first = rows?.[0] ?? {};
+    // A lone scalar has nothing to compare against, so only grouped results
+    // (several rows) get bars.
+    const grouped = (rows?.length ?? 0) > 1;
     return Object.keys(first).map((key) => {
       const numeric = typeof first[key] === "number";
       return numeric
@@ -94,6 +121,12 @@ export default function QueryResult({
             useValueFormatterForExport: false,
             valueFormatter: (p) =>
               typeof p.value === "number" ? numberFmt.format(p.value) : "",
+            ...(grouped && {
+              cellRenderer: BarCell,
+              cellRendererParams: {
+                max: barMax((rows ?? []).map((r) => r[key])),
+              },
+            }),
           }
         : {
             field: key,
