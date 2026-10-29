@@ -39,6 +39,8 @@ import {
   type OrderFilter,
 } from "../../../lib/db/client";
 import { authorizationWindow } from "../../../lib/escrow/auth-window";
+import { buildReceipt } from "../../../lib/escrow/receipt";
+import { listUsage } from "../../../lib/db/usage";
 import {
   createEscrowOrder,
   advanceEscrowOrder,
@@ -75,6 +77,10 @@ function errorResponse(err: unknown): Response {
 //       ({ authorizedAt, honorUntil, expiresAt, state, daysLeft }, see
 //       lib/escrow/auth-window) while funds are held (AUTHORIZED, DELIVERED,
 //       DISPUTED), measured from the AUTHORIZE event; otherwise null.
+//   GET /api/orders?id=ord_..&receipt=1
+//       -> { order, receipt }  fee breakdown (lib/escrow/receipt): amount,
+//          platform fee, vendor payout, per-query charges and the total. All
+//          money fields are 0 for a VOIDED or CANCELLED order.
 //   GET /api/orders?summary=1[&datasetId=..]
 //       -> { summary: OrderSummary }  vendor earnings roll-up: countsByStatus
 //          (every EscrowState, zero-filled) plus heldCents (AUTHORIZED +
@@ -95,6 +101,17 @@ export async function GET(request: Request) {
       // `?events` (any value) also returns the order's audit timeline. Order
       // and events are read in one DB open so they are a consistent snapshot.
       const includeEvents = params.get("events") !== null;
+      if (params.get("receipt") !== null) {
+        const found = withDb((db) => {
+          const order = getOrder(db, id);
+          return order && { order, usage: listUsage(db, id) };
+        });
+        if (!found) return bad(`unknown orderId: ${id}`, 404);
+        return Response.json({
+          order: found.order,
+          receipt: buildReceipt(found.order, found.usage),
+        });
+      }
       const result = withDb((db) => {
         const order = getOrder(db, id);
         if (!order) return null;

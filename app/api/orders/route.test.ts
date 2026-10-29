@@ -10,6 +10,7 @@ import { rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
 import { GET, POST, PATCH } from "./route";
+import { recordUsage, PER_QUERY_FEE_CENTS } from "../../../lib/db/usage";
 import {
   openDb,
   createOrder,
@@ -616,6 +617,73 @@ test(
       json.events.find((e) => e.event === "DISPUTE")?.note,
       "dataset was incomplete",
     );
+  }),
+);
+
+// --- Receipt ---
+
+type ReceiptBody = {
+  order: { id: string };
+  receipt: Record<string, number | string>;
+};
+
+test(
+  "GET ?id=&receipt=1 returns the fee breakdown with query charges",
+  withEnv(async ({ url }) => {
+    const order = seedOrder(url, { status: "CAPTURED" });
+    const db = openDb(url);
+    recordUsage(db, {
+      orderId: order.id,
+      question: "q1",
+      chargeCents: PER_QUERY_FEE_CENTS,
+    });
+    recordUsage(db, {
+      orderId: order.id,
+      question: "q2",
+      chargeCents: PER_QUERY_FEE_CENTS,
+    });
+    db.close();
+    const res = await GET(getReq(`?id=${order.id}&receipt=1`));
+    assert.equal(res.status, 200);
+    const { order: o, receipt: r } = (await res.json()) as ReceiptBody;
+    assert.equal(o.id, order.id);
+    assert.deepEqual(r, {
+      orderId: order.id,
+      datasetId: DATASET_ID,
+      status: "CAPTURED",
+      amountCents: 4900,
+      platformFeeCents: 490,
+      vendorPayoutCents: 4410,
+      queryCount: 2,
+      queryChargesCents: 2 * PER_QUERY_FEE_CENTS,
+      totalCents: 4900 + 2 * PER_QUERY_FEE_CENTS,
+    });
+    assert.equal(
+      Number(r.platformFeeCents) + Number(r.vendorPayoutCents),
+      r.amountCents,
+    );
+  }),
+);
+
+test(
+  "GET ?id=&receipt=1 on a cancelled order is all zeros",
+  withEnv(async ({ url }) => {
+    const order = seedOrder(url, { status: "CANCELLED" });
+    const json = (await (
+      await GET(getReq(`?id=${order.id}&receipt=1`))
+    ).json()) as ReceiptBody;
+    assert.equal(json.receipt.amountCents, 0);
+    assert.equal(json.receipt.platformFeeCents, 0);
+    assert.equal(json.receipt.vendorPayoutCents, 0);
+    assert.equal(json.receipt.totalCents, 0);
+  }),
+);
+
+test(
+  "GET ?id=&receipt=1 for an unknown order is 404",
+  withEnv(async () => {
+    const res = await GET(getReq(`?id=ord_nope&receipt=1`));
+    assert.equal(res.status, 404);
   }),
 );
 
