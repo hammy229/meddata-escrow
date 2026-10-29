@@ -133,6 +133,17 @@ test(
     const json = await res.json();
     assert.equal(json.error, "query rejected");
     assert.ok(json.reasons.some((r: string) => /zip/.test(r)));
+    assert.equal(json.suggestion, "How many patients are there by region?");
+  }),
+);
+
+test(
+  "refusal omits suggestion when no safe rewrite fits",
+  withEnv(async ({ orderId }) => {
+    const res = await ask(orderId, "show one specific patient");
+    assert.equal(res.status, 403);
+    const json = await res.json();
+    assert.equal("suggestion" in json, false);
   }),
 );
 

@@ -13,6 +13,7 @@
 import * as z from "zod/v4";
 
 import { llmEnabled, structured } from "../llm/client";
+import { GROUP_FIELDS, NUMERIC_FIELDS } from "./nl2query";
 import type { AiOptions } from "./options";
 
 export interface PrivacyVerdict {
@@ -169,6 +170,50 @@ function screenQuestion(question: string): PrivacyVerdict {
   }
 
   return { allowed: reasons.length === 0, reasons };
+}
+
+// Reasons that mean the asker wants one person, not a cohort. No aggregate
+// rephrasing preserves that intent, so we offer none rather than a mismatch.
+const SINGLE_PERSON_RE = /single record|individual|LIMIT 1/;
+
+// First whitelisted field named in the question, on word boundaries.
+function mentioned<T extends string>(q: string, fields: readonly T[]) {
+  return fields.find((f) =>
+    new RegExp(`\\b${f.replace(/_/g, "[ _]")}\\b`).test(q),
+  );
+}
+
+/**
+ * Suggest an aggregate-only rephrasing of a refused question, or null when no
+ * safe rewrite fits (the ask was about one person, or the refusal came from
+ * the model review with nothing for us to rewrite from). The suggestion is
+ * built only from whitelisted fields and is itself run through the intent
+ * screen, so it can never be a question we would refuse.
+ */
+export function suggestRewrite(
+  question: string,
+  reasons: string[],
+): string | null {
+  if (reasons.length === 0) return null;
+  if (reasons.every((r) => r.startsWith("Privacy review:"))) return null;
+  if (reasons.some((r) => SINGLE_PERSON_RE.test(r))) return null;
+
+  const q = question.toLowerCase();
+  // An identifier-based grouping ("by zip") is coarsened to region.
+  const group =
+    mentioned(q, GROUP_FIELDS) ??
+    (/\b(zip|zipcode|postal|address)\b/.test(q) ? "region" : undefined);
+  const field = mentioned(q, NUMERIC_FIELDS);
+  const wantsAvg = /\b(average|avg|mean)\b/.test(q);
+
+  const by = group ? ` by ${group.replace(/_/g, " ")}` : "";
+  const suggestion =
+    wantsAvg && field
+      ? `What is the average ${field}${by}?`
+      : group
+        ? `How many patients are there${by}?`
+        : "How many patients are in the dataset?";
+  return screenQuestion(suggestion).allowed ? suggestion : null;
 }
 
 export async function checkQuery(

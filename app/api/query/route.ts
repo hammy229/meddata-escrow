@@ -19,6 +19,7 @@ import {
   checkQuery,
   checkQuestion,
   checkResult,
+  suggestRewrite,
 } from "../../../lib/ai/privacy-guard";
 import { mockExecute } from "../../../lib/query/mock-execute";
 import { getOrder, withDb } from "../../../lib/db/client";
@@ -78,8 +79,13 @@ export async function POST(request: Request) {
   // 1. Reject the question before compiling if it asks for row-level/PII data.
   const questionVerdict = await checkQuestion(question, datasetId);
   if (!questionVerdict.allowed) {
+    const suggestion = suggestRewrite(question, questionVerdict.reasons);
     return Response.json(
-      { error: "query rejected", reasons: questionVerdict.reasons },
+      {
+        error: "query rejected",
+        reasons: questionVerdict.reasons,
+        ...(suggestion && { suggestion }),
+      },
       { status: 403 },
     );
   }

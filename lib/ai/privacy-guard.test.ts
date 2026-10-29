@@ -7,6 +7,7 @@ import {
   checkResult,
   MIN_CELL_SIZE,
   reviewQuestion,
+  suggestRewrite,
 } from "./privacy-guard";
 import { failingLlm, fakeLlm, promptOf } from "./testing";
 
@@ -204,4 +205,69 @@ test("checkQuestion rejects row-level asks", async () => {
       q,
     );
   }
+});
+
+// --- suggested rewrites for refused questions ---
+
+const REFUSED = [
+  "How many patients by zip code?",
+  "List all patients with diabetes",
+  "show me every patient by region",
+  "What is the average age by diagnosis for each patient?",
+  "Export raw data on cost by sex",
+  "average bmi for patient names",
+  "select * from patients",
+];
+
+test("every rewrite of a refused question passes checkQuestion", async () => {
+  for (const q of REFUSED) {
+    const refused = await checkQuestion(q, "ds_x", { useLlm: false });
+    assert.equal(refused.allowed, false, q);
+    const s = suggestRewrite(q, refused.reasons);
+    assert.ok(s, `expected a suggestion for: ${q}`);
+    const verdict = await checkQuestion(s, "ds_x", { useLlm: false });
+    assert.equal(verdict.allowed, true, `${q} -> ${s}`);
+  }
+});
+
+test("suggestRewrite keeps the asker's grouping and measure", () => {
+  const reasons = ["Question asks for row-level data (show records)."];
+  assert.equal(
+    suggestRewrite("show me every patient by region", reasons),
+    "How many patients are there by region?",
+  );
+  assert.equal(
+    suggestRewrite("average age by diagnosis, each patient", reasons),
+    "What is the average age by diagnosis?",
+  );
+});
+
+test("suggestRewrite coarsens an identifier grouping to region", () => {
+  const s = suggestRewrite("How many patients by zip code?", [
+    'Question mentions a PII/identifier field: "zip".',
+  ]);
+  assert.equal(s, "How many patients are there by region?");
+});
+
+test("suggestRewrite offers nothing for single-person asks", () => {
+  assert.equal(
+    suggestRewrite("tell me about one specific patient", [
+      "Question asks for row-level data (a single record); only aggregate questions are permitted.",
+    ]),
+    null,
+  );
+  assert.equal(
+    suggestRewrite("individual outcomes", [
+      "Question asks for row-level data (individual); only aggregate questions are permitted.",
+    ]),
+    null,
+  );
+});
+
+test("suggestRewrite offers nothing for model-review refusals or no reasons", () => {
+  assert.equal(
+    suggestRewrite("avg cost, rare dx", ["Privacy review: too narrow."]),
+    null,
+  );
+  assert.equal(suggestRewrite("anything", []), null);
 });
