@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "MedData Escrow API",
-    "description": "Generated from openapi/openapi.yaml (v0.2.0) by `npm run postman:gen`. Do not edit by hand.\n\nMedData Escrow lets a researcher describe a study in plain English, match it\nto vendor datasets, and buy access through an **escrow** built on PayPal\nauthorize-then-capture. Funds are held (authorized) while the data is\ndelivered, captured once the buyer accepts it, and paid out to the vendor.\nA buyer can dispute while funds are held, and an operator resolves the\ndispute toward capture or void.\n\nAfter delivery the researcher asks plain-English questions. Each question is\nscreened for identifiers, compiled to aggregate-only SQL, re-checked, run\nvendor-side, put through small-cell suppression, and billed per answer at a\nserver-set fee.\n\n**All data is synthetic** (Synthea-generated cohorts). No real patient data\nis stored or returned.\n\nThe server, not the client, decides who pays what and who sees what:\nthe escrowed amount is always the dataset's listed price, queries require a\npaid and delivered order, and the per-query fee is fixed server-side.\n\nErrors are always `{ \"error\": string }`, plus `reasons: string[]` on\nprivacy rejections.\n\nRun with `PAYPAL_MODE=mock` to drive the whole escrow arc with no PayPal\ncredentials; responses then carry `mock: true` and `MOCK-*` ids.\n\nOperations marked `x-status: preview` are documented ahead of their\nimplementation landing and may change.\n",
+    "description": "Generated from openapi/openapi.yaml (v0.3.0) by `npm run postman:gen`. Do not edit by hand.\n\nMedData Escrow lets a researcher describe a study in plain English, match it\nto vendor datasets, and buy access through an **escrow** built on PayPal\nauthorize-then-capture. Funds are held (authorized) while the data is\ndelivered, captured once the buyer accepts it, and paid out to the vendor.\nA buyer can dispute while funds are held, and an operator resolves the\ndispute toward capture or void.\n\nAfter delivery the researcher asks plain-English questions. Each question is\nscreened for identifiers, compiled to aggregate-only SQL, re-checked, run\nvendor-side, put through small-cell suppression, and billed per answer at a\nserver-set fee.\n\n**All data is synthetic** (Synthea-generated cohorts). No real patient data\nis stored or returned.\n\nThe server, not the client, decides who pays what and who sees what:\nthe escrowed amount is always the dataset's listed price, queries require a\npaid and delivered order, and the per-query fee is fixed server-side.\n\nErrors are always `{ \"error\": string }`, plus `reasons: string[]` on\nprivacy rejections.\n\nRun with `PAYPAL_MODE=mock` to drive the whole escrow arc with no PayPal\ncredentials; responses then carry `mock: true` and `MOCK-*` ids. In mock\nmode the approve link is a local page (`/checkout/mock`), and\n`POST /api/demo/reset` starts the demo over.\n",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -468,7 +468,7 @@
           "response": []
         },
         {
-          "name": "Reseed the demo database (mock mode only, preview)",
+          "name": "Reset the demo database (mock mode only)",
           "request": {
             "method": "POST",
             "header": [],
@@ -477,7 +477,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "demo", "reset"]
             },
-            "description": "**Preview:** documented ahead of its implementation; may 404 on this server.\n\nWipes orders, events, usage and agent runs and reseeds the catalog so\na live demo can start over. Returns 404 unless `PAYPAL_MODE=mock`.\n"
+            "description": "Clears orders, order events, query usage, webhook dedupe rows and agent\nruns, then reseeds the catalog (including its prices), so a live demo\ncan start over between takes. Returns 404 unless `PAYPAL_MODE=mock`.\n"
           },
           "response": []
         }
@@ -488,7 +488,7 @@
       "description": "Dataset listings and vendor pricing.",
       "item": [
         {
-          "name": "List catalog datasets with their current prices (preview)",
+          "name": "List catalog datasets with their current prices",
           "request": {
             "method": "GET",
             "header": [],
@@ -497,21 +497,35 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "datasets"]
             },
-            "description": "**Preview:** documented ahead of its implementation; may 404 on this server.\n\nReturns every listed dataset with the price stored in the database,\nwhich is the price escrow orders charge.\n"
+            "description": "Returns every listed dataset with the price stored in the database,\nwhich is the price escrow orders charge.\n"
           },
           "response": []
         },
         {
-          "name": "Change a dataset's listing price (preview)",
+          "name": "Change a dataset's listing price",
           "request": {
             "method": "PATCH",
-            "header": [],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/datasets",
               "host": ["{{baseUrl}}"],
               "path": ["api", "datasets"]
             },
-            "description": "**Preview:** documented ahead of its implementation; may 404 on this server.\n\nVendors reprice a listing. Prices must be whole cents between $1 and\n$10,000.\n"
+            "description": "Vendors reprice a listing. The price must be a whole number of cents\nbetween $1.00 (`100`) and $10,000.00 (`1000000`). The new price is what\nthe next `POST /api/orders` escrows and what `POST /api/match` shows.\nOrders that already exist keep the amount they were created with.\n\nChecks run in this order: body shape and field types (400), then the\nprice range and whole cents (422), then the dataset lookup (404).\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"datasetId\": \"{{datasetId}}\",\n  \"priceCents\": 5400\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           },
           "response": []
         }
@@ -549,7 +563,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "match"]
             },
-            "description": "Returns catalog datasets ranked by relevance to a plain-English study\ndescription, each enriched with its catalog title and listed price.\n\nWhen `LLM_PROVIDER=bedrock`, Claude on Amazon Bedrock ranks the catalog;\notherwise (or if the model call fails) a deterministic keyword matcher\ndoes. `source` says which (`llm` | `keyword`), per response and per match.\n\nThe body may instead be `{ \"sampleCheck\": datasetId, \"description\"? }` to\nrun the pre-purchase sample quality check on one dataset. The check can\nonly tighten: the model's verdict is AND-ed with deterministic rules.\n",
+            "description": "Returns catalog datasets ranked by relevance to a plain-English study\ndescription, each enriched with its catalog title, its listed price and\nits record count. The price is the one stored in the database, which is\nwhat an order charges, so a vendor's repricing shows up here at once.\n\nWhen `LLM_PROVIDER=bedrock`, Claude on Amazon Bedrock ranks the catalog;\notherwise (or if the model call fails) a deterministic keyword matcher\ndoes. `source` says which (`llm` | `keyword`), per response and per match.\n\nThe body may instead be `{ \"sampleCheck\": datasetId, \"description\"? }` to\nrun the pre-purchase sample quality check on one dataset. The check can\nonly tighten: the model's verdict is AND-ed with deterministic rules.\n",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"description\": \"Heart disease cohort with cardiology encounters\"\n}",
@@ -598,6 +612,12 @@
                   "description": "Return a single order by id."
                 },
                 {
+                  "key": "receipt",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "With `id`, return the order's receipt (any value). Money fields are 0 for a VOIDED or CANCELLED order."
+                },
+                {
                   "key": "events",
                   "value": "1",
                   "disabled": true,
@@ -629,7 +649,7 @@
                 }
               ]
             },
-            "description": "Reads orders from the DB (no PayPal). The query string picks the shape:\n\n- no `id` / `summary` → `{ orders: OrderRow[] }` (newest first),\n  optionally AND-filtered by `status`, `datasetId`, `buyerEmail`.\n- `?id=ord_..` → `{ order }`; add `&events=1` for `{ order, events }`\n  (the audit timeline, oldest first). 404 if unknown.\n- `?summary=1[&datasetId=..]` → `{ summary: OrderSummary }`, the vendor\n  earnings roll-up.\n"
+            "description": "Reads orders from the DB (no PayPal). The query string picks the shape:\n\n- no `id` / `summary` → `{ orders: OrderRow[] }` (newest first),\n  optionally AND-filtered by `status`, `datasetId`, `buyerEmail`.\n- `?id=ord_..` → `{ order, authorization }`; add `&events=1` for\n  `{ order, authorization, events }` (the audit timeline, oldest first).\n  `authorization` is the PayPal hold window while funds are held, and\n  null otherwise. 404 if unknown.\n- `?id=ord_..&receipt=1` → `{ order, receipt }`, the fee breakdown.\n- `?summary=1[&datasetId=..]` → `{ summary: OrderSummary }`, the vendor\n  earnings roll-up.\n"
           },
           "response": []
         },
@@ -662,7 +682,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "orders"]
             },
-            "description": "Creates a PayPal Orders v2 order (`intent=AUTHORIZE`) and an `orders`\nrow in state `MATCHED`. The escrowed amount is **always** the dataset's\nlisted price; an optional `amount` (major units) is only a confirmation,\nand a mismatch is 422. In mock mode no PayPal call is made, but the row\nis still persisted with a `MOCK-ORDER-*` id.\n",
+            "description": "Creates a PayPal Orders v2 order (`intent=AUTHORIZE`) and an `orders`\nrow in state `MATCHED`. The escrowed amount is **always** the dataset's\nlisted price; an optional `amount` (major units) is only a confirmation,\nand a mismatch is 422. In mock mode no PayPal call is made, but the row\nis still persisted with a `MOCK-ORDER-*` id.\n\nIf the same buyer already has an unapproved (`MATCHED`) order for this\ndataset at the current price, that order is returned instead of a new\none, with `reused: true` and status 200. An order left at an old price\n(the vendor repriced since) is not reused. In mock mode the approve link\nis the relative path `/checkout/mock?token=..&orderId=..`.\n",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"datasetId\": \"{{datasetId}}\",\n  \"amount\": 49,\n  \"buyerEmail\": \"researcher@example.edu\"\n}",
@@ -703,7 +723,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "orders"]
             },
-            "description": "Actions map to escrow events: `authorize` (MATCHED → AUTHORIZED),\n`deliver` (AUTHORIZED → DELIVERED), `capture` (DELIVERED → CAPTURED),\n`payout` (CAPTURED → PAID_OUT), `void` (AUTHORIZED → VOIDED),\n`dispute` (AUTHORIZED/DELIVERED → DISPUTED), and `resolve` with\n`resolution: capture | void` (DISPUTED → CAPTURED | VOIDED).\n\nThe stored row is the source of truth for the current state and PayPal\nids. The transition is validated **before** any PayPal call, so an\nillegal move never charges anyone and never writes (409).\n",
+            "description": "Actions map to escrow events: `authorize` (MATCHED → AUTHORIZED),\n`deliver` (AUTHORIZED → DELIVERED), `capture` (DELIVERED → CAPTURED),\n`payout` (CAPTURED → PAID_OUT), `void` (AUTHORIZED → VOIDED),\n`dispute` (AUTHORIZED/DELIVERED → DISPUTED), `cancel` (MATCHED →\nCANCELLED, the buyer backing out before approving; no PayPal call, since\nnothing was held), and `resolve` with `resolution: capture | void`\n(DISPUTED → CAPTURED | VOIDED).\n\nThe stored row is the source of truth for the current state and PayPal\nids. The transition is validated **before** any PayPal call, so an\nillegal move never charges anyone and never writes (409).\n",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"orderId\": \"{{newOrderId}}\",\n  \"action\": \"authorize\"\n}",

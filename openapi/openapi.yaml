@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MedData Escrow API
-  version: 0.2.0
+  version: 0.3.0
   summary: Escrowed marketplace for synthetic medical datasets, settled with PayPal.
   description: |
     MedData Escrow lets a researcher describe a study in plain English, match it
@@ -27,10 +27,9 @@ info:
     privacy rejections.
 
     Run with `PAYPAL_MODE=mock` to drive the whole escrow arc with no PayPal
-    credentials; responses then carry `mock: true` and `MOCK-*` ids.
-
-    Operations marked `x-status: preview` are documented ahead of their
-    implementation landing and may change.
+    credentials; responses then carry `mock: true` and `MOCK-*` ids. In mock
+    mode the approve link is a local page (`/checkout/mock`), and
+    `POST /api/demo/reset` starts the demo over.
   license:
     name: MIT
     identifier: MIT
@@ -114,7 +113,7 @@ paths:
                 spec:
                   value:
                     openapi: 3.1.0
-                    info: { title: MedData Escrow API, version: 0.2.0 }
+                    info: { title: MedData Escrow API, version: 0.3.0 }
             application/yaml:
               schema:
                 type: string
@@ -126,7 +125,9 @@ paths:
       summary: Rank datasets for a study description
       description: |
         Returns catalog datasets ranked by relevance to a plain-English study
-        description, each enriched with its catalog title and listed price.
+        description, each enriched with its catalog title, its listed price and
+        its record count. The price is the one stored in the database, which is
+        what an order charges, so a vendor's repricing shows up here at once.
 
         When `LLM_PROVIDER=bedrock`, Claude on Amazon Bedrock ranks the catalog;
         otherwise (or if the model call fails) a deterministic keyword matcher
@@ -170,11 +171,13 @@ paths:
                         rationale: "Matched on: cardiology, cohort"
                         title: Synthetic Cardiology Cohort (Synthea)
                         priceCents: 4900
+                        recordCount: 10000
                       - datasetId: ds_diabetes_synthea_v1
                         score: 1
                         rationale: "Matched on: cohort"
                         title: Synthetic Type 2 Diabetes Cohort (Synthea)
                         priceCents: 5900
+                        recordCount: 8000
                     source: keyword
                 sampleCheck:
                   summary: Sample check verdict
@@ -201,8 +204,11 @@ paths:
 
         - no `id` / `summary` → `{ orders: OrderRow[] }` (newest first),
           optionally AND-filtered by `status`, `datasetId`, `buyerEmail`.
-        - `?id=ord_..` → `{ order }`; add `&events=1` for `{ order, events }`
-          (the audit timeline, oldest first). 404 if unknown.
+        - `?id=ord_..` → `{ order, authorization }`; add `&events=1` for
+          `{ order, authorization, events }` (the audit timeline, oldest first).
+          `authorization` is the PayPal hold window while funds are held, and
+          null otherwise. 404 if unknown.
+        - `?id=ord_..&receipt=1` → `{ order, receipt }`, the fee breakdown.
         - `?summary=1[&datasetId=..]` → `{ summary: OrderSummary }`, the vendor
           earnings roll-up.
       parameters:
@@ -214,6 +220,10 @@ paths:
               type: string,
               examples: [ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f],
             }
+        - name: receipt
+          in: query
+          description: With `id`, return the order's receipt (any value). Money fields are 0 for a VOIDED or CANCELLED order.
+          schema: { type: string, examples: ["1"] }
         - name: events
           in: query
           description: With `id`, also return the order's audit events (any value).
@@ -245,6 +255,7 @@ paths:
                   - $ref: "#/components/schemas/OrderListResponse"
                   - $ref: "#/components/schemas/OrderDetailResponse"
                   - $ref: "#/components/schemas/OrderSummaryResponse"
+                  - $ref: "#/components/schemas/OrderReceiptResponse"
               examples:
                 list:
                   value:
@@ -270,6 +281,12 @@ paths:
                       amount_cents: 4900
                       created_at: "2026-10-21 17:02:11"
                       updated_at: "2026-10-21 17:03:40"
+                    authorization:
+                      authorizedAt: "2026-10-21T17:02:30.000Z"
+                      honorUntil: "2026-10-24T17:02:30.000Z"
+                      expiresAt: "2026-11-19T17:02:30.000Z"
+                      state: valid
+                      daysLeft: 21
                     events:
                       - id: evt_0c6d6f7e-1a2b-4c3d-8e9f-001122334455
                         order_id: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
@@ -303,6 +320,29 @@ paths:
                       capturedCents: 10800
                       paidOutCents: 10800
                       releasedCents: 4900
+                receipt:
+                  summary: Receipt for a delivered order with two query charges
+                  value:
+                    order:
+                      id: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                      dataset_id: ds_cardio_synthea_v1
+                      buyer_email: demo-buyer@meddata.test
+                      paypal_order_id: MOCK-ORDER-a1b2c3d4
+                      authorization_id: MOCK-AUTH-e5f6a7b8
+                      status: DELIVERED
+                      amount_cents: 4900
+                      created_at: "2026-10-21 17:02:11"
+                      updated_at: "2026-10-21 17:03:40"
+                    receipt:
+                      orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                      datasetId: ds_cardio_synthea_v1
+                      status: DELIVERED
+                      amountCents: 4900
+                      platformFeeCents: 490
+                      vendorPayoutCents: 4410
+                      queryCount: 2
+                      queryChargesCents: 100
+                      totalCents: 5000
         "404":
           $ref: "#/components/responses/NotFound"
         "422":
@@ -326,6 +366,12 @@ paths:
         listed price; an optional `amount` (major units) is only a confirmation,
         and a mismatch is 422. In mock mode no PayPal call is made, but the row
         is still persisted with a `MOCK-ORDER-*` id.
+
+        If the same buyer already has an unapproved (`MATCHED`) order for this
+        dataset at the current price, that order is returned instead of a new
+        one, with `reused: true` and status 200. An order left at an old price
+        (the vendor repriced since) is not reused. In mock mode the approve link
+        is the relative path `/checkout/mock?token=..&orderId=..`.
       requestBody:
         required: true
         content:
@@ -339,6 +385,22 @@ paths:
                   amount: 49
                   buyerEmail: researcher@example.edu
       responses:
+        "200":
+          description: "An existing unapproved order for this buyer and dataset was returned (`reused: true`); no PayPal call was made."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateOrderResponse"
+              examples:
+                reused:
+                  value:
+                    orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                    paypalOrderId: MOCK-ORDER-a1b2c3d4
+                    status: CREATED
+                    approveUrl: /checkout/mock?token=MOCK-ORDER-a1b2c3d4&orderId=ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                    escrowState: MATCHED
+                    reused: true
+                    mock: true
         "201":
           description: Order created; escrow state `MATCHED`.
           content:
@@ -351,7 +413,7 @@ paths:
                     orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
                     paypalOrderId: MOCK-ORDER-a1b2c3d4
                     status: CREATED
-                    approveUrl: https://sandbox.paypal.com/checkoutnow?token=MOCK-ORDER-a1b2c3d4
+                    approveUrl: /checkout/mock?token=MOCK-ORDER-a1b2c3d4&orderId=ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
                     escrowState: MATCHED
                     mock: true
         "422":
@@ -379,8 +441,10 @@ paths:
         Actions map to escrow events: `authorize` (MATCHED → AUTHORIZED),
         `deliver` (AUTHORIZED → DELIVERED), `capture` (DELIVERED → CAPTURED),
         `payout` (CAPTURED → PAID_OUT), `void` (AUTHORIZED → VOIDED),
-        `dispute` (AUTHORIZED/DELIVERED → DISPUTED), and `resolve` with
-        `resolution: capture | void` (DISPUTED → CAPTURED | VOIDED).
+        `dispute` (AUTHORIZED/DELIVERED → DISPUTED), `cancel` (MATCHED →
+        CANCELLED, the buyer backing out before approving; no PayPal call, since
+        nothing was held), and `resolve` with `resolution: capture | void`
+        (DISPUTED → CAPTURED | VOIDED).
 
         The stored row is the source of truth for the current state and PayPal
         ids. The transition is validated **before** any PayPal call, so an
@@ -403,6 +467,11 @@ paths:
                   orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
                   action: dispute
                   note: Delivered file is missing the medications table
+              cancel:
+                summary: Buyer backs out before approving in PayPal
+                value:
+                  orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                  action: cancel
               resolve:
                 value:
                   orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
@@ -453,6 +522,11 @@ paths:
                     }
                 noAuthorization:
                   value: { error: order has no authorization to capture }
+                cancelAfterApproval:
+                  value:
+                    {
+                      error: "Invalid escrow transition: CANCEL not allowed from AUTHORIZED",
+                    }
         "422":
           description: Unknown `action`, missing `orderId`, or `resolve` without a valid `resolution`.
           content:
@@ -462,7 +536,7 @@ paths:
               examples:
                 badAction:
                   value:
-                    error: "action must be one of: authorize, deliver, capture, payout, void, dispute, resolve"
+                    error: "action must be one of: authorize, deliver, capture, payout, void, dispute, cancel, resolve"
         "500":
           $ref: "#/components/responses/InternalError"
         "501":
@@ -520,11 +594,12 @@ paths:
                     result:
                       - { group: female, avg_age: 77 }
                       - { group: male, avg_age: 60 }
+                    summary: The average age by sex ranges from 60 (male) to 77 (female).
                     usage:
                       usageId: qu_5b6c7d8e-9f01-4a2b-8c3d-4e5f60718293
                       chargeCents: 50
         "403":
-          description: Order does not grant data access, or the question/SQL/result was rejected by the privacy guard (`reasons` explains why).
+          description: Order does not grant data access, or the question/SQL/result was rejected by the privacy guard (`reasons` explains why). When a safe aggregate rephrasing exists, `suggestion` carries it.
           content:
             application/json:
               schema:
@@ -536,6 +611,13 @@ paths:
                     reasons:
                       - 'Question mentions a PII/identifier field: "name".'
                       - 'Question mentions a PII/identifier field: "ssn".'
+                withSuggestion:
+                  summary: Refused question with a safe rewrite
+                  value:
+                    error: query rejected
+                    reasons:
+                      - 'Question mentions a PII/identifier field: "zip".'
+                    suggestion: How many patients are there by region?
                 noAccess:
                   value:
                     {
@@ -707,6 +789,15 @@ paths:
                     recommendation:
                       datasetId: ds_cardio_synthea_v1
                       reasoning: Best match within budget; sample check passed
+                    shortlist:
+                      - datasetId: ds_cardio_synthea_v1
+                        title: Synthetic Cardiology Cohort (Synthea)
+                        priceCents: 4900
+                        fitScore: 2
+                        sampleCheck: passed
+                        withinBudget: true
+                        reason: "Chosen, the best fit that cleared every check."
+                        chosen: true
                     createdAt: "2026-10-21 18:02:12"
         "404":
           $ref: "#/components/responses/NotFound"
@@ -744,7 +835,7 @@ paths:
                   buyerEmail: researcher@university.edu
       responses:
         "200":
-          description: Agent run trace and recommendation.
+          description: Agent run trace, recommendation and the ranked shortlist.
           content:
             application/json:
               schema:
@@ -774,10 +865,27 @@ paths:
                     recommendation:
                       datasetId: ds_cardio_synthea_v1
                       reasoning: Best match within budget; sample check passed
+                    shortlist:
+                      - datasetId: ds_cardio_synthea_v1
+                        title: Synthetic Cardiology Cohort (Synthea)
+                        priceCents: 4900
+                        fitScore: 2
+                        sampleCheck: passed
+                        withinBudget: true
+                        reason: "Chosen, the best fit that cleared every check."
+                        chosen: true
+                      - datasetId: ds_diabetes_synthea_v1
+                        title: Synthetic Type 2 Diabetes Cohort (Synthea)
+                        priceCents: 5900
+                        fitScore: 1
+                        sampleCheck: not_run
+                        withinBudget: true
+                        reason: "Matched on: cohort"
+                        chosen: false
                     order:
                       orderId: ord_3f9c2a1e
                       datasetId: ds_cardio_synthea_v1
-                      approveUrl: https://www.sandbox.paypal.com/checkoutnow?token=5O190127TN364715T
+                      approveUrl: /checkout/mock?token=MOCK-ORDER-a1b2c3d4&orderId=ord_3f9c2a1e
                       escrowState: MATCHED
                       amountCents: 4900
                     source: scripted
@@ -796,8 +904,7 @@ paths:
     get:
       tags: [Catalog]
       operationId: listDatasets
-      x-status: preview
-      summary: List catalog datasets with their current prices (preview)
+      summary: List catalog datasets with their current prices
       description: |
         Returns every listed dataset with the price stored in the database,
         which is the price escrow orders charge.
@@ -812,17 +919,32 @@ paths:
                 properties:
                   datasets:
                     type: array
-                    items: { type: object }
+                    items: { $ref: "#/components/schemas/Dataset" }
+              examples:
+                catalog:
+                  value:
+                    datasets:
+                      - id: ds_cardio_synthea_v1
+                        vendorId: vnd_demo_health
+                        title: Synthetic Cardiology Cohort (Synthea)
+                        description: Synthetic patients with cardiovascular conditions.
+                        priceCents: 4900
+                        recordCount: 10000
+                        tags: [cardiology, synthetic, synthea]
         "500":
           $ref: "#/components/responses/InternalError"
     patch:
       tags: [Catalog]
       operationId: updateDatasetPrice
-      x-status: preview
-      summary: Change a dataset's listing price (preview)
+      summary: Change a dataset's listing price
       description: |
-        Vendors reprice a listing. Prices must be whole cents between $1 and
-        $10,000.
+        Vendors reprice a listing. The price must be a whole number of cents
+        between $1.00 (`100`) and $10,000.00 (`1000000`). The new price is what
+        the next `POST /api/orders` escrows and what `POST /api/match` shows.
+        Orders that already exist keep the amount they were created with.
+
+        Checks run in this order: body shape and field types (400), then the
+        price range and whole cents (422), then the dataset lookup (404).
       requestBody:
         required: true
         content:
@@ -832,7 +954,14 @@ paths:
               required: [datasetId, priceCents]
               properties:
                 datasetId: { type: string, minLength: 1 }
-                priceCents: { type: integer, minimum: 100, maximum: 1000000 }
+                priceCents:
+                  type: integer
+                  minimum: 100
+                  maximum: 1000000
+                  description: Whole cents, `100` to `1000000`.
+            examples:
+              reprice:
+                value: { datasetId: ds_cardio_synthea_v1, priceCents: 5400 }
       responses:
         "200":
           description: The updated dataset.
@@ -842,13 +971,46 @@ paths:
                 type: object
                 required: [dataset]
                 properties:
-                  dataset: { type: object }
+                  dataset: { $ref: "#/components/schemas/Dataset" }
+              examples:
+                repriced:
+                  value:
+                    dataset:
+                      id: ds_cardio_synthea_v1
+                      vendorId: vnd_demo_health
+                      title: Synthetic Cardiology Cohort (Synthea)
+                      description: Synthetic patients with cardiovascular conditions.
+                      priceCents: 5400
+                      recordCount: 10000
+                      tags: [cardiology, synthetic, synthea]
         "400":
-          $ref: "#/components/responses/ValidationError"
+          description: The body is not a JSON object, `datasetId` is not a non-empty string, or `priceCents` is not a number.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                notNumber:
+                  value: { error: "priceCents (number) is required" }
         "404":
-          $ref: "#/components/responses/NotFound"
+          description: No dataset has that id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                unknownDataset:
+                  value: { error: "unknown dataset: ds_nope" }
         "422":
-          $ref: "#/components/responses/ValidationError"
+          description: "`priceCents` is not a whole number of cents, or is outside $1.00 to $10,000.00."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                outOfRange:
+                  value:
+                    error: "priceCents must be between 100 ($1.00) and 1000000 ($10,000.00)"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -856,14 +1018,14 @@ paths:
     post:
       tags: [System]
       operationId: resetDemo
-      x-status: preview
-      summary: Reseed the demo database (mock mode only, preview)
+      summary: Reset the demo database (mock mode only)
       description: |
-        Wipes orders, events, usage and agent runs and reseeds the catalog so
-        a live demo can start over. Returns 404 unless `PAYPAL_MODE=mock`.
+        Clears orders, order events, query usage, webhook dedupe rows and agent
+        runs, then reseeds the catalog (including its prices), so a live demo
+        can start over between takes. Returns 404 unless `PAYPAL_MODE=mock`.
       responses:
         "200":
-          description: Database reseeded.
+          description: Demo data cleared and the catalog reseeded.
           content:
             application/json:
               schema:
@@ -871,12 +1033,18 @@ paths:
                 required: [ok]
                 properties:
                   ok: { type: boolean }
+              examples:
+                reset:
+                  value: { ok: true }
         "404":
           description: Not available outside mock mode.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+              examples:
+                notMock:
+                  value: { error: "not found" }
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1139,15 +1307,37 @@ components:
           }
         description:
           { type: string, description: Optional study description for context. }
+    Dataset:
+      type: object
+      description: A catalog listing. `priceCents` is the database price, the amount escrow orders charge.
+      required:
+        [id, vendorId, title, description, priceCents, recordCount, tags]
+      properties:
+        id: { type: string }
+        vendorId: { type: string }
+        title: { type: string }
+        description: { type: [string, "null"] }
+        priceCents:
+          type: integer
+          description: Listed price in cents (the amount POST /api/orders escrows).
+        recordCount:
+          type: [integer, "null"]
+          description: Records in the dataset; null if not listed.
+        tags: { type: array, items: { type: string } }
     DatasetMatch:
       type: object
-      required: [datasetId, score, rationale, title, priceCents]
+      required: [datasetId, score, rationale, title, priceCents, recordCount]
       properties:
         datasetId: { type: string }
         score: { type: number }
         rationale: { type: string }
         title: { type: [string, "null"] }
-        priceCents: { type: [integer, "null"] }
+        priceCents:
+          type: [integer, "null"]
+          description: The database price (what an order charges).
+        recordCount:
+          type: [integer, "null"]
+          description: Records in the dataset, from the catalog; null if not listed.
         source: { type: string, enum: [llm, keyword] }
     MatchResponse:
       type: object
@@ -1183,13 +1373,82 @@ components:
           items: { $ref: "#/components/schemas/OrderRow" }
     OrderDetailResponse:
       type: object
-      required: [order]
+      required: [order, authorization]
       properties:
         order: { $ref: "#/components/schemas/OrderRow" }
+        authorization:
+          description: The PayPal hold window while funds are held (AUTHORIZED, DELIVERED, DISPUTED); null otherwise.
+          oneOf:
+            - $ref: "#/components/schemas/AuthorizationWindow"
+            - type: "null"
         events:
           type: array
           description: Present when `events` is passed; oldest first.
           items: { $ref: "#/components/schemas/OrderEventRow" }
+    AuthorizationWindow:
+      type: object
+      description: How long a PayPal authorization (the buyer's held funds) can still be captured. Measured from the AUTHORIZE event. Honored for 3 days, valid for up to 29.
+      required: [authorizedAt, honorUntil, expiresAt, state, daysLeft]
+      properties:
+        authorizedAt: { type: string, format: date-time }
+        honorUntil:
+          type: string
+          format: date-time
+          description: End of the 3-day honor period. PayPal guarantees the funds until then.
+        expiresAt:
+          type: string
+          format: date-time
+          description: End of the 29-day validity period. After this the hold must be reauthorized.
+        state:
+          type: string
+          enum: [honor, valid, expired]
+          description: Where `now` falls in the window.
+        daysLeft:
+          type: integer
+          minimum: 0
+          description: Whole days left until `expiresAt`, rounded up; 0 once expired.
+    OrderReceiptResponse:
+      type: object
+      required: [order, receipt]
+      properties:
+        order: { $ref: "#/components/schemas/OrderRow" }
+        receipt: { $ref: "#/components/schemas/Receipt" }
+    Receipt:
+      type: object
+      description: What the buyer paid and how it splits between vendor and platform. `platformFeeCents + vendorPayoutCents = amountCents`. VOIDED and CANCELLED orders are all zeros for money.
+      required:
+        [
+          orderId,
+          datasetId,
+          status,
+          amountCents,
+          platformFeeCents,
+          vendorPayoutCents,
+          queryCount,
+          queryChargesCents,
+          totalCents,
+        ]
+      properties:
+        orderId: { type: string }
+        datasetId: { type: string }
+        status: { $ref: "#/components/schemas/EscrowState" }
+        amountCents:
+          type: integer
+          description: The escrowed price (the captured amount once captured). 0 for VOIDED or CANCELLED.
+        platformFeeCents:
+          { type: integer, description: Platform share of amountCents (10%). }
+        vendorPayoutCents:
+          { type: integer, description: amountCents minus platformFeeCents. }
+        queryCount:
+          type: integer
+          description: Queries run against the order, including any on a voided order.
+        queryChargesCents:
+          {
+            type: integer,
+            description: Sum of the per-query charges. 0 for VOIDED or CANCELLED.,
+          }
+        totalCents:
+          { type: integer, description: amountCents + queryChargesCents. }
     OrderSummaryResponse:
       type: object
       required: [summary]
@@ -1224,8 +1483,15 @@ components:
         paypalOrderId: { type: string }
         status:
           { type: string, description: PayPal order status (e.g. CREATED). }
-        approveUrl: { type: string, format: uri }
+        approveUrl:
+          type: string
+          format: uri-reference
+          description: PayPal's approval link, or the relative `/checkout/mock` page in mock mode.
         escrowState: { $ref: "#/components/schemas/EscrowState" }
+        reused:
+          type: boolean
+          const: true
+          description: Present (true) when an existing unapproved order was returned instead of a new one.
         mock: { type: boolean, description: Present (true) in mock mode. }
     AdvanceOrderRequest:
       type: object
@@ -1234,7 +1500,17 @@ components:
         orderId: { type: string }
         action:
           type: string
-          enum: [authorize, deliver, capture, payout, void, dispute, resolve]
+          enum:
+            [
+              authorize,
+              deliver,
+              capture,
+              payout,
+              void,
+              dispute,
+              cancel,
+              resolve,
+            ]
         resolution:
           type: string
           enum: [capture, void]
@@ -1283,7 +1559,7 @@ components:
         question: { type: string, minLength: 1, maxLength: 500 }
     QueryResponse:
       type: object
-      required: [datasetId, question, compiled, result, usage]
+      required: [datasetId, question, compiled, result, summary, usage]
       properties:
         datasetId: { type: string }
         question: { type: string }
@@ -1295,6 +1571,9 @@ components:
             type: object
             additionalProperties:
               type: [string, number]
+        summary:
+          type: string
+          description: One plain sentence describing the result. It never quotes a cell below the small-cell threshold. Claude may reword it; a number guard falls back to the rule-based wording if the model adds a figure the rows do not contain.
         usage:
           type: object
           required: [usageId, chargeCents]
@@ -1362,7 +1641,7 @@ components:
         at: { type: string, format: date-time }
     AgentResponse:
       type: object
-      required: [runId, steps, recommendation, source]
+      required: [runId, steps, recommendation, shortlist, source]
       properties:
         runId: { type: string }
         steps:
@@ -1377,6 +1656,10 @@ components:
               type: [string, "null"]
               description: The dataset ordered, or null if nothing was bought.
             reasoning: { type: string }
+        shortlist:
+          type: array
+          description: Candidates the run considered, best first. The chosen dataset (if any) is ranked first.
+          items: { $ref: "#/components/schemas/ShortlistItem" }
         order:
           type: object
           description: Present when the agent opened an escrow order.
@@ -1384,10 +1667,45 @@ components:
           properties:
             orderId: { type: string }
             datasetId: { type: string }
-            approveUrl: { type: string, format: uri }
+            approveUrl:
+              type: string
+              format: uri-reference
+              description: Absolute PayPal link, or a relative `/checkout/mock` link in mock mode.
             escrowState: { $ref: "#/components/schemas/EscrowState" }
             amountCents: { type: integer }
         source: { type: string, enum: [llm, scripted] }
+    ShortlistItem:
+      type: object
+      description: One candidate in an agent run's shortlist. Derived from the run's recorded steps, so older runs get one too.
+      required:
+        [
+          datasetId,
+          title,
+          priceCents,
+          fitScore,
+          sampleCheck,
+          withinBudget,
+          reason,
+          chosen,
+        ]
+      properties:
+        datasetId: { type: string }
+        title: { type: [string, "null"] }
+        priceCents: { type: [integer, "null"] }
+        fitScore:
+          type: [number, "null"]
+          description: Relevance score from the search step; null if the dataset was never searched.
+        sampleCheck: { type: string, enum: [passed, failed, not_run] }
+        withinBudget:
+          type: [boolean, "null"]
+          description: Whether the price fits `budgetCents`; null when the price is unknown.
+        reason:
+          type: string
+          maxLength: 140
+          description: One short sentence on why the candidate ranks where it does.
+        chosen:
+          type: boolean
+          description: True for the dataset the run recommended or opened an order for.
     AgentRun:
       type: object
       description: A persisted agent run (agent_runs audit table).
@@ -1400,6 +1718,7 @@ components:
           orderId,
           steps,
           recommendation,
+          shortlist,
           createdAt,
         ]
       properties:
@@ -1419,6 +1738,10 @@ components:
           properties:
             datasetId: { type: [string, "null"] }
             reasoning: { type: string }
+        shortlist:
+          type: array
+          description: Ranked candidates, best first (rebuilt from the stored steps).
+          items: { $ref: "#/components/schemas/ShortlistItem" }
         createdAt:
           type: string
           description: SQLite CURRENT_TIMESTAMP (UTC, "YYYY-MM-DD HH:MM:SS").
