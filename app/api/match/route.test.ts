@@ -1,10 +1,34 @@
 // /api/match spec — runs with no network: matchDatasets and the catalog are
 // both local. Calls the exported POST with a Web Request, mirroring the
 // orders route test style.
-import { test } from "node:test";
+import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { rmSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 
 import { POST } from "./route";
+import { openDb } from "../../../lib/db/client";
+import { seedDatabase } from "../../../lib/db/seed";
+
+// Prices come from the database, so point the route at a seeded temp file
+// (never the dev DB) for the whole file.
+const dbPath = join(tmpdir(), `meddata-match-${randomUUID()}.sqlite`);
+const savedUrl = process.env.DATABASE_URL;
+
+before(() => {
+  process.env.DATABASE_URL = `file:${dbPath}`;
+  const db = openDb();
+  seedDatabase(db);
+  db.close();
+});
+
+after(() => {
+  if (savedUrl === undefined) delete process.env.DATABASE_URL;
+  else process.env.DATABASE_URL = savedUrl;
+  rmSync(dbPath, { force: true });
+});
 
 function req(body: unknown) {
   return new Request("http://localhost/api/match", {
@@ -67,4 +91,20 @@ test("empty description -> 422 with { error }", async () => {
   assert.equal(res.status, 422);
   const json = await res.json();
   assert.equal(typeof json.error, "string");
+});
+
+test("matches report the database price, not the catalog.json price", async () => {
+  const db = openDb();
+  db.prepare(`UPDATE datasets SET price_cents = ? WHERE id = ?`).run(
+    12345,
+    "ds_cardio_synthea_v1",
+  );
+  db.close();
+
+  const res = await POST(req({ description: "cardiology cardiovascular" }));
+  const { matches } = await res.json();
+  const cardio = matches.find(
+    (m: { datasetId: string }) => m.datasetId === "ds_cardio_synthea_v1",
+  );
+  assert.equal(cardio.priceCents, 12345);
 });

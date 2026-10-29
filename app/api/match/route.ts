@@ -1,7 +1,9 @@
 // POST /api/match  { description }
 // Takes a plain-English study description and returns candidate vendor
 // datasets ranked by relevance (lib/ai/matcher), each enriched with its
-// catalog title and price so the researcher UI can show a buyable list.
+// catalog title and price so the researcher UI can show a buyable list. The
+// price is the one stored in the database (what POST /api/orders charges, and
+// what a vendor may have changed); catalog.json is only the fallback.
 // Response: { matches, source } where source is "llm" when Claude on Bedrock
 // ranked the catalog and "keyword" when the deterministic fallback did.
 //
@@ -13,6 +15,8 @@
 // step after picking a match, and keeps the AI endpoints in one route.
 import { readFileSync } from "node:fs";
 
+import { withDb } from "../../../lib/db/client";
+import { priceMap } from "../../../lib/db/datasets";
 import { matchDatasets } from "../../../lib/ai/matcher";
 import { checkSample } from "../../../lib/ai/sample-check";
 
@@ -29,6 +33,17 @@ function loadCatalog(): Map<string, CatalogEntry> {
     readFileSync(CATALOG_URL, "utf8"),
   ) as CatalogEntry[];
   return new Map(entries.map((e) => [e.id, e]));
+}
+
+// Database prices by dataset id. An unreadable or unseeded database just means
+// the catalog.json prices are shown, as before.
+function loadPrices(): Map<string, number> {
+  try {
+    return withDb((db) => priceMap(db));
+  } catch (err) {
+    console.error("match route: could not read dataset prices:", err);
+    return new Map();
+  }
 }
 
 // Same error shape as /api/orders: { error }.
@@ -64,12 +79,13 @@ export async function POST(request: Request) {
 
   const ranked = await matchDatasets(description);
   const source = ranked.some((m) => m.source === "llm") ? "llm" : "keyword";
+  const prices = loadPrices();
   const matches = ranked.map((m) => {
     const entry = catalog.get(m.datasetId);
     return {
       ...m,
       title: entry?.title ?? null,
-      priceCents: entry?.priceCents ?? null,
+      priceCents: prices.get(m.datasetId) ?? entry?.priceCents ?? null,
     };
   });
 
