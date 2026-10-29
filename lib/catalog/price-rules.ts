@@ -22,3 +22,14 @@ export function checkPriceCents(value: unknown): PriceCheck {
   }
   return { ok: true, priceCents: value };
 }
+
+/**
+ * Dollars typed in the catalog grid -> cents to send. Rounds away float noise
+ * (19.99 * 100 = 1998.9999999999998) but leaves a genuine fraction of a cent
+ * as a non-integer, so the API rejects it instead of silently rounding.
+ */
+export function dollarsToCents(dollars: number): number {
+  const cents = dollars * 100;
+  const rounded = Math.round(cents);
+  return Math.abs(cents - rounded) < 1e-6 ? rounded : cents;
+}

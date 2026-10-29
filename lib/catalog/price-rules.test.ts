@@ -5,6 +5,7 @@ import {
   MAX_PRICE_CENTS,
   MIN_PRICE_CENTS,
   checkPriceCents,
+  dollarsToCents,
 } from "./price-rules";
 
 test("accepts whole cents inside the range, boundaries included", () => {
@@ -25,4 +26,12 @@ test("rejects fractional cents and non-numbers", () => {
     assert.equal(r.ok, false, String(v));
     if (!r.ok) assert.equal(typeof r.error, "string");
   }
+});
+
+test("dollarsToCents rounds float noise but keeps fractions of a cent", () => {
+  assert.equal(dollarsToCents(19.99), 1999);
+  assert.equal(dollarsToCents(49), 4900);
+  assert.equal(dollarsToCents(0.07), 7);
+  assert.ok(!Number.isInteger(dollarsToCents(49.999)));
+  assert.equal(checkPriceCents(dollarsToCents(49.999)).ok, false);
 });

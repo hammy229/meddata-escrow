@@ -1,39 +1,15 @@
-// Vendor workspace (server component). Reads the local catalog and lists the
-// datasets a vendor has for sale: title, tags, record count, and price. The
-// catalog is read server-side; the grid renders on the client.
+// Vendor workspace (server component shell). The listings load client-side
+// from GET /api/datasets so a repriced listing shows its stored price; the
+// grids and live panels below are client components.
 import Link from "next/link";
 import SiteNav from "../components/SiteNav";
-import VendorCatalog, { type CatalogRow } from "../components/VendorCatalog";
+import VendorCatalog from "../components/VendorCatalog";
 import IncomingOrders from "../components/IncomingOrders";
 import EarningsSummary from "../components/EarningsSummary";
 import OrdersLedger from "../components/OrdersLedger";
 import { ArrowLeft } from "../components/icons";
 
-interface CatalogEntry {
-  id: string;
-  title: string;
-  tags: string[];
-  priceCents: number;
-  recordCount: number;
-}
-
-// Static catalog metadata (synthetic listings) — safe to read at build time.
-import catalog from "../../data/catalog.json";
-
 export default function VendorPage() {
-  const rows: CatalogRow[] = (catalog as CatalogEntry[]).map((d) => ({
-    id: d.id,
-    title: d.title,
-    tags: d.tags ?? [],
-    priceCents: d.priceCents,
-    recordCount: d.recordCount,
-  }));
-
-  const totalRecords = rows.reduce((sum, r) => sum + (r.recordCount || 0), 0);
-  const avgPriceCents = rows.length
-    ? Math.round(rows.reduce((s, r) => s + r.priceCents, 0) / rows.length)
-    : 0;
-
   return (
     <>
       <SiteNav current="/vendor" />
@@ -55,37 +31,7 @@ export default function VendorPage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 border-t border-rule pb-6 sm:grid-cols-3">
-          <div className="py-5 pr-6 not-first:border-l not-first:border-rule not-first:pl-6">
-            <p className="font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase">
-              Listings
-            </p>
-            <p className="mt-2 font-serif text-4xl font-light tabular-nums">
-              {rows.length}
-            </p>
-          </div>
-          <div className="py-5 pr-6 not-first:border-l not-first:border-rule not-first:pl-6">
-            <p className="font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase">
-              Total records
-            </p>
-            <p className="mt-2 font-serif text-4xl font-light tabular-nums">
-              {totalRecords.toLocaleString()}
-            </p>
-          </div>
-          <div className="col-span-2 border-t border-rule py-5 sm:col-span-1 sm:border-t-0 sm:border-l sm:pl-6">
-            <p className="font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase">
-              Average price
-            </p>
-            <p className="mt-2 font-serif text-4xl font-light tabular-nums text-pp-600 dark:text-pp-400">
-              ${(avgPriceCents / 100).toFixed(2)}
-            </p>
-          </div>
-        </div>
-
-        <section className="border-t border-rule pt-8 pb-10">
-          <h2 className="mb-6 font-serif text-[1.6rem] font-normal">Catalog</h2>
-          <VendorCatalog rows={rows} />
-        </section>
+        <VendorCatalog />
 
         <section className="border-t border-rule pt-8 pb-10">
           <h2 className="mb-1 font-serif text-[1.6rem] font-normal">
