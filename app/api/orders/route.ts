@@ -8,7 +8,9 @@
 //            listed price (datasets.price_cents), never a client figure: an
 //            optional `amount` (major units) is only a confirmation, and a
 //            mismatch is 422 so a tampered request can't escrow $0.01 for a
-//            $49 dataset.
+//            $49 dataset. If the same buyer already has a MATCHED (not yet
+//            approved) order for the dataset, that order is returned with
+//            `reused: true` and HTTP 200 instead of 201 — no duplicate.
 //   PATCH { orderId, action, resolution?, requestId?, note? }
 //         action: authorize | deliver | capture | payout | void | dispute
 //                 | cancel | resolve  (resolve needs resolution: "capture" |
@@ -120,7 +122,8 @@ export async function POST(request: Request) {
       currency: body?.currency,
       referenceId: body?.referenceId,
     });
-    return Response.json(result, { status: 201 });
+    // 200 when an existing unapproved order is returned (`reused: true`).
+    return Response.json(result, { status: result.reused ? 200 : 201 });
   } catch (err) {
     return errorResponse(err);
   }

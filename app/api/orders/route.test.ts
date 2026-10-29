@@ -619,6 +619,54 @@ test(
   }),
 );
 
+// --- Reuse of an unapproved order ---
+
+test(
+  "POST twice for the same buyer and dataset returns the same order, 200 reused",
+  withEnv(
+    async ({ url }) => {
+      const body = { datasetId: DATASET_ID, buyerEmail: "r@example.com" };
+      const first = await POST(req(body));
+      assert.equal(first.status, 201);
+      const firstJson = (await first.json()) as { orderId: string };
+
+      const second = await POST(req(body));
+      assert.equal(second.status, 200);
+      const secondJson = (await second.json()) as {
+        orderId: string;
+        reused?: boolean;
+      };
+      assert.equal(secondJson.reused, true);
+      assert.equal(secondJson.orderId, firstJson.orderId);
+      const count = openDb(url)
+        .prepare(`SELECT COUNT(*) AS n FROM orders`)
+        .get() as { n: number };
+      assert.equal(count.n, 1);
+    },
+    { mock: true },
+  ),
+);
+
+test(
+  "POST after the first order is approved creates a new order (201)",
+  withEnv(
+    async () => {
+      const body = { datasetId: DATASET_ID, buyerEmail: "r@example.com" };
+      const first = (await (await POST(req(body))).json()) as {
+        orderId: string;
+      };
+      await PATCH(
+        req({ action: "authorize", orderId: first.orderId }, "PATCH"),
+      );
+      const second = await POST(req(body));
+      assert.equal(second.status, 201);
+      const json = (await second.json()) as { orderId: string };
+      assert.notEqual(json.orderId, first.orderId);
+    },
+    { mock: true },
+  ),
+);
+
 // --- Cancel ---
 
 test(

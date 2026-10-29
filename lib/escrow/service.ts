@@ -5,7 +5,9 @@
 //   createEscrowOrder  -> PayPal Orders v2 order (intent=AUTHORIZE) + an
 //                         `orders` row in MATCHED. The escrowed amount is
 //                         ALWAYS the dataset's listed price; a caller `amount`
-//                         is only a confirmation (mismatch = 422).
+//                         is only a confirmation (mismatch = 422). If the
+//                         same buyer already has a MATCHED order for the
+//                         dataset, that order is returned with `reused: true`.
 //   advanceEscrowOrder -> apply an action (authorize | deliver | capture |
 //                         payout | void | dispute | cancel | resolve) to a
 //                         stored order.
@@ -43,6 +45,7 @@ import {
   getOrder,
   getDataset,
   getVendor,
+  listOrders,
   advanceOrder,
   type OrderRow,
   type OrderPatch,
@@ -156,6 +159,9 @@ export interface CreateEscrowOrderResult {
   status: string;
   approveUrl?: string;
   escrowState: EscrowState;
+  /** True when an existing unapproved (MATCHED) order was returned instead of
+   *  creating a duplicate; absent for a freshly created order. */
+  reused?: true;
   mock?: true;
 }
 
@@ -223,6 +229,22 @@ function fromPayPalFailure(err: unknown): never {
   throw err;
 }
 
+/** Local stand-in for PayPal's approval page (app/checkout/mock). */
+function mockApproveUrl(paypalOrderId: string, orderId: string): string {
+  return `/checkout/mock?token=${paypalOrderId}&orderId=${orderId}`;
+}
+
+/**
+ * PayPal's hosted approval page for an order we created earlier. PayPal only
+ * returns the link at creation, so a reused order rebuilds it from the
+ * configured API base (sandbox unless PAYPAL_API_BASE points at live).
+ */
+function paypalApproveUrl(paypalOrderId: string): string {
+  const base = process.env.PAYPAL_API_BASE;
+  const host = !base || base.includes("sandbox") ? "www.sandbox." : "www.";
+  return `https://${host}paypal.com/checkoutnow?token=${paypalOrderId}`;
+}
+
 /** Create an escrow order for a dataset at its listed price. */
 export async function createEscrowOrder(
   input: CreateEscrowOrderInput,
@@ -262,6 +284,27 @@ export async function createEscrowOrder(
     throw invalid("amount does not match the listed price");
   const amount = amountCents / 100;
 
+  // The same buyer asking again for the same dataset gets their still-
+  // unapproved order back instead of a second PayPal order and DB row. An
+  // order at an old price (the vendor repriced since) is not reused.
+  const existing = withDb((db) =>
+    listOrders(db, { status: "MATCHED", datasetId, buyerEmail }),
+  ).find((o) => o.paypal_order_id && o.amount_cents === amountCents);
+  if (existing?.paypal_order_id) {
+    const paypalOrderId = existing.paypal_order_id;
+    return {
+      orderId: existing.id,
+      paypalOrderId,
+      status: "CREATED",
+      approveUrl: isMockMode()
+        ? mockApproveUrl(paypalOrderId, existing.id)
+        : paypalApproveUrl(paypalOrderId),
+      escrowState: existing.status,
+      reused: true,
+      ...(isMockMode() ? { mock: true as const } : {}),
+    };
+  }
+
   if (isMockMode()) {
     const paypalOrderId = mockId("MOCK-ORDER");
     const order = withDb((db) =>
@@ -278,8 +321,7 @@ export async function createEscrowOrder(
       orderId: order.id,
       paypalOrderId,
       status: "CREATED",
-      // Local stand-in for PayPal's approval page (app/checkout/mock).
-      approveUrl: `/checkout/mock?token=${paypalOrderId}&orderId=${order.id}`,
+      approveUrl: mockApproveUrl(paypalOrderId, order.id),
       escrowState: order.status,
       mock: true,
     };

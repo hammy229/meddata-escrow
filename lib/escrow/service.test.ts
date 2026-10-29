@@ -433,6 +433,103 @@ test(
 );
 
 test(
+  "creating again for the same buyer and dataset reuses the MATCHED order",
+  withDbEnv(
+    async ({ url }) => {
+      const first = await createEscrowOrder({
+        datasetId: DATASET_ID,
+        buyerEmail: "a@example.com",
+      });
+      assert.equal(first.reused, undefined);
+      const again = await createEscrowOrder({
+        datasetId: DATASET_ID,
+        buyerEmail: "a@example.com",
+      });
+      assert.equal(again.reused, true);
+      assert.equal(again.orderId, first.orderId);
+      assert.equal(again.paypalOrderId, first.paypalOrderId);
+      assert.equal(again.approveUrl, first.approveUrl);
+      const count = openDb(url)
+        .prepare(`SELECT COUNT(*) AS n FROM orders`)
+        .get() as { n: number };
+      assert.equal(count.n, 1);
+    },
+    { mock: true },
+  ),
+);
+
+test(
+  "a different buyer, or a no-longer-MATCHED order, gets a fresh order",
+  withDbEnv(
+    async () => {
+      const first = await createEscrowOrder({
+        datasetId: DATASET_ID,
+        buyerEmail: "a@example.com",
+      });
+      const other = await createEscrowOrder({
+        datasetId: DATASET_ID,
+        buyerEmail: "b@example.com",
+      });
+      assert.notEqual(other.orderId, first.orderId);
+      assert.equal(other.reused, undefined);
+
+      await advanceEscrowOrder({ orderId: first.orderId, action: "cancel" });
+      const next = await createEscrowOrder({
+        datasetId: DATASET_ID,
+        buyerEmail: "a@example.com",
+      });
+      assert.notEqual(next.orderId, first.orderId);
+      assert.equal(next.reused, undefined);
+    },
+    { mock: true },
+  ),
+);
+
+test(
+  "an open order at an old price is not reused after a reprice",
+  withDbEnv(
+    async ({ url }) => {
+      const first = await createEscrowOrder({
+        datasetId: DATASET_ID,
+        buyerEmail: "a@example.com",
+      });
+      const db = openDb(url);
+      db.prepare(`UPDATE datasets SET price_cents = ? WHERE id = ?`).run(
+        5900,
+        DATASET_ID,
+      );
+      db.close();
+      const next = await createEscrowOrder({
+        datasetId: DATASET_ID,
+        buyerEmail: "a@example.com",
+      });
+      assert.notEqual(next.orderId, first.orderId);
+      assert.equal(next.reused, undefined);
+    },
+    { mock: true },
+  ),
+);
+
+test(
+  "real mode reuse makes no PayPal call and rebuilds the approve link",
+  withDbEnv(async ({ url }) => {
+    const { deps, calls } = fakePayPal();
+    const seeded = seedOrder(url);
+    const res = await createEscrowOrder(
+      { datasetId: DATASET_ID, buyerEmail: "b@example.com" },
+      deps,
+    );
+    assert.equal(res.reused, true);
+    assert.equal(res.orderId, seeded.id);
+    assert.equal(calls.length, 0);
+    assert.match(
+      String(res.approveUrl),
+      /paypal\.com\/checkoutnow\?token=PP-ORDER-1$/,
+    );
+  }),
+);
+
+test(
   "cancel moves a MATCHED order to CANCELLED without calling PayPal",
   withDbEnv(async ({ url }) => {
     const { deps, calls } = fakePayPal();

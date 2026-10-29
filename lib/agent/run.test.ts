@@ -245,7 +245,8 @@ test(
       assert.equal(r.source, "scripted");
       assert.equal(r.order?.amountCents, 4900);
     }
-    assert.equal(orderCount(), 3);
+    // Same default buyer + dataset each time: the open order is reused.
+    assert.equal(orderCount(), 1);
   }),
 );
 
