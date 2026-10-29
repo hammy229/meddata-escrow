@@ -11,7 +11,9 @@
 //            $49 dataset.
 //   PATCH { orderId, action, resolution?, requestId?, note? }
 //         action: authorize | deliver | capture | payout | void | dispute
-//                 | resolve  (resolve needs resolution: "capture" | "void")
+//                 | cancel | resolve  (resolve needs resolution: "capture" |
+//                 "void"; cancel is the buyer backing out of a MATCHED order
+//                 before approving — any other state is 409)
 //         note:   optional free-text context recorded on the audit event —
 //                 a dispute reason on dispute, a resolution note on resolve.
 //         -> advance the escrow. The stored row is the source of truth: `from`

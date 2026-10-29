@@ -417,3 +417,35 @@ test(
     assert.equal(keyOf(3), "caller-key");
   }),
 );
+
+test(
+  "cancel moves a MATCHED order to CANCELLED without calling PayPal",
+  withDbEnv(async ({ url }) => {
+    const { deps, calls } = fakePayPal();
+    const order = seedOrder(url);
+    const res = await advanceEscrowOrder(
+      { orderId: order.id, action: "cancel" },
+      deps,
+    );
+    assert.equal(res.escrowState, "CANCELLED");
+    assert.equal(calls.length, 0);
+    assert.equal(getOrder(openDb(url), order.id)?.status, "CANCELLED");
+  }),
+);
+
+test(
+  "cancel from any state past MATCHED is refused with 409 and writes nothing",
+  withDbEnv(async ({ url }) => {
+    const { deps } = fakePayPal();
+    const order = seedOrder(url, {
+      status: "AUTHORIZED",
+      authorization_id: "AUTH-1",
+    });
+    await rejectsWith(
+      advanceEscrowOrder({ orderId: order.id, action: "cancel" }, deps),
+      409,
+      "INVALID_TRANSITION",
+    );
+    assert.equal(getOrder(openDb(url), order.id)?.status, "AUTHORIZED");
+  }),
+);

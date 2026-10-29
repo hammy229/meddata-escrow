@@ -7,7 +7,8 @@
 //                         ALWAYS the dataset's listed price; a caller `amount`
 //                         is only a confirmation (mismatch = 422).
 //   advanceEscrowOrder -> apply an action (authorize | deliver | capture |
-//                         payout | void | dispute | resolve) to a stored order.
+//                         payout | void | dispute | cancel | resolve) to a
+//                         stored order.
 //                         The stored row is the source of truth for the `from`
 //                         state and PayPal ids. The state-machine transition is
 //                         validated BEFORE any PayPal call, so an illegal move
@@ -65,6 +66,7 @@ const ACTION_EVENT = {
   payout: "PAYOUT",
   void: "VOID",
   dispute: "DISPUTE",
+  cancel: "CANCEL",
 } as const satisfies Record<string, EscrowEvent>;
 
 export type EscrowAction = keyof typeof ACTION_EVENT | "resolve";
@@ -381,8 +383,9 @@ export async function advanceEscrowOrder(
     ...extra,
   });
 
-  // DELIVER and DISPUTE are internal state changes — no PayPal, in either mode.
-  if (event === "DELIVER" || event === "DISPUTE")
+  // DELIVER, DISPUTE and CANCEL are internal state changes — no PayPal, in
+  // either mode (a MATCHED order was never authorized, so nothing is held).
+  if (event === "DELIVER" || event === "DISPUTE" || event === "CANCEL")
     return done(advance(), isMockMode() ? { mock: true } : {});
 
   // MOCK MODE: deterministic-shape ids, no PayPal client, no network.

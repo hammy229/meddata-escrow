@@ -615,3 +615,39 @@ test(
     );
   }),
 );
+
+// --- Cancel ---
+
+test(
+  "PATCH cancel moves a MATCHED order to CANCELLED",
+  withEnv(
+    async ({ url }) => {
+      const order = seedOrder(url);
+      const res = await PATCH(
+        req({ action: "cancel", orderId: order.id }, "PATCH"),
+      );
+      assert.equal(res.status, 200);
+      const json = (await res.json()) as { escrowState: string };
+      assert.equal(json.escrowState, "CANCELLED");
+      assert.equal(getOrder(openDb(url), order.id)?.status, "CANCELLED");
+    },
+    { mock: true },
+  ),
+);
+
+test(
+  "PATCH cancel on an authorized order is 409 and leaves it alone",
+  withEnv(
+    async ({ url }) => {
+      const order = seedOrder(url, { status: "AUTHORIZED" });
+      const res = await PATCH(
+        req({ action: "cancel", orderId: order.id }, "PATCH"),
+      );
+      assert.equal(res.status, 409);
+      const json = (await res.json()) as { error: string };
+      assert.match(json.error, /CANCEL not allowed from AUTHORIZED/);
+      assert.equal(getOrder(openDb(url), order.id)?.status, "AUTHORIZED");
+    },
+    { mock: true },
+  ),
+);
