@@ -619,6 +619,89 @@ test(
   }),
 );
 
+// --- Authorization window ---
+
+/** Authorize a seeded order, then pretend it happened `daysAgo` days ago. */
+function authorizeAgo(url: string, id: string, daysAgo: number) {
+  const db = openDb(url);
+  advanceOrder(db, id, "AUTHORIZE", { authorizationId: "AUTH-1" });
+  db.prepare(
+    `UPDATE order_events SET created_at = datetime('now', ?) WHERE order_id = ? AND event = 'AUTHORIZE'`,
+  ).run(`-${daysAgo} days`, id);
+  db.close();
+}
+
+type AuthBody = {
+  authorization: {
+    state: string;
+    daysLeft: number;
+    authorizedAt: string;
+    honorUntil: string;
+    expiresAt: string;
+  } | null;
+};
+
+test(
+  "GET ?id= reports the authorization window for a held order",
+  withEnv(async ({ url }) => {
+    const order = seedOrder(url);
+    authorizeAgo(url, order.id, 1);
+    const json = (await (
+      await GET(getReq(`?id=${order.id}`))
+    ).json()) as AuthBody;
+    assert.equal(json.authorization?.state, "honor");
+    assert.equal(json.authorization?.daysLeft, 28);
+    assert.ok(json.authorization?.honorUntil < json.authorization!.expiresAt);
+  }),
+);
+
+test(
+  "GET ?id= reports valid after 3 days and expired after 29",
+  withEnv(async ({ url }) => {
+    const a = seedOrder(url);
+    authorizeAgo(url, a.id, 10);
+    const b = seedOrder(url);
+    authorizeAgo(url, b.id, 40);
+    const ja = (await (await GET(getReq(`?id=${a.id}`))).json()) as AuthBody;
+    const jb = (await (await GET(getReq(`?id=${b.id}`))).json()) as AuthBody;
+    assert.equal(ja.authorization?.state, "valid");
+    assert.equal(jb.authorization?.state, "expired");
+    assert.equal(jb.authorization?.daysLeft, 0);
+  }),
+);
+
+test(
+  "GET ?id= authorization is null before authorizing and once not held",
+  withEnv(async ({ url }) => {
+    const matched = seedOrder(url);
+    const captured = seedOrder(url);
+    authorizeAgo(url, captured.id, 1);
+    const db = openDb(url);
+    advanceOrder(db, captured.id, "DELIVER");
+    advanceOrder(db, captured.id, "CAPTURE");
+    db.close();
+    // A row seeded straight into AUTHORIZED has no AUTHORIZE event to date it.
+    const undated = seedOrder(url, { status: "AUTHORIZED" });
+    for (const id of [matched.id, captured.id, undated.id]) {
+      const json = (await (await GET(getReq(`?id=${id}`))).json()) as AuthBody;
+      assert.equal(json.authorization, null, id);
+    }
+  }),
+);
+
+test(
+  "GET ?id=&events=1 still includes the timeline alongside authorization",
+  withEnv(async ({ url }) => {
+    const order = seedOrder(url);
+    authorizeAgo(url, order.id, 0);
+    const json = (await (
+      await GET(getReq(`?id=${order.id}&events=1`))
+    ).json()) as AuthBody & { events: unknown[] };
+    assert.equal(json.events.length, 2);
+    assert.equal(json.authorization?.state, "honor");
+  }),
+);
+
 // --- Reuse of an unapproved order ---
 
 test(

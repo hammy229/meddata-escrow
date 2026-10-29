@@ -38,12 +38,20 @@ import {
   summarizeOrders,
   type OrderFilter,
 } from "../../../lib/db/client";
+import { authorizationWindow } from "../../../lib/escrow/auth-window";
 import {
   createEscrowOrder,
   advanceEscrowOrder,
   EscrowError,
   type AdvanceEscrowOrderResult,
 } from "../../../lib/escrow/service";
+
+// States where PayPal is still holding the buyer's funds (not yet captured).
+const HELD_STATES: ReadonlySet<string> = new Set([
+  "AUTHORIZED",
+  "DELIVERED",
+  "DISPUTED",
+]);
 
 function bad(error: string, status = 422) {
   return Response.json({ error }, { status });
@@ -63,6 +71,10 @@ function errorResponse(err: unknown): Response {
 //   GET /api/orders            -> { orders: OrderRow[] }   (newest first)
 //   GET /api/orders?status=DISPUTED&datasetId=..&buyerEmail=..  (AND filters)
 //   GET /api/orders?id=ord_..  -> { order: OrderRow }  (404 if unknown)
+//       The order also carries `authorization`: the PayPal hold window
+//       ({ authorizedAt, honorUntil, expiresAt, state, daysLeft }, see
+//       lib/escrow/auth-window) while funds are held (AUTHORIZED, DELIVERED,
+//       DISPUTED), measured from the AUTHORIZE event; otherwise null.
 //   GET /api/orders?summary=1[&datasetId=..]
 //       -> { summary: OrderSummary }  vendor earnings roll-up: countsByStatus
 //          (every EscrowState, zero-filled) plus heldCents (AUTHORIZED +
@@ -86,9 +98,15 @@ export async function GET(request: Request) {
       const result = withDb((db) => {
         const order = getOrder(db, id);
         if (!order) return null;
+        const events = listOrderEvents(db, id);
+        const authorization = HELD_STATES.has(order.status)
+          ? authorizationWindow(
+              events.find((e) => e.event === "AUTHORIZE")?.created_at,
+            )
+          : null;
         return includeEvents
-          ? { order, events: listOrderEvents(db, id) }
-          : { order };
+          ? { order, authorization, events }
+          : { order, authorization };
       });
       if (!result) return bad(`unknown orderId: ${id}`, 404);
       return Response.json(result);
