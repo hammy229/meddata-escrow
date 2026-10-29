@@ -28,9 +28,6 @@ npm run postman:gen
    body. Happy-path requests assert their status code. They reuse the order
    the demo leaves behind (`{{orderId}}`, `PAID_OUT`), so run the demo
    folder first.
-   _Agent_ and _Webhooks_ are **preview** operations. They are documented
-   ahead of their implementation, have no assertions, and return 404 until
-   their routes land.
 
 ## Run it
 
