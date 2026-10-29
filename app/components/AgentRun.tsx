@@ -222,6 +222,14 @@ export default function AgentRun({
               fallbackLabel="Scripted planner"
             />
             <span className="font-mono text-xs text-zinc-400">{run.runId}</span>
+            <a
+              href={`/agent/${encodeURIComponent(run.runId)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm font-medium text-pp-700 underline underline-offset-4 dark:text-pp-400"
+            >
+              Permalink
+            </a>
           </div>
 
           <ol className="space-y-2">
