@@ -95,6 +95,7 @@ test(
     const json = await res.json();
     assert.equal(json.datasetId, DATASET_ID);
     assert.ok(json.compiled.sql.includes("GROUP BY"));
+    assert.match(json.summary, /^[\d,]+ patients across 2 groups by sex/);
     assert.ok(Array.isArray(json.result));
     assert.ok(json.result.length >= 1);
     // Every returned cell is at or above the suppression threshold (11).

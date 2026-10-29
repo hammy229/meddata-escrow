@@ -11,9 +11,11 @@
 //   3. mockExecute  — the vendor-side aggregate query runs here (mock; no raw
 //                     records ever leave the vendor).
 //   4. checkResult  — small-cell suppression on the aggregate (403 if unsafe).
+//      The 200 also carries a one-sentence `summary` of the rows.
 //   5. recordUsage  — meter the answered query against the order at
 //                     PER_QUERY_FEE_CENTS (lib/query/pricing). Only successful
 //                     answers reach this step, so rejections are never billed.
+import { summarizeAnswer } from "../../../lib/ai/answer-summary";
 import { nl2query } from "../../../lib/ai/nl2query";
 import {
   checkQuery,
@@ -124,11 +126,14 @@ export async function POST(request: Request) {
     return bad("could not record query usage", 500);
   }
 
+  const summary = await summarizeAnswer(question, compiled, rows);
+
   return Response.json({
     datasetId,
     question,
     compiled,
     result: rows,
+    summary,
     usage: { usageId: usage.id, chargeCents: usage.charge_cents },
   });
 }
