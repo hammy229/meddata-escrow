@@ -147,6 +147,8 @@ export default function ResearcherPage() {
   const [escrowNote, setEscrowNote] = useState<string | null>(null);
   // A real failure from the orders API, shown as is (never turned into success).
   const [escrowError, setEscrowError] = useState<string | null>(null);
+  // True when the server handed back an order that was already open.
+  const [reused, setReused] = useState(false);
   const [approveUrl, setApproveUrl] = useState<string | null>(null);
   // Bumped after every PATCH so the audit timeline refetches live.
   const [timelineKey, setTimelineKey] = useState(0);
@@ -155,6 +157,10 @@ export default function ResearcherPage() {
   const [querying, setQuerying] = useState(false);
   const [queryError, setQueryError] = useState<string | null>(null);
   const [queryReasons, setQueryReasons] = useState<string[]>([]);
+  // A safe rewording offered when the privacy guard refuses a question.
+  const [querySuggestion, setQuerySuggestion] = useState<string | null>(null);
+  // One-sentence answer shown above the result rows.
+  const [summary, setSummary] = useState<string | null>(null);
   const [compiled, setCompiled] = useState<CompiledQuery | null>(null);
   const [results, setResults] = useState<AggregateRow[] | null>(null);
   const [queryCharge, setQueryCharge] = useState<number | null>(null);
@@ -170,10 +176,13 @@ export default function ResearcherPage() {
     setOrderId(null);
     setEscrowNote(null);
     setEscrowError(null);
+    setReused(false);
     setApproveUrl(null);
     setResults(null);
     setQueryError(null);
     setQueryReasons([]);
+    setQuerySuggestion(null);
+    setSummary(null);
     setCompiled(null);
   }
 
@@ -287,6 +296,7 @@ export default function ResearcherPage() {
         return;
       }
       setOrderId(data.orderId);
+      setReused(data.reused === true);
       if (typeof data.approveUrl === "string") setApproveUrl(data.approveUrl);
 
       // Authorize the created order -> AUTHORIZED. The server derives the `from`
@@ -341,6 +351,38 @@ export default function ResearcherPage() {
         setEscrow(nextState);
         setEscrowNote(`${action} mocked for demo (service offline).`);
       }
+    } finally {
+      setBusyAction(null);
+      setTimelineKey((k) => k + 1);
+    }
+  }
+
+  // Cancel an order that was opened but never authorized (MATCHED -> CANCELLED).
+  async function cancelOrder() {
+    setBusyAction("cancel");
+    setEscrowError(null);
+    try {
+      const out = await escrowRequest("/api/orders", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "cancel",
+          orderId,
+        }),
+      });
+      if (out.kind !== "ok") {
+        setEscrowError(
+          out.kind === "error"
+            ? `Could not cancel the order: ${out.message}`
+            : "Could not cancel the order: the service is offline.",
+        );
+        return;
+      }
+      // The cancelled order is closed; buying again opens a fresh one.
+      setOrderId(null);
+      setReused(false);
+      setApproveUrl(null);
+      setEscrowNote("Order cancelled. Nothing was charged.");
     } finally {
       setBusyAction(null);
       setTimelineKey((k) => k + 1);
@@ -406,11 +448,14 @@ export default function ResearcherPage() {
     }
   }
 
-  async function runQuery() {
-    if (!selected || !question.trim()) return;
+  // `asked` lets a suggested rewrite run without waiting for state to settle.
+  async function runQuery(asked: string = question) {
+    if (!selected || !asked.trim()) return;
     setQuerying(true);
     setQueryError(null);
     setQueryReasons([]);
+    setQuerySuggestion(null);
+    setSummary(null);
     setCompiled(null);
     setResults(null);
     setQueryCharge(null);
@@ -422,7 +467,7 @@ export default function ResearcherPage() {
         body: JSON.stringify({
           orderId,
           datasetId: selected.datasetId,
-          question,
+          question: asked,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -431,6 +476,9 @@ export default function ResearcherPage() {
         // or the order does not grant data access; 404/422 => bad order.
         setQueryError(data?.error ?? `Query rejected (${res.status}).`);
         setQueryReasons(Array.isArray(data?.reasons) ? data.reasons : []);
+        if (typeof data?.suggestion === "string" && data.suggestion.trim()) {
+          setQuerySuggestion(data.suggestion);
+        }
         return;
       }
       // Show the SQL the vendor actually ran, plus how it was planned.
@@ -451,6 +499,9 @@ export default function ResearcherPage() {
           : null,
       );
       setResults(Array.isArray(data.result) ? data.result : []);
+      if (typeof data.summary === "string" && data.summary.trim()) {
+        setSummary(data.summary);
+      }
       // The server meters each answered query against the order.
       setQueryCharge(
         typeof data.usage?.chargeCents === "number"
@@ -606,6 +657,15 @@ export default function ResearcherPage() {
                     {checking ? "Checking sample…" : "Check sample"}
                   </button>
                 )}
+                {escrow === "MATCHED" && !voided && orderId && (
+                  <button
+                    onClick={cancelOrder}
+                    disabled={busyAction !== null}
+                    className={dangerBtn}
+                  >
+                    {busyAction === "cancel" ? "Cancelling…" : "Cancel order"}
+                  </button>
+                )}
                 {escrow === "MATCHED" && !voided && (
                   <button
                     onClick={buyEscrow}
@@ -741,6 +801,12 @@ export default function ResearcherPage() {
                 {escrowError}
               </p>
             )}
+            {reused && (
+              <p className="mt-2 text-xs text-muted">
+                Reusing your open order for this dataset instead of creating a
+                new one.
+              </p>
+            )}
             {escrowNote && (
               <p className="mt-4 text-sm text-muted">{escrowNote}</p>
             )}
@@ -793,7 +859,7 @@ export default function ResearcherPage() {
                 className={`flex-1 ${inputBase} py-2.5`}
               />
               <button
-                onClick={runQuery}
+                onClick={() => runQuery()}
                 disabled={querying || !question.trim()}
                 className={primaryBtn}
               >
@@ -828,9 +894,32 @@ export default function ResearcherPage() {
                     ))}
                   </ul>
                 )}
+                {querySuggestion && (
+                  <div className="mt-3 border-t border-amber-300/60 pt-3 dark:border-amber-500/30">
+                    <p className="text-amber-800 dark:text-amber-300">
+                      A safe way to ask this: &ldquo;{querySuggestion}&rdquo;
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setQuestion(querySuggestion);
+                        runQuery(querySuggestion);
+                      }}
+                      disabled={querying}
+                      className={`mt-2 ${secondaryBtn} !py-1.5`}
+                    >
+                      Try instead
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
+            {summary && (
+              <p className="reveal mt-4 font-serif text-lg leading-snug">
+                {summary}
+              </p>
+            )}
             <QueryResult
               compiled={compiled}
               rows={results}
