@@ -24,6 +24,7 @@ interface CatalogEntry {
   id: string;
   title: string;
   priceCents: number;
+  recordCount?: number;
 }
 
 const CATALOG_URL = new URL("../../../data/catalog.json", import.meta.url);
@@ -86,6 +87,7 @@ export async function POST(request: Request) {
       ...m,
       title: entry?.title ?? null,
       priceCents: prices.get(m.datasetId) ?? entry?.priceCents ?? null,
+      recordCount: entry?.recordCount ?? null,
     };
   });
 
