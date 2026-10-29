@@ -278,7 +278,8 @@ export async function createEscrowOrder(
       orderId: order.id,
       paypalOrderId,
       status: "CREATED",
-      approveUrl: `https://sandbox.paypal.com/checkoutnow?token=${paypalOrderId}`,
+      // Local stand-in for PayPal's approval page (app/checkout/mock).
+      approveUrl: `/checkout/mock?token=${paypalOrderId}&orderId=${order.id}`,
       escrowState: order.status,
       mock: true,
     };

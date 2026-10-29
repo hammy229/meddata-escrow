@@ -120,7 +120,7 @@ test(
     };
     assert.equal(out.escrowState, "MATCHED");
     assert.equal(out.amountCents, 4900);
-    assert.match(out.approveUrl, /^https:\/\/sandbox\.paypal\.com\//);
+    assert.match(out.approveUrl, /^\/checkout\/mock\?token=MOCK-ORDER-/);
     const row = withDb((db) => getOrder(db, out.orderId));
     assert.equal(row?.status, "MATCHED");
     assert.equal(row?.buyer_email, "researcher@example.com");

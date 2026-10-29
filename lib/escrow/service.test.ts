@@ -419,6 +419,20 @@ test(
 );
 
 test(
+  "mock mode approve link is a relative local checkout URL",
+  withDbEnv(
+    async () => {
+      const created = await createEscrowOrder({ datasetId: DATASET_ID });
+      assert.equal(
+        created.approveUrl,
+        `/checkout/mock?token=${created.paypalOrderId}&orderId=${created.orderId}`,
+      );
+    },
+    { mock: true },
+  ),
+);
+
+test(
   "cancel moves a MATCHED order to CANCELLED without calling PayPal",
   withDbEnv(async ({ url }) => {
     const { deps, calls } = fakePayPal();

@@ -204,7 +204,10 @@ test(
       assert.equal(json.escrowState, "MATCHED");
       assert.match(String(json.orderId), /^ord_/);
       assert.match(String(json.paypalOrderId), /^MOCK-ORDER-/);
-      assert.match(String(json.approveUrl), /checkoutnow\?token=MOCK-ORDER-/);
+      assert.equal(
+        json.approveUrl,
+        `/checkout/mock?token=${json.paypalOrderId}&orderId=${json.orderId}`,
+      );
       // Persisted: the row exists with the right amount and state.
       const row = getOrder(openDb(url), String(json.orderId));
       assert.equal(row?.status, "MATCHED");

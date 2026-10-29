@@ -36,7 +36,7 @@ test(
     assert.equal(typeof body.recommendation.reasoning, "string");
     assert.equal(body.order.amountCents, 4900);
     assert.equal(body.order.escrowState, "MATCHED");
-    assert.match(body.order.approveUrl, /^https:\/\//);
+    assert.match(body.order.approveUrl, /^\/checkout\/mock\?token=/);
     assert.equal(body.steps.length, 4);
     for (const s of body.steps) assert.ok(s.tool && s.at && "input" in s);
     const row = withDb((db) => getOrder(db, body.order.orderId));
