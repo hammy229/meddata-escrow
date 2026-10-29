@@ -811,7 +811,9 @@ export default function ResearcherPage() {
             {escrowNote && (
               <p className="mt-4 text-sm text-muted">{escrowNote}</p>
             )}
-            {approveUrl && (
+            {/* Only useful while the buyer still has to approve; once funds
+                are held the link would just offer a second approval. */}
+            {approveUrl && escrow === "MATCHED" && (
               <a
                 href={approveUrl}
                 target="_blank"
