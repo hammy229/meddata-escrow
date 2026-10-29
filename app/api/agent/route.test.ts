@@ -120,6 +120,11 @@ test(
     assert.deepEqual(stored.steps, posted.steps);
     assert.deepEqual(stored.recommendation, posted.recommendation);
     assert.equal(typeof stored.createdAt, "string");
+    // The shortlist is on both responses and the chosen dataset leads it.
+    assert.ok(Array.isArray(posted.shortlist) && posted.shortlist.length > 0);
+    assert.equal(posted.shortlist[0].datasetId, posted.order.datasetId);
+    assert.equal(posted.shortlist[0].chosen, true);
+    assert.deepEqual(stored.shortlist, posted.shortlist);
 
     const noOrder = await (
       await post({ study: STUDY, budgetCents: 100 })

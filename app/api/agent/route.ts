@@ -5,6 +5,7 @@
 //        budgetCents: positive integer (the most the agent may escrow)
 //        buyerEmail:  optional email recorded on the order
 //        -> 200 { runId, steps, recommendation: { datasetId, reasoning },
+//                 shortlist: ShortlistItem[]  (candidates, best first),
 //                 order?: { orderId, datasetId, approveUrl, escrowState,
 //                           amountCents },
 //                 source: "llm" | "scripted" }
@@ -16,13 +17,14 @@
 //
 //   GET ?runId=run_...
 //        -> 200 { runId, study, budgetCents, source, orderId, steps,
-//                 recommendation, createdAt }   (the stored run)
+//                 recommendation, shortlist, createdAt }   (the stored run)
 //        404 unknown runId; 422 missing runId.
 //
 // Unexpected failures are logged server-side and returned as a generic 500.
 import * as z from "zod/v4";
 
 import { runProcurementAgent } from "../../../lib/agent/run";
+import { buildShortlist } from "../../../lib/agent/shortlist";
 import { getAgentRun, saveAgentRun } from "../../../lib/agent/store";
 
 const Body = z.object({
@@ -65,7 +67,10 @@ export async function GET(request: Request) {
   try {
     const run = getAgentRun(runId);
     if (!run) return bad(`unknown runId: ${runId}`, 404);
-    return Response.json(run);
+    return Response.json({
+      ...run,
+      shortlist: buildShortlist(run.steps, run.recommendation, run.budgetCents),
+    });
   } catch (err) {
     return internalError(err);
   }

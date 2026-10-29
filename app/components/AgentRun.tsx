@@ -6,6 +6,8 @@
 // order the agent opened. The agent can only open a MATCHED order — the buyer
 // still approves it in PayPal — so this panel links to approval and stops.
 import { useState } from "react";
+import type { ColDef } from "ag-grid-community";
+import DataGrid from "./DataGrid";
 import { SourceBadge } from "./MatchesGrid";
 import { AlertTriangle, Check } from "./icons";
 
@@ -27,10 +29,23 @@ interface AgentOrder {
   amountCents: number;
 }
 
+// Mirrors lib/agent/shortlist ShortlistItem.
+interface ShortlistItem {
+  datasetId: string;
+  title: string | null;
+  priceCents: number | null;
+  fitScore: number | null;
+  sampleCheck: "passed" | "failed" | "not_run";
+  withinBudget: boolean | null;
+  reason: string;
+  chosen: boolean;
+}
+
 interface AgentRunResult {
   runId: string;
   steps: AgentStep[];
   recommendation: { datasetId: string | null; reasoning: string };
+  shortlist?: ShortlistItem[];
   order?: AgentOrder;
   source: "llm" | "scripted";
 }
@@ -45,6 +60,57 @@ const TOOL_LABELS: Record<string, string> = {
 function usd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
+
+const SAMPLE_LABELS = {
+  passed: "Passed",
+  failed: "Failed",
+  not_run: "Not run",
+};
+
+const SHORTLIST_COLUMNS: ColDef<ShortlistItem>[] = [
+  {
+    headerName: "Dataset",
+    flex: 2,
+    minWidth: 180,
+    valueGetter: (p) =>
+      p.data
+        ? `${p.data.chosen ? "✓ " : ""}${p.data.title ?? p.data.datasetId}`
+        : "",
+    tooltipValueGetter: (p) => p.data?.datasetId,
+  },
+  {
+    field: "priceCents",
+    headerName: "Price",
+    minWidth: 90,
+    valueFormatter: (p) => (p.value == null ? "n/a" : usd(p.value)),
+  },
+  {
+    field: "fitScore",
+    headerName: "Fit",
+    minWidth: 70,
+    valueFormatter: (p) => (p.value == null ? "n/a" : String(p.value)),
+  },
+  {
+    field: "sampleCheck",
+    headerName: "Sample",
+    minWidth: 100,
+    valueFormatter: (p) =>
+      SAMPLE_LABELS[p.value as ShortlistItem["sampleCheck"]],
+  },
+  {
+    field: "withinBudget",
+    headerName: "In budget",
+    minWidth: 100,
+    valueFormatter: (p) => (p.value == null ? "n/a" : p.value ? "Yes" : "No"),
+  },
+  {
+    field: "reason",
+    headerName: "Why",
+    flex: 3,
+    minWidth: 240,
+    tooltipField: "reason",
+  },
+];
 
 /** One-line summary of a tool's input/output object, e.g. "datasetId: ds_x". */
 // Arrays read as a count ("matches: 2"); long prose and URLs are left to
@@ -182,6 +248,18 @@ export default function AgentRun({
               </li>
             ))}
           </ol>
+
+          {run.shortlist && run.shortlist.length > 0 && (
+            <div>
+              <p className="mb-2 text-sm font-medium">Shortlist</p>
+              <DataGrid<ShortlistItem>
+                rowData={run.shortlist}
+                columnDefs={SHORTLIST_COLUMNS}
+                getRowId={(r) => r.datasetId}
+                height={Math.min(380, 92 + run.shortlist.length * 46)}
+              />
+            </div>
+          )}
 
           <p className="text-sm text-zinc-700 dark:text-zinc-300">
             <span className="font-medium">Recommendation: </span>

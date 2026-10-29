@@ -23,6 +23,7 @@ import {
   type LlmClient,
 } from "../llm/client";
 import type { EscrowDeps } from "../escrow/service";
+import { buildShortlist, type ShortlistItem } from "./shortlist";
 import {
   AGENT_TOOLS,
   createAgentContext,
@@ -52,6 +53,8 @@ export interface AgentRunResult {
   runId: string;
   steps: AgentStep[];
   recommendation: { datasetId: string | null; reasoning: string };
+  /** Candidates the run considered, best first (see ./shortlist). */
+  shortlist: ShortlistItem[];
   order?: AgentOrder;
   source: "llm" | "scripted";
 }
@@ -84,6 +87,7 @@ function result(
     runId,
     steps: ctx.steps,
     recommendation: { datasetId, reasoning },
+    shortlist: buildShortlist(ctx.steps, { datasetId }, ctx.budgetCents),
     ...(ctx.order ? { order: ctx.order } : {}),
     source,
   };
