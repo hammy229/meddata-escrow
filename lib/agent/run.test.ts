@@ -442,3 +442,31 @@ test(
     assert.equal(r.recommendation.datasetId, null);
   }),
 );
+
+test(
+  "scripted planner names owned datasets when nothing else passes",
+  withAgentDb(async () => {
+    withDb((db) =>
+      createOrder(db, {
+        datasetId: "ds_hypertension_registry_v1",
+        buyerEmail: "r@example.com",
+        amountCents: 3900,
+        status: "PAID_OUT",
+      }),
+    );
+    const r = await runProcurementAgent(
+      {
+        study: "pediatric asthma pilot inhaler plus hypertension registry",
+        budgetCents: 6000,
+        buyerEmail: "r@example.com",
+      },
+      { useLlm: false },
+    );
+    assert.equal(r.order, undefined);
+    assert.match(r.recommendation.reasoning, /failed its sample check/);
+    assert.match(
+      r.recommendation.reasoning,
+      /You already own ds_hypertension_registry_v1/,
+    );
+  }),
+);

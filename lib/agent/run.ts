@@ -255,9 +255,11 @@ async function runScripted(
     );
   }
 
-  return done(
-    `Nothing was bought: ${failures.join("; ")}.`,
-  );
+  const owned = inBudget.filter((m) => m.alreadyOwned);
+  const ownedNote = owned.length
+    ? ` You already own ${owned.map((m) => m.datasetId).join(", ")}, so ${owned.length > 1 ? "they were" : "it was"} skipped.`
+    : "";
+  return done(`Nothing was bought: ${failures.join("; ")}.${ownedNote}`);
 }
 
 /** Run the procurement agent once. Never throws for LLM failures. */
