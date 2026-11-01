@@ -3,26 +3,26 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![CI](https://github.com/hammy229/meddata-escrow/actions/workflows/ci.yml/badge.svg)](https://github.com/hammy229/meddata-escrow/actions/workflows/ci.yml)
 
-![MedData Escrow — research data you can trust, paid for only once it is delivered](docs/screenshots/home-thumbnail.png)
+![MedData Escrow: research data you can trust, paid for only once it is delivered](docs/screenshots/home-thumbnail.png)
 
 ## In Progress: MedData Escrow
 
-MedData Escrow is an AI procurement and escrow marketplace for medical research data. Buyers describe the data they need, Amazon Bedrock (Claude) matches relevant dataset listings, PayPal authorizes and holds payment before access is granted, and data is delivered through time-limited Amazon S3 presigned URLs before payment is captured and settled with the seller.
+MedData Escrow is an AI procurement and escrow marketplace for medical research data. Buyers describe the data they need, Amazon Bedrock (Claude) matches relevant dataset listings, PayPal authorizes and holds payment before access is granted, and the vendor delivers through an expiring download link before payment is captured and settled with the seller. That download link is mocked for now; S3 presigned URLs are the planned version.
 
-**Tech stack:** Amazon Bedrock (Claude), Amazon S3, DynamoDB, AWS Lambda + API Gateway, and PayPal sandbox APIs.
+**Tech stack:** Next.js and React (AG Grid for tables), Amazon Bedrock (Claude, opt-in), PayPal sandbox APIs, and SQLite through Node's `node:sqlite`, deployed on Render. Planned, not used yet: Amazon S3 presigned delivery, DynamoDB, and AWS Lambda with API Gateway.
 
 **Status:** Actively building for the PayPal AI Hackathon (Devpost deadline: November 12, 2026).
 
-**Architecture flow:** Request → Bedrock match → PayPal authorization → S3 delivery → capture → seller payout.
+**Architecture flow:** Request → Bedrock match → PayPal authorization → mock delivery link → capture → seller payout.
 
-> **An AI procurement + escrow marketplace for medical research data.** Describe your study in plain English; an AI agent finds the right dataset, verifies a sample, and buys it via PayPal escrow — funds captured only if the sample passes.
+> **An AI procurement + escrow marketplace for medical research data.** Describe your study in plain English; an AI agent finds the right dataset, verifies a sample, and buys it via PayPal escrow, and funds are captured only if the sample passes.
 
 ## Problem & who it's for
 
 Medical-school researchers waste weeks sourcing data: they can't inspect quality before paying, vendors can't trust buyers, and sharing raw records creates serious privacy risk. **meddata-escrow** is for **academic medical researchers** (and the data vendors who serve them). It makes buying research data trustworthy on both sides:
 
 - Buyers never pay for data that fails a quality/privacy check.
-- Vendors never release raw records — only privacy-safe aggregates leave their systems.
+- Vendors never release raw records. Only privacy-safe aggregates leave their systems.
 - Everything is metered, so researchers pay for exactly what they use.
 
 > ⚕️ **All data is synthetic**, generated with [Synthea](https://github.com/synthetichealth/synthea). **No real patient data** is used anywhere.
@@ -33,7 +33,7 @@ Medical-school researchers waste weeks sourcing data: they can't inspect quality
 | ------------------------------------------------------------- | ----------------------------------------------------------- |
 | ![Landing page, light theme](docs/screenshots/home-light.png) | ![Landing page, dark theme](docs/screenshots/home-dark.png) |
 
-**Procurement agent** — a $60 budget: search → inspect → sample check → a
+**Procurement agent**: a $60 budget runs search, inspect and sample check, then opens a
 `MATCHED` escrow order the buyer approves in PayPal (mock mode, synthetic data).
 
 ![Researcher workspace: the agent's steps, recommendation and opened escrow order](docs/screenshots/researcher-agent.png)
@@ -45,23 +45,23 @@ out), incoming orders with dispute buttons, and the full ledger.
 
 ## How it works (6-step flow)
 
-1. **Describe** — A researcher describes their study in plain English.
-2. **Match** — An AI agent matches vendor datasets in the catalog and ranks them by fit (`lib/ai/matcher`).
-3. **Sample check** — The agent runs an automated quality + privacy check on a sample of the top match.
-4. **Escrow (authorize)** — PayPal **authorizes** the purchase amount — funds are _held, not captured_ (`/api/orders`).
-5. **Capture or void** — If the sample check passes, PayPal **captures** the payment; if it fails, the authorization is **voided** and the researcher is never charged.
-6. **Query & bill** — After purchase, plain-English queries return **privacy-safe aggregates** (`lib/ai/nl2query` + `lib/ai/privacy-guard`), each **billed per query** via PayPal. Raw records never leave the vendor.
+1. **Describe**: A researcher describes their study in plain English.
+2. **Match**: An AI agent matches vendor datasets in the catalog and ranks them by fit (`lib/ai/matcher`).
+3. **Sample check**: The agent runs an automated quality + privacy check on a sample of the top match.
+4. **Escrow (authorize)**: PayPal **authorizes** the purchase amount. Funds are _held, not captured_ (`/api/orders`).
+5. **Capture or void**: If the sample check passes, PayPal **captures** the payment; if it fails, the authorization is **voided** and the researcher is never charged.
+6. **Query & meter**: After purchase, plain-English queries return **privacy-safe aggregates** (`lib/ai/nl2query` + `lib/ai/privacy-guard`), each **metered per query** against the order's spend cap in our own ledger. Raw records never leave the vendor.
 
 ## Tools used & how
 
 | Tool                                      | How it's used                                                                                                                                                                      |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **PayPal** (Orders/Payments API, sandbox) | Escrow via authorize-then-capture; per-query billing (`lib/paypal/client.ts`, `app/api/orders`, `app/api/billing`)                                                                 |
+| **PayPal** (Orders/Payments API, sandbox) | Escrow via authorize-then-capture (`lib/paypal/client.ts`, `app/api/orders`). Per-query charges are metered in our own ledger (`app/api/billing`), not billed through PayPal       |
 | **PayPal** (Payouts + Webhooks)           | Vendor payouts minus a 10% fee (`lib/escrow/fees.ts`); verified, deduped webhooks at `/api/webhooks/paypal`; `PayPal-Request-Id` idempotency on every write                        |
 | **Claude on Amazon Bedrock**              | Dataset ranking, question → query plan, tighten-only privacy review, sample check, and the procurement agent (`lib/llm`, `lib/ai`, `lib/agent`); opt-in via `LLM_PROVIDER=bedrock` |
 | **OpenAPI 3.1**                           | Contract for every route (`openapi/openapi.yaml`, served at `/api/openapi`) with drift tests; Postman collection generated from it                                                 |
 | **Zapier** (outbound webhooks)            | Every escrow transition POSTs a signed event to `OUTBOUND_WEBHOOK_URL` (`lib/events/outbound.ts`)                                                                                  |
-| **AG Grid**                               | Interactive dataset catalog and query-result tables in the researcher/vendor UIs                                                                                                   |
+| **AG Grid**                               | Dataset catalog, vendor order queue, ledger and query-result tables in the researcher and vendor workspaces                                                                        |
 | **Render**                                | One-click Blueprint deploy via [`render.yaml`](./render.yaml): seeded SQLite demo, `/api/health` check                                                                             |
 | **Postman**                               | API collection to exercise and demo every endpoint ([`postman/`](./postman))                                                                                                       |
 
@@ -76,7 +76,7 @@ Researcher UI ─▶ /api/match   ─▶ lib/ai/matcher          (rank vendor da
              ─▶ /api/orders  ─▶ lib/escrow/service       (state machine + lib/paypal/client)
              ─▶ /api/query   ─▶ lib/ai/nl2query          (NL → plan → safe SQL)
                               └▶ lib/ai/privacy-guard     (screen question, SQL + results)
-             ─▶ /api/billing ─▶ lib/db/usage             (per-query charge)
+             ─▶ /api/billing ─▶ lib/db/usage             (per-query metering, query cap)
 PayPal       ─▶ /api/webhooks/paypal ─▶ lib/escrow/paypal-webhooks (verified, deduped)
 Escrow       ─▶ lib/events/outbound  (signed webhook per transition → Zapier)
 Vendor UI    ─▶ manage catalog (data/catalog.json → DB via lib/db)
@@ -105,30 +105,34 @@ The server, not the client, decides who pays what and who sees what:
   identifiers and row-level asks (`checkQuestion`), then the compiled SQL is
   re-checked as aggregate-only (`checkQuery`), and results go through small-cell
   suppression (k ≥ 11, `checkResult`).
-- **Metered per answer.** Each answered query is billed against the order at a
-  fixed server fee (`PER_QUERY_FEE_CENTS`). Rejected or suppressed queries are
-  never billed.
+- **Metered per answer, capped per order.** Each answered query is metered
+  against the order at a fixed server fee (`PER_QUERY_FEE_CENTS`, 50 cents) in
+  our own ledger. Nothing is billed through PayPal per query. Each order has a
+  spend cap (`queryCapCents`, $10.00 by default, between $0.50 and $1,000.00).
+  Once one more query would pass the cap, the API answers `402` and meters
+  nothing. Rejected or suppressed queries are never metered.
 - **Honor window.** While PayPal holds the funds, the order shows its
   authorization window: honored for 3 days, valid for up to 29, with the days
   left (`lib/escrow/auth-window.ts`). Past day 29 the hold has to be
   reauthorized.
 - **Receipts add up.** `GET /api/orders?id=<id>&receipt=1` splits the amount
   into the platform fee and the vendor payout, which always sum to the price.
-  The total adds per-query charges. A voided or cancelled order shows zeros.
+  The total adds per-query charges, and the receipt shows the order's query
+  cap. A voided or cancelled order shows zeros.
 
 ### AI & the procurement agent
 
 Claude on Amazon Bedrock is opt-in (`LLM_PROVIDER=bedrock`, client in
 `lib/llm/client.ts`). Every AI step has a deterministic fallback, so the full
-app — including the agent — runs with no AWS access.
+app (including the agent) runs with no AWS access.
 
-- **Matching** — Claude ranks catalog datasets for a study; keyword scoring is
+- **Matching**: Claude ranks catalog datasets for a study; keyword scoring is
   the fallback (`lib/ai/matcher`).
-- **Questions → plans, never SQL** — Claude emits a typed query plan that
+- **Questions → plans, never SQL**: Claude emits a typed query plan that
   `compilePlan` turns into SQL; the model never writes SQL itself.
-- **Privacy second opinion** — Claude can only _tighten_ the rule-based privacy
+- **Privacy second opinion**: Claude can only _tighten_ the rule-based privacy
   verdict, never loosen it.
-- **Sample check** — a quality check on a dataset sample before money moves
+- **Sample check**: a quality check on a dataset sample before money moves
   (`lib/ai/sample-check.ts`, `POST /api/match { sampleCheck }`).
 - **Safe rewrites and summaries**: a refused question comes back with a
   rephrasing that goes through the same privacy screen before it is offered
@@ -138,40 +142,87 @@ app — including the agent — runs with no AWS access.
 
 **Procurement agent** (`lib/agent`, `POST /api/agent`): give it a study and a
 budget and it searches, inspects, sample-checks and opens an escrow order using
-four tools — `search_datasets`, `get_dataset`, `check_sample`,
+four tools: `search_datasets`, `get_dataset`, `check_sample`,
 `create_escrow_order`. The guardrails live in code, not the prompt: an order is
 refused unless the dataset exists, its listed price fits the budget, a
-_passing_ sample check ran in the same run, and no order was placed yet. The
-agent can only open a `MATCHED` order; it has no tool to authorize, capture or
-pay out — the human buyer still approves in PayPal. Runs are capped at 8 model
+_passing_ sample check ran in the same run, the buyer does not already own the
+dataset, and no order was placed yet. Sample checks are capped at three per run.
+When a sample fails, the agent moves on to the next in-budget candidate, and
+search results flag datasets the buyer already owns (`alreadyOwned`). The agent
+can only open a `MATCHED` order; it has no tool to authorize, capture or pay
+out. The human buyer still approves in PayPal. Runs are capped at 8 model
 turns, fall back to a scripted planner when the LLM is off, and every step is
 stored in `agent_runs` (`GET /api/agent?runId=`). Each run also returns a
 `shortlist` of the candidates it looked at, best first, with a short reason
-for each. `/agent/<runId>` shows the same run as a shareable replay page.
+for each. `/agent/<runId>` shows the same run as a shareable replay page, with
+each guardrail marked as enforced or triggered.
+
+### Escrow in the workspaces
+
+- **Checkout round trip.** Buy (escrow) saves the study text, opens (or reuses)
+  the `MATCHED` order, and sends the buyer to its approval page: `/checkout/mock`
+  in mock mode, PayPal's own page otherwise. Approving or cancelling there leads
+  back to `/researcher?orderId=<id>`. The workspace reopens the order from that
+  link and reads its state from the API. A real PayPal return (with a `token`,
+  or `cancelled=1`) authorizes or cancels the order if it is still `MATCHED`.
+- **Live sync and hold chip.** While an order can still change, the workspace
+  polls `GET /api/orders?id=` every 4 seconds, so a vendor's delivery, a dispute
+  or a void shows up without a reload. Polling stops at `PAID_OUT`, `VOIDED` and
+  `CANCELLED`. While PayPal holds the funds, a chip shows the hold's days left,
+  such as "Funds held · 2 days left · honor period ended …".
+- **Expiring download link.** Once the vendor delivers, the workspace shows a
+  "Download dataset (link expires HH:MM)" link. Each read mints a new link that
+  lives for 900 seconds. For now it is a mock link on `mock-delivery.meddata.local`,
+  so it does not download a real file.
+- **Query cap.** Each order has a spend cap, $10.00 by default. A query that would
+  go past it gets `402`. After a `402`, the spend line reads "$10.00 of $10.00
+  used" with a note that the order cannot run more queries.
+- **Vendor catalog.** An AG Grid with column groups (Listing and Performance). The
+  performance columns show orders, money in escrow, net earned after the fee and
+  the last order. Click a price to edit it, then press Ctrl+Z to undo up to the
+  last 10 edits.
+- **Order queue.** Incoming orders sit in an AG Grid with a "Needs action" filter.
+  An authorized order gets **Deliver data**. A disputed order gets **Release to
+  vendor** (capture) or **Refund buyer** (void), each with an optional resolution
+  note. Each row opens its audit history underneath.
+- **Ledger.** Each row splits the amount into the platform fee and the vendor's
+  net. A pinned total row sums both, so the amount equals the fee plus the net on
+  every row and in the total.
+- **Webhook replay.** In mock mode the webhook simulator sends a buyer approval
+  (authorization created), a capture, a refund, a void or a dispute. **Replay
+  last event** sends the same event id again. The server answers that it is a
+  duplicate, so nothing changes.
+- **Demo catalog.** Six synthetic datasets. Two are built to fail their sample
+  check: the Pediatric Asthma Pilot (640 records, under the 1,000 minimum) and
+  the COPD Exacerbations Panel (3.4% duplicate rows, over the 2% limit). The
+  Heart Failure Readmissions dataset lists at $240, above a $60 demo budget.
+- **Mock-mode bar.** In mock mode a bar at the bottom right says that no real
+  money moves. **Reset** clears the demo data. **Reset with sample orders** also
+  adds six orders in different states, including a hold with 2 days left.
 
 ### API reference
 
-| Method & path                                                 | Purpose                                                                                                                                             |
-| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST /api/match` `{ description }`                           | Rank catalog datasets for a study description (each match carries `priceCents` and `recordCount`)                                                   |
-| `GET /api/datasets`                                           | Catalog with the database prices (what orders charge), record counts and tags                                                                       |
-| `PATCH /api/datasets` `{ datasetId, priceCents }`             | Reprice a listing: whole cents, $1.00 to $10,000.00 (`422` otherwise)                                                                               |
-| `POST /api/match` `{ sampleCheck, description? }`             | Pre-purchase sample quality check on one dataset                                                                                                    |
-| `POST /api/orders` `{ datasetId, amount?, buyerEmail? }`      | Create an escrow order at the listed price (`MATCHED`); `200` with `reused: true` if an unapproved order exists                                     |
-| `PATCH /api/orders` `{ orderId, action, resolution?, note? }` | Advance escrow: `authorize · deliver · capture · payout · void · dispute · cancel · resolve`                                                        |
-| `GET /api/orders` `?status= &datasetId= &buyerEmail=`         | List orders (newest first)                                                                                                                          |
-| `GET /api/orders?id=<id>[&events=1]`                          | One order with its `authorization` window (while funds are held) and optional audit timeline                                                        |
-| `GET /api/orders?id=<id>&receipt=1`                           | Receipt: amount, platform fee, vendor payout, query charges, total                                                                                  |
-| `GET /api/orders?summary=1[&datasetId=]`                      | Vendor earnings: counts by status, held / captured / paid-out / released cents                                                                      |
-| `POST /api/query` `{ orderId, datasetId, question }`          | Plain-English question → privacy-safe aggregate with a one-sentence `summary`, metered (`usage` in response); a `403` may carry a safe `suggestion` |
-| `GET /api/billing?orderId=<id>`                               | An order's per-query usage, `queryCount`, `totalCents`                                                                                              |
-| `POST /api/billing` `{ orderId, question }`                   | Record one query charge (fee is server-set; `409` without data access)                                                                              |
-| `POST /api/agent` `{ study, budgetCents }`                    | Run the procurement agent; returns `runId`, steps, recommendation, `shortlist`, order                                                               |
-| `GET /api/agent?runId=<id>`                                   | Replay a stored agent run (audit), with its `shortlist`                                                                                             |
-| `POST /api/webhooks/paypal`                                   | Signature-verified, deduped PayPal events applied to escrow state                                                                                   |
-| `POST /api/demo/reset`                                        | Mock mode only: clears orders, events, usage and agent runs, then reseeds the catalog (`404` otherwise)                                             |
-| `GET /api/openapi`                                            | The OpenAPI 3.1 spec (`openapi/openapi.yaml`)                                                                                                       |
-| `GET /api/health`                                             | Uptime check: `{ status, mode, db }` (Render health check)                                                                                          |
+| Method & path                                                            | Purpose                                                                                                                                                                                  |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST /api/match` `{ description }`                                      | Rank catalog datasets for a study description (each match carries `priceCents` and `recordCount`)                                                                                        |
+| `GET /api/datasets`                                                      | Catalog with the database prices (what orders charge), record counts and tags                                                                                                            |
+| `PATCH /api/datasets` `{ datasetId, priceCents }`                        | Reprice a listing: whole cents, $1.00 to $10,000.00 (`422` otherwise)                                                                                                                    |
+| `POST /api/match` `{ sampleCheck, description? }`                        | Pre-purchase sample quality check on one dataset                                                                                                                                         |
+| `POST /api/orders` `{ datasetId, amount?, buyerEmail?, queryCapCents? }` | Create an escrow order at the listed price (`MATCHED`); `200` with `reused: true` if a matching unapproved order exists. `queryCapCents` is 50 to 100000 (default 1000), `422` otherwise |
+| `PATCH /api/orders` `{ orderId, action, resolution?, note? }`            | Advance escrow: `authorize · deliver · capture · payout · void · dispute · cancel · resolve`                                                                                             |
+| `GET /api/orders` `?status= &datasetId= &buyerEmail=`                    | List orders (newest first)                                                                                                                                                               |
+| `GET /api/orders?id=<id>[&events=1]`                                     | One order with its `authorization` window (while funds are held), a `delivery` link (once data is granted, minted per read) and optional audit timeline                                  |
+| `GET /api/orders?id=<id>&receipt=1`                                      | Receipt: amount, platform fee, vendor payout, query charges, query cap, total                                                                                                            |
+| `GET /api/orders?summary=1[&datasetId=]`                                 | Vendor earnings: counts by status, held / captured / paid-out (gross) / released cents, plus vendor net and platform fee on paid-out orders                                              |
+| `POST /api/query` `{ orderId, datasetId, question }`                     | Plain-English question → privacy-safe aggregate with a one-sentence `summary`, metered (`usage` in response); a `403` may carry a safe `suggestion`; `402` once the query cap is reached |
+| `GET /api/billing?orderId=<id>`                                          | An order's per-query usage, `queryCount`, `totalCents`                                                                                                                                   |
+| `POST /api/billing` `{ orderId, question }`                              | Record one query charge (fee is server-set; `409` without data access; `402` at the cap)                                                                                                 |
+| `POST /api/agent` `{ study, budgetCents }`                               | Run the procurement agent; returns `runId`, steps, recommendation, `shortlist`, order                                                                                                    |
+| `GET /api/agent?runId=<id>`                                              | Replay a stored agent run (audit), with its `shortlist`                                                                                                                                  |
+| `POST /api/webhooks/paypal`                                              | Signature-verified, deduped PayPal events applied to escrow state, matched by PayPal ids or our order id                                                                                 |
+| `POST /api/demo/reset`                                                   | Mock mode only: clears orders, events, usage and agent runs, then reseeds the catalog. Body `{ "seed": "story" }` also adds six sample orders (`404` otherwise, `422` for other bodies)  |
+| `GET /api/openapi`                                                       | The OpenAPI 3.1 spec (`openapi/openapi.yaml`)                                                                                                                                            |
+| `GET /api/health`                                                        | Uptime check: `{ status, mode, db }` (Render health check)                                                                                                                               |
 
 Errors are always `{ error }` (plus `reasons` on privacy rejections).
 
@@ -201,18 +252,18 @@ Production build: `npm run build && npm start`.
 
 | Variable                  | Required | Description                                                                            |
 | ------------------------- | :------: | -------------------------------------------------------------------------------------- |
-| `PAYPAL_MODE`             |    —     | `mock` runs the whole escrow arc with no PayPal keys; unset = real sandbox calls       |
+| `PAYPAL_MODE`             |    no    | `mock` runs the whole escrow arc with no PayPal keys; unset = real sandbox calls       |
 | `PAYPAL_CLIENT_ID`        | sandbox  | PayPal **sandbox** app client ID                                                       |
 | `PAYPAL_CLIENT_SECRET`    | sandbox  | PayPal **sandbox** app secret                                                          |
-| `PAYPAL_API_BASE`         |    —     | PayPal API base (default `https://api-m.sandbox.paypal.com`)                           |
+| `PAYPAL_API_BASE`         |    no    | PayPal API base (default `https://api-m.sandbox.paypal.com`)                           |
 | `PAYPAL_WEBHOOK_ID`       | webhooks | Webhook id used to verify inbound PayPal webhooks                                      |
-| `LLM_PROVIDER`            |    —     | `bedrock` enables Claude on Amazon Bedrock; unset = deterministic fallbacks            |
+| `LLM_PROVIDER`            |    no    | `bedrock` enables Claude on Amazon Bedrock; unset = deterministic fallbacks            |
 | `AWS_REGION`              | Bedrock  | Bedrock region (default `us-east-1`); credentials from the AWS chain                   |
-| `LLM_MODEL`               |    —     | Bedrock model id override (default `anthropic.claude-opus-5-5`)                        |
+| `LLM_MODEL`               |    no    | Bedrock model id override (default `anthropic.claude-opus-5-5`)                        |
 | `DATABASE_URL`            |    ✅    | `file:./data/dev.sqlite` locally; `file:./data/demo.sqlite` on Render (seeded at boot) |
-| `OUTBOUND_WEBHOOK_URL`    |    —     | Receives signed escrow events (e.g. a Zapier Catch Hook)                               |
-| `OUTBOUND_WEBHOOK_SECRET` |    —     | HMAC secret for `X-MedData-Signature` on outbound events                               |
-| `NEXT_PUBLIC_SITE_URL`    |    —     | Absolute site URL for share metadata                                                   |
+| `OUTBOUND_WEBHOOK_URL`    |    no    | Receives signed escrow events (e.g. a Zapier Catch Hook)                               |
+| `OUTBOUND_WEBHOOK_SECRET` |    no    | HMAC secret for `X-MedData-Signature` on outbound events                               |
+| `NEXT_PUBLIC_SITE_URL`    |    no    | Absolute site URL for share metadata                                                   |
 
 > 🔒 Never commit secrets. Only `.env.example` (with empty placeholders) is tracked.
 
@@ -226,14 +277,15 @@ Production build: `npm run build && npm start`.
 
 ## Demo
 
-- 🌐 **Hosted demo:** _placeholder — link coming soon_
-- 🎥 **Demo video (YouTube, < 3 min):** _placeholder — link coming soon_
+- 🌐 **Hosted demo:** _placeholder, link coming soon_
+- 🎥 **Demo video (YouTube, < 3 min):** _placeholder, link coming soon_
 
 ### Run it locally
 
 ```bash
 npm test               # unit tests (node:test + tsx): escrow state machine, SQLite
                        # persistence, PayPal client, matcher, nl2query, privacy guard, routes
+                       # (511 passing as of November 1, 2026)
 npm run demo           # happy-path CLI: match → authorize → deliver → capture → payout
 npm run dev:mock       # full UI + API, no PayPal keys needed (http://localhost:3000)
 npm run demo -- --sandbox "heart disease cohort"   # real sandbox calls (.env.local)
@@ -243,13 +295,17 @@ npm run demo -- --sandbox "heart disease cohort"   # real sandbox calls (.env.lo
 open [`/researcher`](http://localhost:3000/researcher). Describe a study, tick up
 to three matches to compare them, and pick one. **Buy (escrow)** opens the local
 checkout page at `/checkout/mock`, which stands in for PayPal's approval page.
-Then walk the escrow arc with the on-page buttons (**Deliver → Confirm & release →
-Pay out vendor**), run a privacy-safe query, and read the receipt card. A
-refused question offers a **Try instead** rewrite. Cancel is available until the
-order is approved. [`/vendor`](http://localhost:3000/vendor) shows the catalog
-(edit a price inline and the next order charges it), the status filter, the
-order drawer and a PayPal webhook simulator. To start over between takes, call
-`POST /api/demo/reset` (mock mode only).
+Approve there, then **Back to the workspace** returns you to
+`/researcher?orderId=…`, where the order is reloaded from the server. Run a
+privacy-safe query, read the receipt card, and use **Confirm & release payment**
+and **Pay out vendor**. The vendor delivers the data on
+[`/vendor`](http://localhost:3000/vendor) with **Deliver data**. Cancel is
+available until the order is approved. A refused question offers a **Try
+instead** rewrite. The vendor page also has the catalog (edit a price inline and
+the next order charges it; Ctrl+Z undoes the edit), the order queue, the ledger
+with fee and net, the order drawer and a PayPal webhook simulator. To start over
+between takes, use **Reset** or **Reset with sample orders** in the mock-mode bar
+(or call `POST /api/demo/reset` in mock mode).
 
 The escrow lifecycle is a pure state machine in `lib/escrow/state-machine.ts`
 (`MATCHED → AUTHORIZED → DELIVERED → CAPTURED → PAID_OUT`, with
@@ -257,8 +313,8 @@ The escrow lifecycle is a pure state machine in `lib/escrow/state-machine.ts`
 (`lib/db`, built on Node's `node:sqlite`). Everything is **mock-first**: both the
 CLI (`npm run demo`) and the app (`PAYPAL_MODE=mock`) drive the real state machine,
 matcher, and privacy guard against stubbed PayPal + delivery, so no AWS and no
-credentials are needed. The real sandbox path drops in behind the same interfaces —
-see [TODO-paypal-tools.md](./TODO-paypal-tools.md) for the sponsor-tool
+credentials are needed. The real sandbox path drops in behind the same interfaces.
+See [TODO-paypal-tools.md](./TODO-paypal-tools.md) for the sponsor-tool
 verification pass (AI-Toolkit plugin + PayPal MCP).
 
 ## Project structure
@@ -271,23 +327,23 @@ meddata-escrow/
 │  ├─ agent/[runId]/         # shareable replay of one procurement agent run
 │  ├─ checkout/mock/         # local stand-in for PayPal's approval page (mock mode)
 │  └─ api/
-│     ├─ match/              # POST  — match datasets to a study description
+│     ├─ match/              # POST: match datasets to a study description
 │     ├─ datasets/           # GET/PATCH: catalog with database prices; reprice a listing
 │     ├─ orders/             # GET/POST/PATCH: list + escrow lifecycle (authorize → capture/void/payout, dispute/resolve, cancel); GET ?events= returns the audit timeline, ?receipt=1 the fee receipt
 │     ├─ query/              # POST: plain-English query (paid order required; privacy-safe aggregate, metered, one-sentence summary)
-│     ├─ billing/            # GET/POST — per-query usage + spend
+│     ├─ billing/            # GET/POST: per-query usage and spend
 │     ├─ agent/              # POST/GET: procurement agent runs (with shortlist)
-│     ├─ demo/reset/         # POST: mock mode only, resets the demo data
-│     └─ health/             # GET   — uptime check
+│     ├─ demo/reset/         # POST: mock mode only, resets the demo data (optionally with sample orders)
+│     └─ health/             # GET: uptime check
 ├─ lib/
 │  ├─ ai/                    # matcher, nl2query, privacy-guard (incl. safe rewrites), answer-summary
 │  ├─ agent/                 # procurement tool loop, run store, shortlist, replay
 │  ├─ query/                 # mock vendor-side executor, per-query pricing, query suggestions
 │  ├─ escrow/                # escrow state machine, data-access rule, authorization window, receipts, mock webhook events
 │  ├─ catalog/               # listing price rules (whole cents, $1 to $10,000)
-│  ├─ ui/                    # pure helpers for the grids: compare, bar scale, status filter, escrow messages
+│  ├─ ui/                    # pure helpers for the grids and workspaces: compare, bar scale, status filter, escrow messages, order sync, ledger, listing stats, vendor actions
 │  ├─ paypal/                # PayPal Orders/Payments client
-│  └─ db/                    # SQLite persistence layer (client.ts, usage.ts, datasets.ts, reset.ts), schema.sql, seed.ts
+│  └─ db/                    # SQLite persistence layer (client.ts, usage.ts, datasets.ts, reset.ts, demo-story.ts), schema.sql, seed.ts
 ├─ data/catalog.json         # dataset catalog (synthetic)
 ├─ scripts/                  # generate-data.sh (Synthea), seed.sh
 ├─ docs/                     # architecture, paypal-flow, privacy, demo-script, checklist
