@@ -29,7 +29,11 @@
 // MOCK MODE: set PAYPAL_MODE=mock to drive the whole arc with no credentials.
 // It still persists to the DB — the demo gets real, queryable order rows with
 // mock PayPal ids. It is opt-in — without the flag, missing creds still 503.
-import { isEscrowState } from "../../../lib/escrow/state-machine";
+import {
+  isEscrowState,
+  grantsDataAccess,
+} from "../../../lib/escrow/state-machine";
+import { presignDelivery } from "../../../lib/delivery/mock-s3";
 import {
   withDb,
   getOrder,
@@ -121,9 +125,13 @@ export async function GET(request: Request) {
               events.find((e) => e.event === "AUTHORIZE")?.created_at,
             )
           : null;
+        // A fresh expiring link per read, only once the buyer may have the data.
+        const delivery = grantsDataAccess(order.status)
+          ? presignDelivery(order.dataset_id, { orderId: order.id })
+          : null;
         return includeEvents
-          ? { order, authorization, events }
-          : { order, authorization };
+          ? { order, authorization, delivery, events }
+          : { order, authorization, delivery };
       });
       if (!result) return bad(`unknown orderId: ${id}`, 404);
       return Response.json(result);

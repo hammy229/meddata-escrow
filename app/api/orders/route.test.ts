@@ -622,6 +622,46 @@ test(
   }),
 );
 
+// --- Delivery link ---
+
+test(
+  "GET ?id= hands out an expiring delivery link only when data access is granted",
+  withEnv(async ({ url }) => {
+    for (const status of ["DELIVERED", "CAPTURED"] as const) {
+      const order = seedOrder(url, { status });
+      const json = (await (await GET(getReq(`?id=${order.id}`))).json()) as {
+        delivery: { url: string; expiresAt: string; mock: true } | null;
+      };
+      assert.ok(json.delivery, status);
+      assert.equal(json.delivery.mock, true);
+      assert.ok(json.delivery.url.includes(DATASET_ID));
+      const ms = Date.parse(json.delivery.expiresAt) - Date.now();
+      assert.ok(ms > 800_000 && ms <= 900_000, `ttl ${ms}`);
+    }
+    for (const status of ["AUTHORIZED", "DISPUTED", "VOIDED"] as const) {
+      const order = seedOrder(url, { status });
+      const json = (await (await GET(getReq(`?id=${order.id}`))).json()) as {
+        delivery: unknown;
+      };
+      assert.equal(json.delivery, null, status);
+    }
+  }),
+);
+
+test(
+  "each read mints a fresh delivery link",
+  withEnv(async ({ url }) => {
+    const order = seedOrder(url, { status: "DELIVERED" });
+    const read = async () =>
+      (
+        (await (await GET(getReq(`?id=${order.id}`))).json()) as {
+          delivery: { url: string };
+        }
+      ).delivery.url;
+    assert.notEqual(await read(), await read());
+  }),
+);
+
 // --- Receipt ---
 
 type ReceiptBody = {
