@@ -6,7 +6,11 @@
 import { can, isEscrowState } from "./state-machine";
 
 export type MockWebhookKind =
-  "capture_completed" | "authorization_voided" | "dispute_created";
+  | "authorization_created"
+  | "capture_completed"
+  | "capture_refunded"
+  | "authorization_voided"
+  | "dispute_created";
 
 /** The order fields a payload refers to (raw OrderRow columns). */
 export interface MockWebhookOrder {
@@ -22,9 +26,19 @@ export const MOCK_WEBHOOK_KINDS: {
   eventType: string;
 }[] = [
   {
+    kind: "authorization_created",
+    label: "Buyer approved (authorization created)",
+    eventType: "PAYMENT.AUTHORIZATION.CREATED",
+  },
+  {
     kind: "capture_completed",
     label: "Capture completed",
     eventType: "PAYMENT.CAPTURE.COMPLETED",
+  },
+  {
+    kind: "capture_refunded",
+    label: "Capture refunded",
+    eventType: "PAYMENT.CAPTURE.REFUNDED",
   },
   {
     kind: "authorization_voided",
@@ -72,6 +86,52 @@ export function buildMockWebhookEvent(
   ];
 
   switch (kind) {
+    case "authorization_created":
+      // PayPal creates the authorization when the buyer approves; the order is
+      // matched by the PayPal order id in related_ids.
+      return {
+        ...base,
+        resource_type: "authorization",
+        event_type: "PAYMENT.AUTHORIZATION.CREATED",
+        summary: "A payment authorization was created",
+        resource: {
+          id: `MOCK-AUTH-${suffix}`,
+          status: "CREATED",
+          amount: money(order.amount_cents),
+          create_time: createTime,
+          supplementary_data: {
+            related_ids: {
+              ...(order.paypal_order_id && {
+                order_id: order.paypal_order_id,
+              }),
+            },
+          },
+          links: links(`payments/authorizations/MOCK-AUTH-${suffix}`),
+        },
+      };
+    case "capture_refunded":
+      // Recorded for the ops trail only; no escrow state models a refund.
+      return {
+        ...base,
+        resource_type: "refund",
+        event_type: "PAYMENT.CAPTURE.REFUNDED",
+        summary: "A capture was refunded",
+        resource: {
+          id: `MOCK-REF-${suffix}`,
+          status: "COMPLETED",
+          amount: money(order.amount_cents),
+          create_time: createTime,
+          supplementary_data: {
+            related_ids: {
+              ...(authId && { authorization_id: authId }),
+              ...(order.paypal_order_id && {
+                order_id: order.paypal_order_id,
+              }),
+            },
+          },
+          links: links(`payments/refunds/MOCK-REF-${suffix}`),
+        },
+      };
     case "capture_completed":
       return {
         ...base,
@@ -143,7 +203,7 @@ export function buildMockWebhookEvent(
 /**
  * Would the webhook processor act on `kind` for an order in `status`? Mirrors
  * the mapping in paypal-webhooks: a false answer means the event is recorded
- * but ignored as not applicable from that state.
+ * but changes nothing from that state.
  */
 export function mockWebhookFits(
   kind: MockWebhookKind,
@@ -151,6 +211,11 @@ export function mockWebhookFits(
 ): boolean {
   if (!isEscrowState(status)) return false;
   switch (kind) {
+    case "authorization_created":
+      return can(status, "AUTHORIZE");
+    case "capture_refunded":
+      // Recorded whenever the order is found; never moves state.
+      return true;
     case "capture_completed":
       return can(status, "CAPTURE") || can(status, "RESOLVE_CAPTURE");
     case "authorization_voided":

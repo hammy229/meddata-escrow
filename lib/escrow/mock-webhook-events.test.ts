@@ -28,6 +28,7 @@ import {
 function withOrder(
   path: EscrowEvent[],
   fn: (order: OrderRow) => void,
+  opts: { authorizationId?: string | null } = {},
 ): () => void {
   return () => {
     const file = join(tmpdir(), `meddata-mockwh-${randomUUID()}.sqlite`);
@@ -47,7 +48,9 @@ function withOrder(
         buyerEmail: "buyer@example.com",
         amountCents: 4900,
         paypalOrderId: "MOCK-ORDER-1",
-        authorizationId: "MOCK-AUTH-1",
+        ...(opts.authorizationId === null
+          ? {}
+          : { authorizationId: opts.authorizationId ?? "MOCK-AUTH-1" }),
       });
       for (const e of path) advanceOrder(db, order.id, e);
       const current = getOrder(db, order.id)!;
@@ -172,7 +175,11 @@ const PATHS: Record<string, EscrowEvent[]> = {
   CANCELLED: ["CANCEL"],
 };
 
-for (const { kind } of MOCK_WEBHOOK_KINDS) {
+// capture_refunded never moves an order (it is always just recorded), so only
+// the kinds that can change state are compared with the processor.
+for (const { kind } of MOCK_WEBHOOK_KINDS.filter(
+  (k) => k.kind !== "capture_refunded",
+)) {
   for (const [status, path] of Object.entries(PATHS)) {
     test(
       `mockWebhookFits(${kind}, ${status}) agrees with the processor`,
@@ -181,7 +188,7 @@ for (const { kind } of MOCK_WEBHOOK_KINDS) {
         const out = processPayPalWebhookEvent(
           buildMockWebhookEvent(kind, order),
         );
-        assert.equal(mockWebhookFits(kind, status), out.kind !== "ignored");
+        assert.equal(mockWebhookFits(kind, status), out.kind === "applied");
       }),
     );
   }
@@ -198,6 +205,50 @@ test(
     const replay = JSON.parse(JSON.stringify(evt));
     assert.equal(processPayPalWebhookEvent(evt).kind, "applied");
     assert.equal(processPayPalWebhookEvent(replay).kind, "duplicate");
+    assert.equal(stateOf(order.id).status, "CAPTURED");
+  }),
+);
+
+test(
+  "authorization created authorizes a matched order and stores the new id",
+  withOrder(
+    [],
+    (order) => {
+      assert.equal(order.authorization_id, null);
+      const evt = buildMockWebhookEvent("authorization_created", order);
+      const resource = evt.resource as {
+        id: string;
+        supplementary_data: { related_ids: { order_id: string } };
+      };
+      assert.match(resource.id, /^MOCK-AUTH-/);
+      assert.equal(
+        resource.supplementary_data.related_ids.order_id,
+        "MOCK-ORDER-1",
+      );
+
+      const out = processPayPalWebhookEvent(evt);
+      assert.equal(out.kind, "applied");
+      const db = openDb();
+      try {
+        const after = getOrder(db, order.id)!;
+        assert.equal(after.status, "AUTHORIZED");
+        assert.equal(after.authorization_id, resource.id);
+      } finally {
+        db.close();
+      }
+      assert.equal(processPayPalWebhookEvent(evt).kind, "duplicate");
+    },
+    { authorizationId: null },
+  ),
+);
+
+test(
+  "capture refunded is recorded without moving the order",
+  withOrder(["AUTHORIZE", "DELIVER", "CAPTURE"], (order) => {
+    const out = processPayPalWebhookEvent(
+      buildMockWebhookEvent("capture_refunded", order),
+    );
+    assert.equal(out.kind, "recorded");
     assert.equal(stateOf(order.id).status, "CAPTURED");
   }),
 );
