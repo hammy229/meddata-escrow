@@ -219,6 +219,7 @@ export default function VendorCatalog() {
         return;
       }
       setEditError(null);
+      e.api.flashCells({ rowNodes: [e.node], columns: ["price"] });
       // Take the server's stored price as the truth.
       const saved = body?.dataset?.priceCents;
       if (typeof saved === "number") e.data.priceCents = saved;
@@ -294,6 +295,8 @@ export default function VendorCatalog() {
           height={Math.min(80 + Math.max(rows.length, 1) * 44, 480)}
           options={{
             loading: state.status === "loading",
+            undoRedoCellEditing: true,
+            undoRedoCellEditingLimit: 10,
             onCellValueChanged: onPriceChanged,
           }}
         />
