@@ -108,6 +108,11 @@ function guardrails(
       detail: `At most ${MAX_SAMPLE_CHECKS} sample checks per run.`,
     },
     {
+      label: "No duplicate purchase",
+      status: status(/already own/),
+      detail: "A dataset the buyer already owns is never bought again.",
+    },
+    {
       label: "One order per run",
       status: status(/already created/),
       detail: "At most one escrow order can be opened.",

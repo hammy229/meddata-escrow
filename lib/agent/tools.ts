@@ -17,6 +17,8 @@
 //   - its listed price is <= the run's budgetCents,
 //   - a PASSING sample check for that dataset already ran in this run
 //     (and check_sample itself is capped at MAX_SAMPLE_CHECKS per run),
+//   - the buyer does not already own the dataset (an AUTHORIZED, DELIVERED,
+//     CAPTURED, PAID_OUT or DISPUTED order for it),
 //   - no order has been created yet in this run (at most one per run).
 // A refused call becomes an error tool result the model can read and react to;
 // it never throws out of the loop.
@@ -28,9 +30,10 @@ import * as z from "zod/v4";
 import { loadCatalog, matchDatasets, type CatalogEntry } from "../ai/matcher";
 import { checkSample } from "../ai/sample-check";
 import type { AiOptions } from "../ai/options";
-import { getDataset, withDb } from "../db/client";
+import { getDataset, listOrders, withDb } from "../db/client";
 import {
   createEscrowOrder,
+  DEFAULT_BUYER_EMAIL,
   EscrowError,
   type EscrowDeps,
 } from "../escrow/service";
@@ -187,6 +190,25 @@ function listedPriceCents(datasetId: string): number | null {
   return typeof entry?.priceCents === "number" ? entry.priceCents : null;
 }
 
+/** States in which the buyer has paid for (or is owed) the dataset. */
+const OWNED_STATES: ReadonlySet<EscrowState> = new Set<EscrowState>([
+  "AUTHORIZED",
+  "DELIVERED",
+  "CAPTURED",
+  "PAID_OUT",
+  "DISPUTED",
+]);
+
+/**
+ * The state of the run's buyer's order that already covers this dataset, if
+ * any. MATCHED does not count: the service reuses an open MATCHED order.
+ */
+function ownedState(ctx: AgentContext, datasetId: string): EscrowState | null {
+  const buyerEmail = ctx.buyerEmail?.trim() || DEFAULT_BUYER_EMAIL;
+  const orders = withDb((db) => listOrders(db, { datasetId, buyerEmail }));
+  return orders.find((o) => OWNED_STATES.has(o.status))?.status ?? null;
+}
+
 function parse<S extends z.ZodType>(s: S, input: unknown): z.infer<S> {
   const r = s.safeParse(input);
   if (!r.success)
@@ -210,6 +232,7 @@ async function searchDatasets(ctx: AgentContext, input: unknown) {
         rationale: m.rationale,
         priceCents,
         withinBudget: priceCents !== null && priceCents <= ctx.budgetCents,
+        alreadyOwned: ownedState(ctx, m.datasetId) !== null,
       };
     }),
     budgetCents: ctx.budgetCents,
@@ -230,6 +253,7 @@ async function getDatasetDetails(ctx: AgentContext, input: unknown) {
     priceCents,
     budgetCents: ctx.budgetCents,
     withinBudget: priceCents !== null && priceCents <= ctx.budgetCents,
+    alreadyOwned: ownedState(ctx, datasetId) !== null,
   };
 }
 
@@ -261,6 +285,11 @@ async function placeOrder(ctx: AgentContext, input: unknown) {
   if (dataset.price_cents > ctx.budgetCents)
     throw new ToolError(
       `price ${dataset.price_cents} cents exceeds the budget of ${ctx.budgetCents} cents`,
+    );
+  const owned = ownedState(ctx, datasetId);
+  if (owned)
+    throw new ToolError(
+      `you already own ${datasetId} (an order is ${owned}); not buying it again`,
     );
   if (!ctx.passedSamples.has(datasetId))
     throw new ToolError(

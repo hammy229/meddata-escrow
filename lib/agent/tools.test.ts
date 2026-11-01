@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { getOrder, listOrders, withDb } from "../db/client";
+import { createOrder, getOrder, listOrders, withDb } from "../db/client";
+import type { EscrowState } from "../escrow/state-machine";
 import { fakeLlm } from "../ai/testing";
 import { withAgentDb } from "./test-db";
 import {
@@ -253,6 +254,94 @@ test(
       study: STUDY,
     });
     assert.ok(fresh.ok);
+  }),
+);
+
+function seedOrder(
+  status: "MATCHED" | EscrowState,
+  buyerEmail = "demo-buyer@meddata.test",
+  datasetId = CARDIO,
+) {
+  withDb((db) =>
+    createOrder(db, { datasetId, buyerEmail, amountCents: 4900, status }),
+  );
+}
+
+test(
+  "guardrail: refuses to rebuy a dataset the buyer already owns",
+  withAgentDb(async () => {
+    for (const status of [
+      "AUTHORIZED",
+      "DELIVERED",
+      "CAPTURED",
+      "PAID_OUT",
+      "DISPUTED",
+    ] as const) {
+      withDb((db) => db.exec(`DELETE FROM order_events; DELETE FROM orders;`));
+      seedOrder(status);
+      const c = ctx();
+      await executeTool(c, "check_sample", { datasetId: CARDIO, study: STUDY });
+      const r = await executeTool(c, "create_escrow_order", {
+        datasetId: CARDIO,
+        justification: "x",
+      });
+      assert.equal(r.ok, false, status);
+      assert.match((r as { error: string }).error, /already own/, status);
+      assert.equal(c.order, undefined);
+      assert.equal(withDb((db) => listOrders(db)).length, 1);
+    }
+  }),
+);
+
+test(
+  "ownership is per buyer and ignores unpaid or finished-without-sale orders",
+  withAgentDb(async () => {
+    seedOrder("CAPTURED", "someone-else@example.com");
+    seedOrder("VOIDED");
+    seedOrder("CANCELLED");
+    seedOrder("MATCHED");
+    const c = ctx();
+    await executeTool(c, "check_sample", { datasetId: CARDIO, study: STUDY });
+    const r = await executeTool(c, "create_escrow_order", {
+      datasetId: CARDIO,
+      justification: "x",
+    });
+    assert.ok(r.ok, JSON.stringify(r));
+  }),
+);
+
+test(
+  "search_datasets and get_dataset report alreadyOwned for the run's buyer",
+  withAgentDb(async () => {
+    seedOrder("PAID_OUT", "r@example.com");
+    const mine = createAgentContext({
+      study: STUDY,
+      budgetCents: 10_000,
+      buyerEmail: "r@example.com",
+      ai: { useLlm: false },
+    });
+    const search = await executeTool(mine, "search_datasets", { study: STUDY });
+    const { matches } = (search as { output: unknown }).output as {
+      matches: { datasetId: string; alreadyOwned: boolean }[];
+    };
+    assert.equal(matches.find((m) => m.datasetId === CARDIO)?.alreadyOwned, true);
+    assert.equal(
+      matches.find((m) => m.datasetId === DIABETES)?.alreadyOwned,
+      false,
+    );
+    const detail = await executeTool(mine, "get_dataset", { datasetId: CARDIO });
+    assert.equal(
+      ((detail as { output: unknown }).output as { alreadyOwned: boolean })
+        .alreadyOwned,
+      true,
+    );
+    // Another buyer (the default) owns nothing.
+    const other = await executeTool(ctx(), "get_dataset", { datasetId: CARDIO });
+    assert.equal(
+      ((other as { output: unknown }).output as { alreadyOwned: boolean })
+        .alreadyOwned,
+      false,
+    );
   }),
 );
 

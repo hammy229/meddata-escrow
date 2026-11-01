@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type Anthropic from "@anthropic-ai/sdk";
 
 import type { LlmClient } from "../llm/client";
-import { listOrders, withDb } from "../db/client";
+import { createOrder, listOrders, withDb } from "../db/client";
 import { withAgentDb } from "./test-db";
 import { runProcurementAgent } from "./run";
 
@@ -323,6 +323,48 @@ test(
     assert.equal(r.order?.datasetId, "ds_hypertension_registry_v1");
     assert.equal(r.order?.amountCents, 3900);
     assert.equal(orderCount(), 1);
+  }),
+);
+
+test(
+  "scripted planner skips a dataset the buyer already owns",
+  withAgentDb(async () => {
+    withDb((db) =>
+      createOrder(db, {
+        datasetId: CARDIO,
+        buyerEmail: "r@example.com",
+        amountCents: 4900,
+        status: "CAPTURED",
+      }),
+    );
+    const r = await runProcurementAgent(
+      {
+        study: "cardiology hypertension registry synthetic",
+        budgetCents: 6000,
+        buyerEmail: "r@example.com",
+      },
+      { useLlm: false },
+    );
+    assert.equal(r.order?.datasetId, "ds_hypertension_registry_v1");
+    assert.ok(
+      r.steps.every(
+        (s) =>
+          s.tool !== "check_sample" ||
+          (s.output as { datasetId: string }).datasetId !== CARDIO,
+      ),
+    );
+
+    // Only owned datasets in budget: nothing bought, and it says why.
+    const none = await runProcurementAgent(
+      {
+        study: "cardiology",
+        budgetCents: 6000,
+        buyerEmail: "r@example.com",
+      },
+      { useLlm: false },
+    );
+    assert.equal(none.order, undefined);
+    assert.match(none.recommendation.reasoning, /already own/);
   }),
 );
 

@@ -82,6 +82,7 @@ test("guardrails show which ones fired", () => {
   );
   assert.equal(g["One order per run"].status, "enforced");
   assert.equal(g["Sample check limit"].status, "enforced");
+  assert.equal(g["No duplicate purchase"].status, "enforced");
   assert.equal(g["No money movement"].status, "enforced");
 });
 
@@ -112,6 +113,25 @@ test("the sample check limit guardrail fires on a refused fourth check", () => {
     )["Sample check first"],
     "enforced",
   );
+});
+
+test("the duplicate purchase guardrail fires when the buyer already owns it", () => {
+  const dup: StoredAgentRun = {
+    ...run,
+    steps: [
+      ...run.steps,
+      {
+        tool: "create_escrow_order",
+        input: { datasetId: "ds_a" },
+        error: "you already own ds_a (an order is CAPTURED); not buying it again",
+        at,
+      },
+    ],
+  };
+  const g = Object.fromEntries(
+    buildReplay(dup).guardrails.map((x) => [x.label, x]),
+  );
+  assert.equal(g["No duplicate purchase"].status, "triggered");
 });
 
 test("recommendation, shortlist, order and timestamp come through", () => {

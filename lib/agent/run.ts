@@ -66,7 +66,7 @@ const SYSTEM = [
   "Work in this order: search_datasets for the study; get_dataset on the best candidate;",
   "check_sample on it; then, only if the sample check passed and the listed price is",
   "within the budget, call create_escrow_order exactly once. If a sample fails, try",
-  "the next in-budget candidate (at most 3 sample checks per run). Use only dataset ids",
+  "the next in-budget candidate (at most 3 sample checks per run). Never buy a dataset marked alreadyOwned. Use only dataset ids",
   "returned by the tools; never invent ids or prices. If no dataset fits the study,",
   "the budget, or the sample check, do not buy. The order only opens a PayPal escrow",
   "the researcher must approve; you cannot move money. Finish with a short plain-text",
@@ -172,6 +172,7 @@ interface SearchMatch {
   rationale: string;
   priceCents: number | null;
   withinBudget: boolean;
+  alreadyOwned: boolean;
 }
 
 async function runScripted(
@@ -191,7 +192,13 @@ async function runScripted(
   if (matches.length === 0)
     return done("No dataset in the catalog matches this study.");
 
-  const candidates = matches.filter((m) => m.withinBudget);
+  const inBudget = matches.filter((m) => m.withinBudget);
+  const candidates = inBudget.filter((m) => !m.alreadyOwned);
+  if (inBudget.length > 0 && candidates.length === 0) {
+    return done(
+      `Nothing was bought: you already own ${inBudget.map((m) => m.datasetId).join(", ")}, the only matching dataset${inBudget.length > 1 ? "s" : ""} within budget.`,
+    );
+  }
   if (candidates.length === 0) {
     const best = matches[0];
     return done(
