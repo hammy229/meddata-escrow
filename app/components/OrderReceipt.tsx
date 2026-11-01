@@ -6,6 +6,7 @@
 // order is captured, and nothing if the server sends no `receipt` (older API)
 // or the request fails: a missing receipt is not an error worth showing.
 import { useEffect, useState } from "react";
+import { describeCap } from "../../lib/ui/order-sync";
 
 interface Receipt {
   amountCents: number;
@@ -14,6 +15,8 @@ interface Receipt {
   queryCount: number;
   queryChargesCents: number;
   totalCents: number;
+  /** Per-order query cap, when the server reports one. */
+  queryCapCents?: number;
 }
 
 function usd(cents: number): string {
@@ -41,6 +44,8 @@ function parseReceipt(raw: unknown): Receipt | null {
     queryCount: r.queryCount as number,
     queryChargesCents: r.queryChargesCents as number,
     totalCents: r.totalCents as number,
+    queryCapCents:
+      typeof r.queryCapCents === "number" ? r.queryCapCents : undefined,
   };
 }
 
@@ -88,6 +93,8 @@ export default function OrderReceipt({
     ],
   ];
 
+  const cap = describeCap(receipt.queryChargesCents, receipt.queryCapCents);
+
   return (
     <div className="reveal mt-6 border-t border-rule pt-5">
       <h3 className="mb-3 font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase">
@@ -103,6 +110,14 @@ export default function OrderReceipt({
             <dd className="font-mono tabular-nums">{value}</dd>
           </div>
         ))}
+        {cap && (
+          <div
+            className={`border-b border-rule py-2 text-xs ${cap.reached ? "text-amber-700 dark:text-amber-400" : "text-muted"}`}
+          >
+            Query budget: {cap.label}
+            {cap.message && ` · ${cap.message}`}
+          </div>
+        )}
         <div className="flex items-baseline justify-between gap-6 py-2 font-medium">
           <dt>Total</dt>
           <dd className="font-mono tabular-nums">{usd(receipt.totalCents)}</dd>

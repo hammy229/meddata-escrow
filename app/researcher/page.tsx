@@ -32,7 +32,10 @@ import AgentRun from "../components/AgentRun";
 import EscrowStepper from "../components/EscrowStepper";
 import {
   describeHold,
+  downloadLabel,
+  type Delivery,
   orderToView,
+  parseDelivery,
   shouldPoll,
   type EscrowFlowState,
 } from "../../lib/ui/order-sync";
@@ -117,6 +120,10 @@ export default function ResearcherPage({
   const [cancelled, setCancelled] = useState(false);
   // "Funds held · 28 days left · ..." from the order's authorization window.
   const [holdLine, setHoldLine] = useState<string | null>(null);
+  // Expiring download link, present once the vendor has delivered.
+  const [delivery, setDelivery] = useState<Delivery | null>(null);
+  // Query cap from a 402 (the receipt and billing carry their own copy).
+  const [queryCap, setQueryCap] = useState<number | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [escrowNote, setEscrowNote] = useState<string | null>(null);
@@ -150,6 +157,8 @@ export default function ResearcherPage({
     setDisputed(false);
     setCancelled(false);
     setHoldLine(null);
+    setDelivery(null);
+    setQueryCap(null);
     setOrderId(null);
     setEscrowNote(null);
     setEscrowError(null);
@@ -200,6 +209,7 @@ export default function ResearcherPage({
         if (stale || !res.ok || typeof data?.order?.status !== "string") return;
         applyOrderStatus(data.order.status);
         setHoldLine(describeHold(data.authorization));
+        setDelivery(parseDelivery(data.delivery));
       } catch {
         // Offline for a moment; the next tick tries again.
       }
@@ -282,6 +292,7 @@ export default function ResearcherPage({
         applyOrderStatus(status);
         if (status === data.order.status) {
           setHoldLine(describeHold(data.authorization));
+          setDelivery(parseDelivery(data.delivery));
         }
         if (status === "AUTHORIZED" && returnToken) {
           setEscrowNote("Approved. Funds are held in escrow.");
@@ -586,6 +597,10 @@ export default function ResearcherPage({
         // 403 => privacy guard rejected the query (row-level/PII/small cell)
         // or the order does not grant data access; 404/422 => bad order.
         setQueryError(data?.error ?? `Query rejected (${res.status}).`);
+        if (res.status === 402 && typeof data?.capCents === "number") {
+          setQueryCap(data.capCents);
+          setSpendKey((k) => k + 1);
+        }
         setQueryReasons(Array.isArray(data?.reasons) ? data.reasons : []);
         if (typeof data?.suggestion === "string" && data.suggestion.trim()) {
           setQuerySuggestion(data.suggestion);
@@ -937,6 +952,20 @@ export default function ResearcherPage({
                 Open PayPal approval →
               </a>
             )}
+            {orderId && delivery && delivered && !voided && !disputed && (
+              <p className="mt-4">
+                <a
+                  href={delivery.url}
+                  download
+                  className="inline-flex text-sm font-medium text-pp-700 underline underline-offset-4 dark:text-pp-400"
+                >
+                  {downloadLabel(delivery)}
+                </a>
+                {delivery.mock && (
+                  <span className="ml-2 text-xs text-muted">demo file</span>
+                )}
+              </p>
+            )}
             {orderId && (
               <OrderReceipt
                 key={orderId}
@@ -1065,6 +1094,7 @@ export default function ResearcherPage({
                   key={orderId}
                   orderId={orderId}
                   refreshKey={spendKey}
+                  capCents={queryCap ?? undefined}
                 />
               </div>
             )}

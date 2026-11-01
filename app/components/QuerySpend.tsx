@@ -7,6 +7,7 @@
 // tally stays live without polling here.
 import { useEffect, useState } from "react";
 import { AlertTriangle } from "./icons";
+import { describeCap } from "../../lib/ui/order-sync";
 
 // Mirrors lib/db/usage UsageRow. Kept local so this client component never
 // imports the server-only db module.
@@ -51,14 +52,18 @@ type Load =
       usage: UsageRow[];
       queryCount: number;
       totalCents: number;
+      capCents: number | null;
     };
 
 export default function QuerySpend({
   orderId,
   refreshKey,
+  capCents,
 }: {
   orderId: string;
   refreshKey?: unknown;
+  /** Query cap learned elsewhere, e.g. from a 402 on /api/query. */
+  capCents?: number;
 }) {
   const [state, setState] = useState<Load>({ status: "loading" });
   const [retry, setRetry] = useState(0);
@@ -91,6 +96,13 @@ export default function QuerySpend({
             typeof data.totalCents === "number"
               ? data.totalCents
               : usage.reduce((sum, u) => sum + u.charge_cents, 0),
+          // Only shown when the server sends one.
+          capCents:
+            typeof data.capCents === "number"
+              ? data.capCents
+              : typeof data.queryCapCents === "number"
+                ? data.queryCapCents
+                : null,
         });
       } catch {
         if (ctrl.signal.aborted) return;
@@ -129,6 +141,7 @@ export default function QuerySpend({
 
   const { usage, queryCount, totalCents } = state;
   const recent = usage.slice(0, RECENT);
+  const cap = describeCap(totalCents, capCents ?? state.capCents);
 
   return (
     <div>
@@ -146,6 +159,20 @@ export default function QuerySpend({
         </span>{" "}
         <span className="text-muted">billed to this order</span>
       </p>
+
+      {cap && (
+        <p
+          className={
+            cap.reached
+              ? "mt-2 text-sm font-medium text-amber-700 dark:text-amber-400"
+              : "mt-2 text-sm text-muted"
+          }
+          role={cap.reached ? "alert" : undefined}
+        >
+          {cap.label}
+          {cap.message && ` · ${cap.message}`}
+        </p>
+      )}
 
       {recent.length === 0 ? (
         <p className="mt-2 text-sm text-muted">

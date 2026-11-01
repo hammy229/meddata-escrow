@@ -94,6 +94,57 @@ export function describeHold(auth: unknown): string | null {
   return `Funds held · ${days} · ${tail}`;
 }
 
+export interface Delivery {
+  url: string;
+  expiresAt: string;
+  mock: boolean;
+}
+
+/** The `delivery` field of GET /api/orders?id=, or null if absent or odd. */
+export function parseDelivery(raw: unknown): Delivery | null {
+  if (!raw || typeof raw !== "object") return null;
+  const d = raw as Record<string, unknown>;
+  if (typeof d.url !== "string" || d.url === "") return null;
+  if (typeof d.expiresAt !== "string" || d.expiresAt === "") return null;
+  return { url: d.url, expiresAt: d.expiresAt, mock: d.mock === true };
+}
+
+/** Button text for the download link, with the local expiry time (HH:MM). */
+export function downloadLabel(delivery: Delivery): string {
+  const d = new Date(delivery.expiresAt);
+  if (Number.isNaN(d.getTime())) return "Download dataset";
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `Download dataset (link expires ${hh}:${mm})`;
+}
+
+function usd(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+export interface CapView {
+  label: string;
+  reached: boolean;
+  message: string | null;
+}
+
+/** "x of cap used" plus a clear message once the query cap is hit. */
+export function describeCap(
+  spentCents: unknown,
+  capCents: unknown,
+): CapView | null {
+  if (typeof capCents !== "number" || !(capCents > 0)) return null;
+  const spent = typeof spentCents === "number" ? spentCents : 0;
+  const reached = spent >= capCents;
+  return {
+    label: `${usd(spent)} of ${usd(capCents)} used`,
+    reached,
+    message: reached
+      ? "Query cap reached. This order cannot run more queries."
+      : null,
+  };
+}
+
 /** Link that reopens an order in the researcher workspace. */
 export function workspaceUrl(orderId: string): string {
   return `/researcher?orderId=${encodeURIComponent(orderId)}`;

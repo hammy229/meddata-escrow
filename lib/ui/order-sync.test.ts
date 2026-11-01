@@ -2,8 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  describeCap,
   describeHold,
+  downloadLabel,
   orderToView,
+  parseDelivery,
   shouldPoll,
   workspaceUrl,
 } from "./order-sync";
@@ -94,6 +97,60 @@ test("an unknown status shows nothing", () => {
     disputed: false,
     cancelled: false,
   });
+});
+
+test("parseDelivery accepts a full delivery and rejects the rest", () => {
+  assert.deepEqual(
+    parseDelivery({
+      url: "/d/1",
+      expiresAt: "2026-11-01T10:00:00Z",
+      mock: true,
+    }),
+    { url: "/d/1", expiresAt: "2026-11-01T10:00:00Z", mock: true },
+  );
+  assert.equal(parseDelivery({ url: "/d/1", expiresAt: "x" })?.mock, false);
+  assert.equal(parseDelivery(null), null);
+  assert.equal(parseDelivery(undefined), null);
+  assert.equal(
+    parseDelivery({ url: "", expiresAt: "2026-11-01T10:00:00Z" }),
+    null,
+  );
+  assert.equal(parseDelivery({ url: "/d/1" }), null);
+  assert.equal(parseDelivery("x"), null);
+});
+
+test("downloadLabel shows the local clock time the link expires", () => {
+  const at = new Date(2026, 10, 1, 9, 5).toISOString();
+  assert.equal(
+    downloadLabel({ url: "/d", expiresAt: at, mock: false }),
+    "Download dataset (link expires 09:05)",
+  );
+  assert.equal(
+    downloadLabel({ url: "/d", expiresAt: "nope", mock: false }),
+    "Download dataset",
+  );
+});
+
+test("describeCap reports usage and when the cap is reached", () => {
+  assert.deepEqual(describeCap(40, 100), {
+    label: "$0.40 of $1.00 used",
+    reached: false,
+    message: null,
+  });
+  const full = describeCap(100, 100);
+  assert.equal(full?.reached, true);
+  assert.equal(full?.label, "$1.00 of $1.00 used");
+  assert.match(full?.message ?? "", /cap/i);
+  assert.equal(describeCap(150, 100)?.reached, true);
+});
+
+test("describeCap needs a real cap", () => {
+  assert.equal(describeCap(10, undefined), null);
+  assert.equal(describeCap(10, null), null);
+  assert.equal(describeCap(10, "100"), null);
+  assert.equal(describeCap(10, 0), null);
+  assert.equal(describeCap(10, -5), null);
+  assert.equal(describeCap(undefined, 100)?.label, "$0.00 of $1.00 used");
 });
 
 test("workspaceUrl encodes the order id", () => {
