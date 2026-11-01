@@ -196,6 +196,9 @@ export default function ResearcherPage({
           ? "DISPUTED"
           : escrow;
   const watching = shouldPoll(watchedStatus) && busyAction === null;
+  // Last change the poll saw, so the audit trail refetches only when the
+  // order actually moved.
+  const lastPolledChange = useRef<string | null>(null);
   useEffect(() => {
     if (!orderId || !watching) return;
     let stale = false;
@@ -210,6 +213,14 @@ export default function ResearcherPage({
         applyOrderStatus(data.order.status);
         setHoldLine(describeHold(data.authorization));
         setDelivery(parseDelivery(data.delivery));
+        const change = `${data.order.status}:${data.order.updated_at ?? ""}`;
+        if (
+          lastPolledChange.current !== null &&
+          lastPolledChange.current !== change
+        ) {
+          setTimelineKey((k) => k + 1);
+        }
+        lastPolledChange.current = change;
       } catch {
         // Offline for a moment; the next tick tries again.
       }
