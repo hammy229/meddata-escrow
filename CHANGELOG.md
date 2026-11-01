@@ -2,6 +2,61 @@
 
 All notable changes to MedData Escrow. Newest first.
 
+## 2026-11-01: Query caps, download links, a fuller vendor desk
+
+### Added
+
+- **Researcher workspace.** Buy (escrow) now goes through the approval page and
+  back to the workspace, which reopens the order from its link
+  (`/researcher?orderId=`). While an order can still change, the workspace polls
+  it every few seconds, and a chip shows the days left on the PayPal hold. Once
+  the vendor delivers, an expiring download link appears (a mock link for now).
+  Each order has a query spend cap, and the researcher sees when it is reached.
+- **Vendor workspace.** The order queue is an AG Grid with a "Needs action"
+  filter, Deliver buttons, and release or refund buttons for disputes with an
+  optional resolution note. The catalog shows listing performance (orders, money
+  in escrow, net earned, last order), and a price edit can be undone with
+  Ctrl+Z. The ledger splits each row into the platform fee and the vendor's net,
+  with a pinned total. The webhook simulator can send a buyer approval, and
+  replaying the last event shows that the server treats it as a duplicate.
+- **Escrow and PayPal.** Each order has a `queryCapCents` (default $10.00, from
+  $0.50 to $1,000.00). Once a query or billing charge would pass the cap, the API
+  answers `402` and meters nothing. Live PayPal orders carry our order id as
+  `custom_id` and return URLs back to the workspace. Webhooks also match an
+  order by our own id.
+- **Agent.** When a sample check fails, the agent tries the next in-budget
+  candidate. It runs at most three sample checks per run and never buys a dataset
+  the buyer already owns. Search and dataset results flag owned datasets with
+  `alreadyOwned`.
+- **Demo.** The catalog grows to six datasets, two of them built to fail their
+  sample checks. `POST /api/demo/reset` accepts `{ "seed": "story" }` to add six
+  sample orders in different states. Mock mode has a bar with Reset and Reset
+  with sample orders buttons.
+
+### Fixed
+
+- Match results no longer count filler words such as "for" and "with" as
+  matching terms.
+- The researcher's audit trail refreshes when the order changes.
+- The vendor queue and catalog grids no longer clip rows.
+- Vendor payout figures are shown net of the platform fee.
+- When the agent gives up, it says which owned datasets it skipped.
+- The researcher's escrow state stays in sync with the server.
+
+### Tests
+
+- `npm test` runs 511 tests, up from 404. New specs cover the query cap (including
+  the 402 responses), delivery links, the demo story and reset seeding, webhook
+  matching by order id, the agent's sample limit and owned-dataset refusals, and
+  the ledger, listing stats, order sync and vendor action helpers.
+
+### Docs
+
+- OpenAPI spec bumped to 0.4.0 with the query cap, delivery links, the earnings
+  fee split and the demo seed body. The Postman collection is regenerated from it.
+- README and the API guide cover the new fields, and the README now describes
+  the mocked download link and the planned AWS services accurately.
+
 ## 2026-10-29: Buyers compare, vendors reprice, the agent shows its work
 
 ### Added
