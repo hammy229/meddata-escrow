@@ -698,6 +698,7 @@ test(
       vendorPayoutCents: 4410,
       queryCount: 2,
       queryChargesCents: 2 * PER_QUERY_FEE_CENTS,
+      queryCapCents: 1000,
       totalCents: 4900 + 2 * PER_QUERY_FEE_CENTS,
     });
     assert.equal(
@@ -705,6 +706,25 @@ test(
       r.amountCents,
     );
   }),
+);
+
+test(
+  "POST passes queryCapCents through and the receipt echoes it; bad caps are 422",
+  withEnv(
+    async () => {
+      const bad = await POST(req({ datasetId: DATASET_ID, queryCapCents: 10 }));
+      assert.equal(bad.status, 422);
+      const res = await POST(
+        req({ datasetId: DATASET_ID, queryCapCents: 300 }),
+      );
+      assert.equal(res.status, 201);
+      const { orderId } = (await res.json()) as { orderId: string };
+      const rec = await GET(getReq(`?id=${orderId}&receipt=1`));
+      const { receipt } = (await rec.json()) as ReceiptBody;
+      assert.equal(receipt.queryCapCents, 300);
+    },
+    { mock: true },
+  ),
 );
 
 test(

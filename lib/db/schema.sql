@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS orders (
   -- PayPal Payouts batch id from paying the vendor (set on PAYOUT). Added to
   -- existing DBs via a guarded ALTER in migrate().
   payout_batch_id  TEXT,
+  -- Most the buyer can be metered for queries on this order (cents). Added to
+  -- existing DBs via a guarded ALTER in migrate().
+  query_cap_cents  INTEGER NOT NULL DEFAULT 1000,
   -- Canonical EscrowState (see lib/escrow/state-machine.ts). One of:
   --   MATCHED | AUTHORIZED | DELIVERED | CAPTURED | PAID_OUT
   --   | DISPUTED | VOIDED | CANCELLED

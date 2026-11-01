@@ -410,6 +410,7 @@ test("migrate back-fills payout columns on a pre-payouts DB", () => {
     );
   assert.ok(cols("vendors").includes("payout_email"));
   assert.ok(cols("orders").includes("payout_batch_id"));
+  assert.ok(cols("orders").includes("query_cap_cents"));
   db.close();
 });
 

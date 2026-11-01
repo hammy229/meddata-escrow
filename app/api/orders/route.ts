@@ -164,6 +164,7 @@ export async function POST(request: Request) {
       buyerEmail: body?.buyerEmail,
       currency: body?.currency,
       referenceId: body?.referenceId,
+      queryCapCents: body?.queryCapCents,
       origin: new URL(request.url).origin,
     });
     // 200 when an existing unapproved order is returned (`reused: true`).

@@ -15,6 +15,7 @@
 //   422 if orderId is missing, 404 if the order is unknown.
 import {
   recordUsage,
+  queryCapStatus,
   listUsage,
   withDb,
   UnknownOrderError,
@@ -85,6 +86,16 @@ export async function POST(request: Request) {
         return bad(
           `order is ${order.status}; queries are billable only once data access is granted`,
           409,
+        );
+      const cap = queryCapStatus(db, order, chargeCents);
+      if (cap.exceeded)
+        return Response.json(
+          {
+            error: "query spend cap reached for this order",
+            spentCents: cap.spentCents,
+            capCents: cap.capCents,
+          },
+          { status: 402 },
         );
       return recordUsage(db, { orderId, question, chargeCents });
     });

@@ -167,6 +167,53 @@ test(
 );
 
 test(
+  "createEscrowOrder stores a valid queryCapCents and defaults to 1000",
+  withDbEnv(
+    async ({ url }) => {
+      const a = await createEscrowOrder({
+        datasetId: DATASET_ID,
+        queryCapCents: 250,
+      });
+      const b = await createEscrowOrder({
+        datasetId: DATASET_ID,
+        buyerEmail: "second@example.com",
+      });
+      const db = openDb(url);
+      assert.equal(getOrder(db, a.orderId)?.query_cap_cents, 250);
+      assert.equal(getOrder(db, b.orderId)?.query_cap_cents, 1000);
+      db.close();
+    },
+    { mock: true },
+  ),
+);
+
+test(
+  "createEscrowOrder rejects a bad queryCapCents with 422",
+  withDbEnv(
+    async () => {
+      for (const bad of [49, 100001, 75.5, "500", -1, Number.NaN]) {
+        await rejectsWith(
+          createEscrowOrder({
+            datasetId: DATASET_ID,
+            queryCapCents: bad as unknown as number,
+          }),
+          422,
+          "VALIDATION",
+        );
+      }
+      // Boundaries are allowed.
+      await createEscrowOrder({ datasetId: DATASET_ID, queryCapCents: 50 });
+      await createEscrowOrder({
+        datasetId: DATASET_ID,
+        buyerEmail: "x@example.com",
+        queryCapCents: 100000,
+      });
+    },
+    { mock: true },
+  ),
+);
+
+test(
   "createEscrowOrder throws typed 422s for bad input",
   withDbEnv(
     async () => {

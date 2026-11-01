@@ -79,6 +79,15 @@ function withEnv(
   };
 }
 
+async function withUsage(orderId: string) {
+  const db = openDb(process.env.DATABASE_URL!);
+  try {
+    return listUsage(db, orderId);
+  } finally {
+    db.close();
+  }
+}
+
 /** POST a question against the delivered order unless overridden. */
 function ask(orderId: string, question: string, datasetId = DATASET_ID) {
   return POST(req({ orderId, datasetId, question }));
@@ -102,6 +111,47 @@ test(
     for (const row of json.result) {
       assert.ok(row.count >= 11);
     }
+  }),
+);
+
+test(
+  "the 21st query on a default-cap order is refused with 402 and never billed",
+  withEnv(async ({ orderId }) => {
+    for (let i = 0; i < 20; i++) {
+      const ok = await ask(orderId, "How many patients by sex?");
+      assert.equal(ok.status, 200, `query ${i + 1}`);
+    }
+    const res = await ask(orderId, "How many patients by sex?");
+    assert.equal(res.status, 402);
+    assert.deepEqual(await res.json(), {
+      error: "query spend cap reached for this order",
+      spentCents: 1000,
+      capCents: 1000,
+    });
+    const usage = await withUsage(orderId);
+    assert.equal(usage.length, 20);
+  }),
+);
+
+test(
+  "a cap lower than the next fee refuses even a rejectable question first with 402",
+  withEnv(async ({ url }) => {
+    const db = openDb(url);
+    const order = createOrder(db, {
+      datasetId: DATASET_ID,
+      buyerEmail: "b@example.com",
+      amountCents: 4900,
+      status: "DELIVERED",
+      queryCapCents: 50,
+    });
+    db.close();
+    assert.equal(
+      (await ask(order.id, "How many patients by sex?")).status,
+      200,
+    );
+    // Cap hit: refused before the privacy screen, so no 403 for bad input.
+    assert.equal((await ask(order.id, "select * from patients")).status, 402);
+    assert.equal((await withUsage(order.id)).length, 1);
   }),
 );
 

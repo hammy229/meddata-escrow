@@ -9,6 +9,16 @@ const order = (status: Parameters<typeof buildReceipt>[0]["status"]) => ({
   dataset_id: "ds_1",
   status,
   amount_cents: 4900,
+  query_cap_cents: 1000,
+});
+
+test("the receipt echoes the order's query cap", () => {
+  assert.equal(buildReceipt(order("CAPTURED"), []).queryCapCents, 1000);
+  assert.equal(
+    buildReceipt({ ...order("CAPTURED"), query_cap_cents: 250 }, [])
+      .queryCapCents,
+    250,
+  );
 });
 const usage = (n: number) =>
   Array.from({ length: n }, () => ({ charge_cents: PER_QUERY_FEE_CENTS }));

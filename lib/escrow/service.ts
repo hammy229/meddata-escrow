@@ -52,6 +52,7 @@ import {
 } from "../db/client";
 import { mockId, isMockMode } from "../mock/ids";
 import { vendorPayoutCents } from "./fees";
+import { PER_QUERY_FEE_CENTS, MAX_QUERY_CAP_CENTS } from "../query/pricing";
 import {
   emitEscrowTransition,
   type EscrowTransition,
@@ -149,6 +150,8 @@ export interface CreateEscrowOrderInput {
   amount?: number;
   currency?: string;
   referenceId?: string;
+  /** Optional spend cap on metered queries (integer cents, 50 to 100000). */
+  queryCapCents?: number;
   /** Request origin, used for PayPal return urls when NEXT_PUBLIC_SITE_URL is unset. */
   origin?: string;
 }
@@ -282,6 +285,19 @@ export async function createEscrowOrder(
     (typeof clientAmount !== "number" || !(clientAmount > 0))
   )
     throw invalid("amount, if provided, must be a positive number");
+  const rawCap: unknown = input.queryCapCents;
+  if (
+    rawCap !== undefined &&
+    rawCap !== null &&
+    (typeof rawCap !== "number" ||
+      !Number.isInteger(rawCap) ||
+      rawCap < PER_QUERY_FEE_CENTS ||
+      rawCap > MAX_QUERY_CAP_CENTS)
+  )
+    throw invalid(
+      `queryCapCents, if provided, must be an integer from ${PER_QUERY_FEE_CENTS} to ${MAX_QUERY_CAP_CENTS}`,
+    );
+  const queryCapCents = typeof rawCap === "number" ? rawCap : undefined;
   const buyerEmail =
     typeof input.buyerEmail === "string" && input.buyerEmail.trim() !== ""
       ? input.buyerEmail
@@ -308,7 +324,12 @@ export async function createEscrowOrder(
   // order at an old price (the vendor repriced since) is not reused.
   const existing = withDb((db) =>
     listOrders(db, { status: "MATCHED", datasetId, buyerEmail }),
-  ).find((o) => o.paypal_order_id && o.amount_cents === amountCents);
+  ).find(
+    (o) =>
+      o.paypal_order_id &&
+      o.amount_cents === amountCents &&
+      (queryCapCents === undefined || o.query_cap_cents === queryCapCents),
+  );
   if (existing?.paypal_order_id) {
     const paypalOrderId = existing.paypal_order_id;
     return {
@@ -333,6 +354,7 @@ export async function createEscrowOrder(
         amountCents,
         paypalOrderId,
         status: "MATCHED",
+        queryCapCents,
       }),
     );
     announce(deps, order, "CREATE", null);
@@ -370,6 +392,7 @@ export async function createEscrowOrder(
         amountCents,
         paypalOrderId: ppOrder.orderId,
         status: "MATCHED",
+        queryCapCents,
       }),
     );
     announce(deps, order, "CREATE", null);

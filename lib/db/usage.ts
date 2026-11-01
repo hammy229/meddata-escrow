@@ -77,6 +77,27 @@ export function listUsage(db: DatabaseSync, orderId: string): UsageRow[] {
     .all(orderId) as UsageRow[];
 }
 
+/**
+ * Would one more query break the order's spend cap? `spentCents` is what the
+ * order has been metered so far; callers answer 402 with these figures.
+ */
+export function queryCapStatus(
+  db: DatabaseSync,
+  order: { id: string; query_cap_cents: number },
+  feeCents: number,
+): { exceeded: boolean; spentCents: number; capCents: number } {
+  const { total } = db
+    .prepare(
+      `SELECT COALESCE(SUM(charge_cents), 0) AS total FROM query_usage WHERE order_id = ?`,
+    )
+    .get(order.id) as { total: number };
+  return {
+    exceeded: total + feeCents > order.query_cap_cents,
+    spentCents: total,
+    capCents: order.query_cap_cents,
+  };
+}
+
 function requireUsage(db: DatabaseSync, id: string): UsageRow {
   const row = getUsage(db, id);
   if (!row) throw new Error(`Usage row not found: ${id}`);

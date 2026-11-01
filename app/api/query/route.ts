@@ -25,7 +25,7 @@ import {
 } from "../../../lib/ai/privacy-guard";
 import { mockExecute } from "../../../lib/query/mock-execute";
 import { getOrder, withDb } from "../../../lib/db/client";
-import { recordUsage } from "../../../lib/db/usage";
+import { recordUsage, queryCapStatus } from "../../../lib/db/usage";
 import { grantsDataAccess } from "../../../lib/escrow/state-machine";
 import { PER_QUERY_FEE_CENTS } from "../../../lib/query/pricing";
 
@@ -75,6 +75,25 @@ export async function POST(request: Request) {
     return bad(
       `order does not grant data access (status ${order.status})`,
       403,
+    );
+  }
+
+  // Spend cap: refuse before doing any work if one more query would push the
+  // order past its cap. Never billed.
+  let cap;
+  try {
+    cap = withDb((db) => queryCapStatus(db, order, PER_QUERY_FEE_CENTS));
+  } catch {
+    return bad("could not check query cap", 500);
+  }
+  if (cap.exceeded) {
+    return Response.json(
+      {
+        error: "query spend cap reached for this order",
+        spentCents: cap.spentCents,
+        capCents: cap.capCents,
+      },
+      { status: 402 },
     );
   }
 

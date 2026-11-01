@@ -7,3 +7,9 @@
 
 /** Flat fee (cents) charged per successfully answered query. */
 export const PER_QUERY_FEE_CENTS = 50;
+
+/** Default per-order spend cap on metered queries (20 queries at 50 cents). */
+export const DEFAULT_QUERY_CAP_CENTS = 1000;
+
+/** Largest cap a buyer may set on an order. */
+export const MAX_QUERY_CAP_CENTS = 100_000;

@@ -80,6 +80,27 @@ test("records usage for a known order (201) at the server fee", async () => {
   });
 });
 
+test("billing refuses with 402 once the order's cap is spent, recording nothing", async () => {
+  const path = tmpDbPath();
+  await withDbEnv(path, async () => {
+    seed(path);
+    for (let i = 0; i < 20; i++) {
+      const ok = await POST(req({ orderId: "ord_test", question: `q${i}` }));
+      assert.equal(ok.status, 201, `charge ${i + 1}`);
+    }
+    const res = await POST(req({ orderId: "ord_test", question: "one more" }));
+    assert.equal(res.status, 402);
+    assert.deepEqual(await res.json(), {
+      error: "query spend cap reached for this order",
+      spentCents: 1000,
+      capCents: 1000,
+    });
+    const db = openDb(path);
+    assert.equal(listUsage(db, "ord_test").length, 20);
+    db.close();
+  });
+});
+
 test("a chargeCents equal to the server fee is accepted", async () => {
   const path = tmpDbPath();
   await withDbEnv(path, async () => {

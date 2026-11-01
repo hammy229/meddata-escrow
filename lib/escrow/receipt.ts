@@ -20,12 +20,17 @@ export interface Receipt {
   queryCount: number;
   /** Sum of the per-query charges recorded for the order. */
   queryChargesCents: number;
+  /** The most query usage the order may be metered for. */
+  queryCapCents: number;
   /** amountCents + queryChargesCents. */
   totalCents: number;
 }
 
 export function buildReceipt(
-  order: Pick<OrderRow, "id" | "dataset_id" | "status" | "amount_cents">,
+  order: Pick<
+    OrderRow,
+    "id" | "dataset_id" | "status" | "amount_cents" | "query_cap_cents"
+  >,
   usage: Pick<UsageRow, "charge_cents">[],
 ): Receipt {
   const uncharged = order.status === "VOIDED" || order.status === "CANCELLED";
@@ -42,6 +47,7 @@ export function buildReceipt(
     vendorPayoutCents: vendorPayoutCents(amountCents),
     queryCount: usage.length,
     queryChargesCents,
+    queryCapCents: order.query_cap_cents,
     totalCents: amountCents + queryChargesCents,
   };
 }

@@ -21,6 +21,7 @@ import {
   type EscrowEvent,
 } from "../escrow/state-machine";
 import { platformFeeCents, vendorPayoutCents } from "../escrow/fees";
+import { DEFAULT_QUERY_CAP_CENTS } from "../query/pricing";
 
 const SCHEMA_PATH = join(dirname(fileURLToPath(import.meta.url)), "schema.sql");
 
@@ -35,6 +36,8 @@ export interface OrderRow {
   payout_batch_id: string | null;
   status: EscrowState;
   amount_cents: number;
+  /** Most the buyer can be metered for queries on this order (cents). */
+  query_cap_cents: number;
   created_at: string;
   /** Null only for rows created before the column existed (guarded ALTER). */
   updated_at: string | null;
@@ -69,6 +72,8 @@ export interface NewOrder {
   status?: EscrowState;
   paypalOrderId?: string | null;
   authorizationId?: string | null;
+  /** Query spend cap in cents; defaults to DEFAULT_QUERY_CAP_CENTS. */
+  queryCapCents?: number;
 }
 
 /**
@@ -99,6 +104,13 @@ export function migrate(db: DatabaseSync): void {
   // Vendor payout receiver + the payout batch id recorded on PAYOUT.
   ensureColumn(db, "vendors", "payout_email", "TEXT");
   ensureColumn(db, "orders", "payout_batch_id", "TEXT");
+  // Per-order query spend cap; older rows get the default.
+  ensureColumn(
+    db,
+    "orders",
+    "query_cap_cents",
+    `INTEGER NOT NULL DEFAULT ${DEFAULT_QUERY_CAP_CENTS}`,
+  );
 }
 
 /** Add `table.column` if it is missing (idempotent schema back-fill). */
@@ -135,8 +147,8 @@ export function createOrder(db: DatabaseSync, input: NewOrder): OrderRow {
   const status: EscrowState = input.status ?? "MATCHED";
   db.prepare(
     `INSERT INTO orders
-       (id, dataset_id, buyer_email, paypal_order_id, authorization_id, status, amount_cents, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+       (id, dataset_id, buyer_email, paypal_order_id, authorization_id, status, amount_cents, query_cap_cents, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
   ).run(
     id,
     input.datasetId,
@@ -145,6 +157,7 @@ export function createOrder(db: DatabaseSync, input: NewOrder): OrderRow {
     input.authorizationId ?? null,
     status,
     input.amountCents,
+    input.queryCapCents ?? DEFAULT_QUERY_CAP_CENTS,
   );
   // Genesis audit row: from_state null, event CREATE, to_state the initial state.
   insertOrderEvent(db, id, "CREATE", null, status);
