@@ -10,6 +10,7 @@ import type { ColDef } from "ag-grid-community";
 import DataGrid from "./DataGrid";
 import { SourceBadge } from "./MatchesGrid";
 import { AlertTriangle, Check } from "./icons";
+import { workspaceUrl } from "../../lib/ui/order-sync";
 
 // Mirrors lib/agent AgentStep / AgentOrder / AgentRunResult. Kept local so
 // this client component never imports server-only agent code.
@@ -287,6 +288,14 @@ export default function AgentRun({
                 Nothing is charged yet: approve in PayPal to hold the funds in
                 escrow.
               </p>
+              <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1">
+                <a
+                  href={workspaceUrl(run.order.orderId)}
+                  className="text-sm font-medium text-pp-700 underline underline-offset-4 dark:text-pp-400"
+                >
+                  Continue in workspace
+                </a>
+              </div>
               {run.order.approveUrl && (
                 <a
                   href={run.order.approveUrl}
