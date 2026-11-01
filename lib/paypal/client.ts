@@ -150,12 +150,38 @@ export function createPayPalClient(config: PayPalConfig) {
       referenceId?: string;
       /** Idempotency key; random when omitted (no resource id exists yet). */
       requestId?: string;
+      /** Where PayPal sends the buyer after approving / cancelling. */
+      returnUrl?: string;
+      cancelUrl?: string;
+      /** Our own order id, echoed back on webhooks as resource.custom_id. */
+      customId?: string;
+      /** Shown to the buyer at checkout (truncated to PayPal's 127 chars). */
+      description?: string;
     }): Promise<CreateOrderResult> {
       const body = {
         intent: "AUTHORIZE",
+        ...(input.returnUrl && input.cancelUrl
+          ? {
+              payment_source: {
+                paypal: {
+                  experience_context: {
+                    return_url: input.returnUrl,
+                    cancel_url: input.cancelUrl,
+                    user_action: "CONTINUE",
+                    shipping_preference: "NO_SHIPPING",
+                    brand_name: "MedData Escrow",
+                  },
+                },
+              },
+            }
+          : {}),
         purchase_units: [
           {
             ...(input.referenceId ? { reference_id: input.referenceId } : {}),
+            ...(input.customId ? { custom_id: input.customId } : {}),
+            ...(input.description
+              ? { description: input.description.slice(0, 127) }
+              : {}),
             amount: {
               currency_code: input.currency ?? "USD",
               value: money(input.amount),

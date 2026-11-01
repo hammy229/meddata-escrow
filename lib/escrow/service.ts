@@ -149,6 +149,8 @@ export interface CreateEscrowOrderInput {
   amount?: number;
   currency?: string;
   referenceId?: string;
+  /** Request origin, used for PayPal return urls when NEXT_PUBLIC_SITE_URL is unset. */
+  origin?: string;
 }
 
 export interface CreateEscrowOrderResult {
@@ -245,6 +247,23 @@ function paypalApproveUrl(paypalOrderId: string): string {
   return `https://${host}paypal.com/checkoutnow?token=${paypalOrderId}`;
 }
 
+/**
+ * Where PayPal sends the buyer back to after approving or cancelling. Site
+ * base is NEXT_PUBLIC_SITE_URL, else the request origin; none = no urls.
+ */
+function returnUrls(
+  orderId: string,
+  origin: unknown,
+): { returnUrl?: string; cancelUrl?: string } {
+  const raw =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    (typeof origin === "string" ? origin : "");
+  const base = raw.replace(/\/+$/, "");
+  if (!base) return {};
+  const returnUrl = `${base}/researcher?orderId=${encodeURIComponent(orderId)}`;
+  return { returnUrl, cancelUrl: `${returnUrl}&cancelled=1` };
+}
+
 /** Create an escrow order for a dataset at its listed price. */
 export async function createEscrowOrder(
   input: CreateEscrowOrderInput,
@@ -338,6 +357,9 @@ export async function createEscrowOrder(
       referenceId:
         typeof input.referenceId === "string" ? input.referenceId : undefined,
       requestId: paypalRequestId(orderId, "create"),
+      customId: orderId,
+      description: dataset.title,
+      ...returnUrls(orderId, input.origin),
     });
     // Persist only after PayPal confirms the order — no dangling rows.
     const order = withDb((db) =>

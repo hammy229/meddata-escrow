@@ -125,6 +125,48 @@ test(
 );
 
 test(
+  "createEscrowOrder (real mode) gives PayPal return urls and our order id",
+  withDbEnv(async () => {
+    const saved = process.env.NEXT_PUBLIC_SITE_URL;
+    delete process.env.NEXT_PUBLIC_SITE_URL;
+    try {
+      const { deps, calls } = fakePayPal();
+      const res = await createEscrowOrder(
+        { datasetId: DATASET_ID, origin: "https://app.test" },
+        deps,
+      );
+      const sent = calls[0].args[0] as {
+        returnUrl: string;
+        cancelUrl: string;
+        customId: string;
+        description: string;
+      };
+      assert.equal(sent.customId, res.orderId);
+      assert.equal(
+        sent.returnUrl,
+        `https://app.test/researcher?orderId=${res.orderId}`,
+      );
+      assert.equal(sent.cancelUrl, `${sent.returnUrl}&cancelled=1`);
+      assert.equal(sent.description, "Service Cohort");
+
+      process.env.NEXT_PUBLIC_SITE_URL = "https://site.test/";
+      const again = await createEscrowOrder(
+        { datasetId: DATASET_ID, buyerEmail: "other@example.com" },
+        deps,
+      );
+      const sent2 = calls[1].args[0] as { returnUrl: string };
+      assert.equal(
+        sent2.returnUrl,
+        `https://site.test/researcher?orderId=${again.orderId}`,
+      );
+    } finally {
+      if (saved === undefined) delete process.env.NEXT_PUBLIC_SITE_URL;
+      else process.env.NEXT_PUBLIC_SITE_URL = saved;
+    }
+  }),
+);
+
+test(
   "createEscrowOrder throws typed 422s for bad input",
   withDbEnv(
     async () => {

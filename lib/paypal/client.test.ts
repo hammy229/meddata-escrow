@@ -422,3 +422,46 @@ test("a retried capture reuses the same PayPal-Request-Id", async () => {
     .map((c) => c.headers["PayPal-Request-Id"]);
   assert.deepEqual(keys, ["ord_7:capture", "ord_7:capture"]);
 });
+
+const ORDERS_ROUTE = {
+  "/v1/oauth2/token": TOKEN_OK,
+  "/v2/checkout/orders": () => ({
+    status: 201,
+    body: { id: "O9", status: "CREATED", links: [] },
+  }),
+};
+
+test("createAuthorizeOrder sends return urls, custom_id and description", async () => {
+  const { fn, calls } = fakeFetch(ORDERS_ROUTE);
+  const pp = createPayPalClient({ ...CREDS, fetch: fn });
+  await pp.createAuthorizeOrder({
+    amount: 5,
+    returnUrl: "https://x.test/researcher?orderId=ord_1",
+    cancelUrl: "https://x.test/researcher?orderId=ord_1&cancelled=1",
+    customId: "ord_1",
+    description: "D".repeat(200),
+  });
+  const sent = JSON.parse(
+    calls.find((c) => c.url.endsWith("/v2/checkout/orders"))!.body!,
+  );
+  assert.deepEqual(sent.payment_source.paypal.experience_context, {
+    return_url: "https://x.test/researcher?orderId=ord_1",
+    cancel_url: "https://x.test/researcher?orderId=ord_1&cancelled=1",
+    user_action: "CONTINUE",
+    shipping_preference: "NO_SHIPPING",
+    brand_name: "MedData Escrow",
+  });
+  assert.equal(sent.purchase_units[0].custom_id, "ord_1");
+  assert.equal(sent.purchase_units[0].description.length, 127);
+});
+
+test("createAuthorizeOrder omits experience_context without urls", async () => {
+  const { fn, calls } = fakeFetch(ORDERS_ROUTE);
+  const pp = createPayPalClient({ ...CREDS, fetch: fn });
+  await pp.createAuthorizeOrder({ amount: 5 });
+  const sent = JSON.parse(
+    calls.find((c) => c.url.endsWith("/v2/checkout/orders"))!.body!,
+  );
+  assert.equal(sent.payment_source, undefined);
+  assert.equal(sent.purchase_units[0].custom_id, undefined);
+});
