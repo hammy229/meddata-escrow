@@ -74,6 +74,57 @@ test(
   }, "mock"),
 );
 
+const post = (body?: string) =>
+  POST(
+    new Request("http://localhost/api/demo/reset", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      ...(body === undefined ? {} : { body }),
+    }),
+  );
+
+test(
+  "POST with { seed: 'story' } leaves the sample orders",
+  withEnv(async ({ url }) => {
+    seedWithOrder(url);
+    const res = await post(JSON.stringify({ seed: "story" }));
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), { ok: true });
+    assert.equal(orderCount(url), 6);
+  }, "mock"),
+);
+
+test(
+  "POST with an empty body is a plain reset",
+  withEnv(async ({ url }) => {
+    seedWithOrder(url);
+    assert.equal((await post()).status, 200);
+    assert.equal(orderCount(url), 0);
+  }, "mock"),
+);
+
+test(
+  "POST with an unknown seed is 422 and leaves data alone",
+  withEnv(async ({ url }) => {
+    seedWithOrder(url);
+    for (const body of ['{"seed":"nope"}', '{"seed":5}', "not json"]) {
+      const res = await post(body);
+      assert.equal(res.status, 422, body);
+      assert.equal(typeof ((await res.json()) as { error: string }).error, "string");
+    }
+    assert.equal(orderCount(url), 1);
+  }, "mock"),
+);
+
+test(
+  "POST with seed 'story' outside mock mode is still 404",
+  withEnv(async ({ url }) => {
+    seedWithOrder(url);
+    assert.equal((await post(JSON.stringify({ seed: "story" }))).status, 404);
+    assert.equal(orderCount(url), 1);
+  }, "live"),
+);
+
 test(
   "POST outside mock mode is 404 { error } and leaves data alone",
   withEnv(async ({ url }) => {

@@ -80,6 +80,49 @@ test("reset restores a dataset price someone changed", () => {
   db.close();
 });
 
+test("reset with { story: true } leaves the sample orders behind", () => {
+  const db = dirtyDb();
+  resetDemoData(db, { story: true });
+  assert.equal(count(db, "orders"), 6);
+  assert.ok(count(db, "order_events") > 6);
+  assert.ok(count(db, "query_usage") > 0);
+  // The old order is gone; only the story remains.
+  assert.equal(
+    db.prepare(`SELECT 1 FROM orders WHERE paypal_order_id = 'PP-1'`).get(),
+    undefined,
+  );
+  // And a plain reset after it wipes them again.
+  resetDemoData(db);
+  assert.equal(count(db, "orders"), 0);
+  db.close();
+});
+
+test("a story that fails rolls the whole reset back", () => {
+  const db = dirtyDb();
+  const before = {
+    orders: count(db, "orders"),
+    events: count(db, "order_events"),
+    usage: count(db, "query_usage"),
+    webhooks: count(db, "paypal_webhook_events"),
+  };
+  db.exec(
+    `CREATE TRIGGER boom BEFORE INSERT ON order_events
+     WHEN NEW.event = 'VOID'
+     BEGIN SELECT RAISE(ABORT, 'boom'); END`,
+  );
+  assert.throws(() => resetDemoData(db, { story: true }), /boom/);
+  assert.deepEqual(
+    {
+      orders: count(db, "orders"),
+      events: count(db, "order_events"),
+      usage: count(db, "query_usage"),
+      webhooks: count(db, "paypal_webhook_events"),
+    },
+    before,
+  );
+  db.close();
+});
+
 test("reset is repeatable", () => {
   const db = dirtyDb();
   resetDemoData(db);

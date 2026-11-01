@@ -29,17 +29,27 @@ export default function DemoBar() {
 
   if (!mock) return null;
 
-  async function reset() {
+  async function reset(withStory: boolean) {
     if (
       !window.confirm(
-        "Reset the demo? This deletes every order, agent run and query charge.",
+        withStory
+          ? "Reset the demo and add sample orders? This deletes every current order, agent run and query charge."
+          : "Reset the demo? This deletes every order, agent run and query charge.",
       )
     )
       return;
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/demo/reset", { method: "POST" });
+      const res = await fetch("/api/demo/reset", {
+        method: "POST",
+        ...(withStory
+          ? {
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ seed: "story" }),
+            }
+          : {}),
+      });
       if (!res.ok) throw new Error(`reset failed (${res.status})`);
       try {
         window.sessionStorage.clear();
@@ -61,11 +71,19 @@ export default function DemoBar() {
       <span>Mock mode: no real money moves</span>
       <button
         type="button"
-        onClick={reset}
+        onClick={() => reset(false)}
         disabled={busy}
         className="border-l border-rule pl-3 text-ink underline-offset-2 hover:underline disabled:opacity-50"
       >
         {busy ? "Resetting…" : "Reset"}
+      </button>
+      <button
+        type="button"
+        onClick={() => reset(true)}
+        disabled={busy}
+        className="text-ink underline-offset-2 hover:underline disabled:opacity-50"
+      >
+        Reset with sample orders
       </button>
       {error ? <span className="text-ink">{error}</span> : null}
     </div>

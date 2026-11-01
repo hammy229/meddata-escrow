@@ -8,6 +8,7 @@
 // and prices) and keeps any payout email set by hand.
 import type { DatabaseSync } from "node:sqlite";
 
+import { seedDemoStory } from "./demo-story";
 import { seedDatabase } from "./seed";
 
 const CLEARED_TABLES = [
@@ -19,8 +20,12 @@ const CLEARED_TABLES = [
 ] as const;
 
 /** Clear orders, events, usage, agent runs and webhook dedupe rows, then
- *  reseed the catalog. All-or-nothing. */
-export function resetDemoData(db: DatabaseSync): {
+ *  reseed the catalog. With `story`, also insert the sample orders from
+ *  ./demo-story. All-or-nothing. */
+export function resetDemoData(
+  db: DatabaseSync,
+  opts: { story?: boolean } = {},
+): {
   vendors: number;
   datasets: number;
 } {
@@ -35,6 +40,7 @@ export function resetDemoData(db: DatabaseSync): {
       if (exists) db.exec(`DELETE FROM ${table}`);
     }
     const seeded = seedDatabase(db);
+    if (opts.story) seedDemoStory(db); // same transaction: all or nothing
     db.exec("COMMIT");
     return seeded;
   } catch (err) {
