@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: MedData Escrow API
-  version: 0.3.0
+  version: 0.4.0
   summary: Escrowed marketplace for synthetic medical datasets, settled with PayPal.
   description: |
     MedData Escrow lets a researcher describe a study in plain English, match it
@@ -13,8 +13,10 @@ info:
 
     After delivery the researcher asks plain-English questions. Each question is
     screened for identifiers, compiled to aggregate-only SQL, re-checked, run
-    vendor-side, put through small-cell suppression, and billed per answer at a
-    server-set fee.
+    vendor-side, put through small-cell suppression, and metered per answer at a
+    server-set fee. Metering is kept in our own ledger, not billed through
+    PayPal. Each order has a query spend cap (`queryCapCents`, default 1000);
+    once a query would go past it, the server answers `402` and bills nothing.
 
     **All data is synthetic** (Synthea-generated cohorts). No real patient data
     is stored or returned.
@@ -29,7 +31,7 @@ info:
     Run with `PAYPAL_MODE=mock` to drive the whole escrow arc with no PayPal
     credentials; responses then carry `mock: true` and `MOCK-*` ids. In mock
     mode the approve link is a local page (`/checkout/mock`), and
-    `POST /api/demo/reset` starts the demo over.
+    `POST /api/demo/reset` starts the demo over (optionally with sample orders).
   license:
     name: MIT
     identifier: MIT
@@ -113,7 +115,7 @@ paths:
                 spec:
                   value:
                     openapi: 3.1.0
-                    info: { title: MedData Escrow API, version: 0.3.0 }
+                    info: { title: MedData Escrow API, version: 0.4.0 }
             application/yaml:
               schema:
                 type: string
@@ -204,13 +206,19 @@ paths:
 
         - no `id` / `summary` → `{ orders: OrderRow[] }` (newest first),
           optionally AND-filtered by `status`, `datasetId`, `buyerEmail`.
-        - `?id=ord_..` → `{ order, authorization }`; add `&events=1` for
-          `{ order, authorization, events }` (the audit timeline, oldest first).
-          `authorization` is the PayPal hold window while funds are held, and
-          null otherwise. 404 if unknown.
-        - `?id=ord_..&receipt=1` → `{ order, receipt }`, the fee breakdown.
+        - `?id=ord_..` → `{ order, authorization, delivery }`; add `&events=1` for
+          `{ order, authorization, delivery, events }` (the audit timeline, oldest
+          first). `authorization` is the PayPal hold window while funds are held,
+          and null otherwise. `delivery` is a short-lived download link, only once
+          the buyer may have the data (DELIVERED, CAPTURED or PAID_OUT); it is
+          minted fresh on every read with a 900 second lifetime, and null
+          otherwise. 404 if unknown.
+        - `?id=ord_..&receipt=1` → `{ order, receipt }`, the fee breakdown and the
+          order's query cap.
         - `?summary=1[&datasetId=..]` → `{ summary: OrderSummary }`, the vendor
-          earnings roll-up.
+          earnings roll-up. `paidOutCents` is gross; for PAID_OUT orders,
+          `vendorPaidOutCents` is what the vendor received after the platform fee,
+          and `platformFeeCents` is the fee withheld.
       parameters:
         - name: id
           in: query
@@ -267,6 +275,7 @@ paths:
                         authorization_id: MOCK-AUTH-e5f6a7b8
                         status: DELIVERED
                         amount_cents: 4900
+                        query_cap_cents: 1000
                         created_at: "2026-10-21 17:02:11"
                         updated_at: "2026-10-21 17:03:40"
                 one:
@@ -279,6 +288,7 @@ paths:
                       authorization_id: MOCK-AUTH-e5f6a7b8
                       status: DELIVERED
                       amount_cents: 4900
+                      query_cap_cents: 1000
                       created_at: "2026-10-21 17:02:11"
                       updated_at: "2026-10-21 17:03:40"
                     authorization:
@@ -319,6 +329,8 @@ paths:
                       heldCents: 4900
                       capturedCents: 10800
                       paidOutCents: 10800
+                      vendorPaidOutCents: 9720
+                      platformFeeCents: 1080
                       releasedCents: 4900
                 receipt:
                   summary: Receipt for a delivered order with two query charges
@@ -331,6 +343,7 @@ paths:
                       authorization_id: MOCK-AUTH-e5f6a7b8
                       status: DELIVERED
                       amount_cents: 4900
+                      query_cap_cents: 1000
                       created_at: "2026-10-21 17:02:11"
                       updated_at: "2026-10-21 17:03:40"
                     receipt:
@@ -342,6 +355,7 @@ paths:
                       vendorPayoutCents: 4410
                       queryCount: 2
                       queryChargesCents: 100
+                      queryCapCents: 1000
                       totalCents: 5000
         "404":
           $ref: "#/components/responses/NotFound"
@@ -370,8 +384,18 @@ paths:
         If the same buyer already has an unapproved (`MATCHED`) order for this
         dataset at the current price, that order is returned instead of a new
         one, with `reused: true` and status 200. An order left at an old price
-        (the vendor repriced since) is not reused. In mock mode the approve link
-        is the relative path `/checkout/mock?token=..&orderId=..`.
+        (the vendor repriced since) is not reused. An order is reused only when
+        its query cap matches a `queryCapCents` the caller sent; leaving
+        `queryCapCents` out reuses an unapproved order at the current price
+        whatever its cap. In mock mode the approve link is the relative path
+        `/checkout/mock?token=..&orderId=..`.
+
+        Each order stores its query spend cap (`queryCapCents`, default 1000
+        cents, $10.00), which `POST /api/query` and `POST /api/billing` enforce.
+        In live mode the PayPal order also carries our order id as `custom_id`,
+        a description, and `experience_context` return and cancel URLs
+        (`/researcher?orderId=..`). The base URL is `NEXT_PUBLIC_SITE_URL`, or the
+        request's origin when that is unset.
       requestBody:
         required: true
         content:
@@ -417,7 +441,7 @@ paths:
                     escrowState: MATCHED
                     mock: true
         "422":
-          description: Missing or unknown `datasetId`, invalid `amount`, or an `amount` that does not match the listed price.
+          description: Missing or unknown `datasetId`, invalid `amount`, an `amount` that does not match the listed price, or a `queryCapCents` that is not an integer from 50 to 100000.
           content:
             application/json:
               schema:
@@ -427,6 +451,11 @@ paths:
                   value: { error: amount does not match the listed price }
                 unknownDataset:
                   value: { error: "unknown datasetId: ds_nope" }
+                badQueryCap:
+                  value:
+                    {
+                      error: "queryCapCents, if provided, must be an integer from 50 to 100000",
+                    }
         "500":
           $ref: "#/components/responses/InternalError"
         "503":
@@ -445,6 +474,10 @@ paths:
         CANCELLED, the buyer backing out before approving; no PayPal call, since
         nothing was held), and `resolve` with `resolution: capture | void`
         (DISPUTED → CAPTURED | VOIDED).
+
+        In live mode, `payout` sends the vendor's share (the price minus the
+        platform fee) through the PayPal Payouts API to the vendor's payout
+        email, and a vendor without one gets a 409.
 
         The stored row is the source of truth for the current state and PayPal
         ids. The transition is validated **before** any PayPal call, so an
@@ -539,15 +572,6 @@ paths:
                     error: "action must be one of: authorize, deliver, capture, payout, void, dispute, cancel, resolve"
         "500":
           $ref: "#/components/responses/InternalError"
-        "501":
-          description: "`payout` in live mode: real PayPal Payouts is not implemented yet."
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-              examples:
-                payouts:
-                  value: { error: real PayPal Payouts not implemented }
         "503":
           $ref: "#/components/responses/PayPalNotConfigured"
         default:
@@ -563,7 +587,10 @@ paths:
         `PAID_OUT`. The question is screened for identifiers and row-level asks,
         compiled to parameterized aggregate-only SQL, re-checked, executed
         vendor-side (mocked), and put through small-cell suppression (k ≥ 11).
-        Only answered queries are billed, at the server-set per-query fee.
+        Only answered queries are metered, at the server-set per-query fee, in
+        our own ledger (not PayPal). If one more query would take the order past
+        its `queryCapCents`, the answer is `402` before any privacy check runs,
+        and nothing is metered.
       requestBody:
         required: true
         content:
@@ -623,6 +650,18 @@ paths:
                     {
                       error: order does not grant data access (status AUTHORIZED),
                     }
+        "402":
+          description: The order's query spend cap is reached; one more query would exceed `queryCapCents`. Nothing is metered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryCapReached"
+              examples:
+                capReached:
+                  value:
+                    error: query spend cap reached for this order
+                    spentCents: 1000
+                    capCents: 1000
         "404":
           $ref: "#/components/responses/NotFound"
         "422":
@@ -693,8 +732,10 @@ paths:
       description: |
         Records a usage row at the server-set fee (`PER_QUERY_FEE_CENTS`, 50).
         `chargeCents` is accepted only as a confirmation; any other value is
-        422. The order must grant data access, otherwise 409. This is where a
-        real PayPal per-query capture would fire (mocked).
+        422. The order must grant data access, otherwise 409. If the charge
+        would take the order past its `queryCapCents`, it is refused with 402
+        and nothing is recorded. This is where a real PayPal per-query capture
+        would fire (mocked).
       requestBody:
         required: true
         content:
@@ -721,6 +762,18 @@ paths:
                     orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
                     chargeCents: 50
                     charged: true
+        "402":
+          description: The order's query spend cap is reached. Nothing is recorded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryCapReached"
+              examples:
+                capReached:
+                  value:
+                    error: query spend cap reached for this order
+                    spentCents: 1000
+                    capCents: 1000
         "409":
           description: The order's escrow state does not grant data access.
           content:
@@ -820,7 +873,13 @@ paths:
         `LLM_PROVIDER=bedrock`; otherwise a deterministic scripted planner runs
         the same tools (`source` says which). Guardrails are enforced in code,
         not the prompt: price must fit `budgetCents`, a passing sample check for
-        that dataset must come first, and at most one order is created per run.
+        that dataset must come first, at most 3 sample checks run per run, a
+        dataset the buyer already owns is never bought again, and at most one
+        order is created per run. `search_datasets` and `get_dataset` results
+        carry `alreadyOwned` (true when an AUTHORIZED, DELIVERED, CAPTURED,
+        PAID_OUT or DISPUTED order already covers the dataset). When a sample
+        fails, the scripted planner moves on to the next in-budget candidate.
+        A refused call is recorded in `steps` with its `error`.
       requestBody:
         required: true
         content:
@@ -1023,9 +1082,28 @@ paths:
         Clears orders, order events, query usage, webhook dedupe rows and agent
         runs, then reseeds the catalog (including its prices), so a live demo
         can start over between takes. Returns 404 unless `PAYPAL_MODE=mock`.
+
+        An optional JSON body `{ "seed": "story" }` also inserts six sample
+        orders in different escrow states (a paid-out sale, a capture, a dispute,
+        a hold with 2 days left, a void and an unapproved match), all in one
+        transaction with the reset. An empty body is a plain reset. A body with
+        any other `seed` value, or invalid JSON, is `422` and nothing is touched.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DemoResetRequest"
+            examples:
+              plain:
+                summary: Plain reset (same as an empty body)
+                value: {}
+              story:
+                summary: Reset and add the sample orders
+                value: { seed: story }
       responses:
         "200":
-          description: Demo data cleared and the catalog reseeded.
+          description: Demo data cleared and the catalog reseeded (with sample orders when `seed` is `story`).
           content:
             application/json:
               schema:
@@ -1045,6 +1123,15 @@ paths:
               examples:
                 notMock:
                   value: { error: "not found" }
+        "422":
+          description: The body is not valid JSON, or `seed` is set to anything other than `story`. Nothing is changed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                badSeed:
+                  value: { error: 'seed, if provided, must be "story"' }
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1058,6 +1145,10 @@ paths:
         `verify-webhook-signature` (headers `paypal-transmission-*`,
         `paypal-cert-url`, `paypal-auth-algo`; webhook id `PAYPAL_WEBHOOK_ID`)
         before it is trusted.
+
+        An event is matched to an order by the ids on its resource (the resource
+        id and the related authorization and PayPal order ids), and by our own
+        order id, which we send as `custom_id` when the PayPal order is created.
 
         Every event id is recorded in the same transaction as any state change,
         so redeliveries are no-ops (`duplicate`). An event is applied only when
@@ -1180,6 +1271,7 @@ components:
           authorization_id,
           status,
           amount_cents,
+          query_cap_cents,
           created_at,
           updated_at,
         ]
@@ -1195,6 +1287,11 @@ components:
           {
             type: integer,
             description: Escrowed amount; always the listed price.,
+          }
+        query_cap_cents:
+          {
+            type: integer,
+            description: Most the buyer can be metered for queries on this order (cents). Defaults to 1000.,
           }
         created_at:
           {
@@ -1256,7 +1353,15 @@ components:
       type: object
       description: Vendor earnings roll-up. Every escrow state is present in `countsByStatus` (zero-filled).
       required:
-        [countsByStatus, heldCents, capturedCents, paidOutCents, releasedCents]
+        [
+          countsByStatus,
+          heldCents,
+          capturedCents,
+          paidOutCents,
+          vendorPaidOutCents,
+          platformFeeCents,
+          releasedCents,
+        ]
       properties:
         countsByStatus:
           type: object
@@ -1283,7 +1388,18 @@ components:
         heldCents:
           { type: integer, description: AUTHORIZED + DELIVERED + DISPUTED. }
         capturedCents: { type: integer, description: CAPTURED + PAID_OUT. }
-        paidOutCents: { type: integer, description: PAID_OUT. }
+        paidOutCents: { type: integer, description: PAID_OUT (gross). }
+        vendorPaidOutCents:
+          {
+            type: integer,
+            description: What the vendor received for PAID_OUT orders,
+            after the platform fee.,
+          }
+        platformFeeCents:
+          {
+            type: integer,
+            description: Platform fee withheld from PAID_OUT orders. vendorPaidOutCents + platformFeeCents = paidOutCents.,
+          }
         releasedCents: { type: integer, description: VOIDED. }
     MatchRequest:
       type: object
@@ -1373,7 +1489,7 @@ components:
           items: { $ref: "#/components/schemas/OrderRow" }
     OrderDetailResponse:
       type: object
-      required: [order, authorization]
+      required: [order, authorization, delivery]
       properties:
         order: { $ref: "#/components/schemas/OrderRow" }
         authorization:
@@ -1381,10 +1497,26 @@ components:
           oneOf:
             - $ref: "#/components/schemas/AuthorizationWindow"
             - type: "null"
+        delivery:
+          description: A fresh download link, only once the buyer may have the data (DELIVERED, CAPTURED, PAID_OUT); null otherwise.
+          oneOf:
+            - $ref: "#/components/schemas/DeliveryLink"
+            - type: "null"
         events:
           type: array
           description: Present when `events` is passed; oldest first.
           items: { $ref: "#/components/schemas/OrderEventRow" }
+    DeliveryLink:
+      type: object
+      description: "A short-lived download link for the order's dataset, minted on every read. For now it is always a mock link on a local-only host (mock is true); the S3 presigned URL is not wired yet."
+      required: [url, expiresAt, mock]
+      properties:
+        url: { type: string, format: uri }
+        expiresAt:
+          type: string
+          format: date-time
+          description: When the link stops working (900 seconds after the read).
+        mock: { type: boolean, const: true }
     AuthorizationWindow:
       type: object
       description: How long a PayPal authorization (the buyer's held funds) can still be captured. Measured from the AUTHORIZE event. Honored for 3 days, valid for up to 29.
@@ -1426,6 +1558,7 @@ components:
           vendorPayoutCents,
           queryCount,
           queryChargesCents,
+          queryCapCents,
           totalCents,
         ]
       properties:
@@ -1446,6 +1579,11 @@ components:
           {
             type: integer,
             description: Sum of the per-query charges. 0 for VOIDED or CANCELLED.,
+          }
+        queryCapCents:
+          {
+            type: integer,
+            description: The most the buyer can be metered for queries on this order.,
           }
         totalCents:
           { type: integer, description: amountCents + queryChargesCents. }
@@ -1475,6 +1613,14 @@ components:
           }
         buyerEmail:
           { type: string, description: Defaults to demo-buyer@meddata.test. }
+        queryCapCents:
+          {
+            type: integer,
+            minimum: 50,
+            maximum: 100000,
+            default: 1000,
+            description: "Spend cap on metered queries for this order, in cents (50 to 100000). Defaults to 1000. When sent, an existing unapproved order is reused only if its cap matches.",
+          }
     CreateOrderResponse:
       type: object
       required: [orderId, paypalOrderId, status, approveUrl, escrowState]
@@ -1493,6 +1639,14 @@ components:
           const: true
           description: Present (true) when an existing unapproved order was returned instead of a new one.
         mock: { type: boolean, description: Present (true) in mock mode. }
+    DemoResetRequest:
+      type: object
+      description: Optional. Omit the body (or send `{}`) for a plain reset.
+      properties:
+        seed:
+          type: string
+          enum: [story]
+          description: "`story` adds the six sample orders after the reset."
     AdvanceOrderRequest:
       type: object
       required: [orderId, action]
@@ -1550,6 +1704,18 @@ components:
         params:
           type: array
           items: {}
+    QueryCapReached:
+      type: object
+      description: A 402 from a query or billing call whose order has spent its cap.
+      required: [error, spentCents, capCents]
+      properties:
+        error: { type: string }
+        spentCents:
+          type: integer
+          description: Metered so far on the order (cents).
+        capCents:
+          type: integer
+          description: The order's query spend cap (cents).
     QueryRequest:
       type: object
       required: [orderId, datasetId, question]

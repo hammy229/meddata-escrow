@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "MedData Escrow API",
-    "description": "Generated from openapi/openapi.yaml (v0.3.0) by `npm run postman:gen`. Do not edit by hand.\n\nMedData Escrow lets a researcher describe a study in plain English, match it\nto vendor datasets, and buy access through an **escrow** built on PayPal\nauthorize-then-capture. Funds are held (authorized) while the data is\ndelivered, captured once the buyer accepts it, and paid out to the vendor.\nA buyer can dispute while funds are held, and an operator resolves the\ndispute toward capture or void.\n\nAfter delivery the researcher asks plain-English questions. Each question is\nscreened for identifiers, compiled to aggregate-only SQL, re-checked, run\nvendor-side, put through small-cell suppression, and billed per answer at a\nserver-set fee.\n\n**All data is synthetic** (Synthea-generated cohorts). No real patient data\nis stored or returned.\n\nThe server, not the client, decides who pays what and who sees what:\nthe escrowed amount is always the dataset's listed price, queries require a\npaid and delivered order, and the per-query fee is fixed server-side.\n\nErrors are always `{ \"error\": string }`, plus `reasons: string[]` on\nprivacy rejections.\n\nRun with `PAYPAL_MODE=mock` to drive the whole escrow arc with no PayPal\ncredentials; responses then carry `mock: true` and `MOCK-*` ids. In mock\nmode the approve link is a local page (`/checkout/mock`), and\n`POST /api/demo/reset` starts the demo over.\n",
+    "description": "Generated from openapi/openapi.yaml (v0.4.0) by `npm run postman:gen`. Do not edit by hand.\n\nMedData Escrow lets a researcher describe a study in plain English, match it\nto vendor datasets, and buy access through an **escrow** built on PayPal\nauthorize-then-capture. Funds are held (authorized) while the data is\ndelivered, captured once the buyer accepts it, and paid out to the vendor.\nA buyer can dispute while funds are held, and an operator resolves the\ndispute toward capture or void.\n\nAfter delivery the researcher asks plain-English questions. Each question is\nscreened for identifiers, compiled to aggregate-only SQL, re-checked, run\nvendor-side, put through small-cell suppression, and metered per answer at a\nserver-set fee. Metering is kept in our own ledger, not billed through\nPayPal. Each order has a query spend cap (`queryCapCents`, default 1000);\nonce a query would go past it, the server answers `402` and bills nothing.\n\n**All data is synthetic** (Synthea-generated cohorts). No real patient data\nis stored or returned.\n\nThe server, not the client, decides who pays what and who sees what:\nthe escrowed amount is always the dataset's listed price, queries require a\npaid and delivered order, and the per-query fee is fixed server-side.\n\nErrors are always `{ \"error\": string }`, plus `reasons: string[]` on\nprivacy rejections.\n\nRun with `PAYPAL_MODE=mock` to drive the whole escrow arc with no PayPal\ncredentials; responses then carry `mock: true` and `MOCK-*` ids. In mock\nmode the approve link is a local page (`/checkout/mock`), and\n`POST /api/demo/reset` starts the demo over (optionally with sample orders).\n",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -471,13 +471,27 @@
           "name": "Reset the demo database (mock mode only)",
           "request": {
             "method": "POST",
-            "header": [],
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
             "url": {
               "raw": "{{baseUrl}}/api/demo/reset",
               "host": ["{{baseUrl}}"],
               "path": ["api", "demo", "reset"]
             },
-            "description": "Clears orders, order events, query usage, webhook dedupe rows and agent\nruns, then reseeds the catalog (including its prices), so a live demo\ncan start over between takes. Returns 404 unless `PAYPAL_MODE=mock`.\n"
+            "description": "Clears orders, order events, query usage, webhook dedupe rows and agent\nruns, then reseeds the catalog (including its prices), so a live demo\ncan start over between takes. Returns 404 unless `PAYPAL_MODE=mock`.\n\nAn optional JSON body `{ \"seed\": \"story\" }` also inserts six sample\norders in different escrow states (a paid-out sale, a capture, a dispute,\na hold with 2 days left, a void and an unapproved match), all in one\ntransaction with the reset. An empty body is a plain reset. A body with\nany other `seed` value, or invalid JSON, is `422` and nothing is touched.\n",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
           },
           "response": []
         }
@@ -649,7 +663,7 @@
                 }
               ]
             },
-            "description": "Reads orders from the DB (no PayPal). The query string picks the shape:\n\n- no `id` / `summary` → `{ orders: OrderRow[] }` (newest first),\n  optionally AND-filtered by `status`, `datasetId`, `buyerEmail`.\n- `?id=ord_..` → `{ order, authorization }`; add `&events=1` for\n  `{ order, authorization, events }` (the audit timeline, oldest first).\n  `authorization` is the PayPal hold window while funds are held, and\n  null otherwise. 404 if unknown.\n- `?id=ord_..&receipt=1` → `{ order, receipt }`, the fee breakdown.\n- `?summary=1[&datasetId=..]` → `{ summary: OrderSummary }`, the vendor\n  earnings roll-up.\n"
+            "description": "Reads orders from the DB (no PayPal). The query string picks the shape:\n\n- no `id` / `summary` → `{ orders: OrderRow[] }` (newest first),\n  optionally AND-filtered by `status`, `datasetId`, `buyerEmail`.\n- `?id=ord_..` → `{ order, authorization, delivery }`; add `&events=1` for\n  `{ order, authorization, delivery, events }` (the audit timeline, oldest\n  first). `authorization` is the PayPal hold window while funds are held,\n  and null otherwise. `delivery` is a short-lived download link, only once\n  the buyer may have the data (DELIVERED, CAPTURED or PAID_OUT); it is\n  minted fresh on every read with a 900 second lifetime, and null\n  otherwise. 404 if unknown.\n- `?id=ord_..&receipt=1` → `{ order, receipt }`, the fee breakdown and the\n  order's query cap.\n- `?summary=1[&datasetId=..]` → `{ summary: OrderSummary }`, the vendor\n  earnings roll-up. `paidOutCents` is gross; for PAID_OUT orders,\n  `vendorPaidOutCents` is what the vendor received after the platform fee,\n  and `platformFeeCents` is the fee withheld.\n"
           },
           "response": []
         },
@@ -682,7 +696,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "orders"]
             },
-            "description": "Creates a PayPal Orders v2 order (`intent=AUTHORIZE`) and an `orders`\nrow in state `MATCHED`. The escrowed amount is **always** the dataset's\nlisted price; an optional `amount` (major units) is only a confirmation,\nand a mismatch is 422. In mock mode no PayPal call is made, but the row\nis still persisted with a `MOCK-ORDER-*` id.\n\nIf the same buyer already has an unapproved (`MATCHED`) order for this\ndataset at the current price, that order is returned instead of a new\none, with `reused: true` and status 200. An order left at an old price\n(the vendor repriced since) is not reused. In mock mode the approve link\nis the relative path `/checkout/mock?token=..&orderId=..`.\n",
+            "description": "Creates a PayPal Orders v2 order (`intent=AUTHORIZE`) and an `orders`\nrow in state `MATCHED`. The escrowed amount is **always** the dataset's\nlisted price; an optional `amount` (major units) is only a confirmation,\nand a mismatch is 422. In mock mode no PayPal call is made, but the row\nis still persisted with a `MOCK-ORDER-*` id.\n\nIf the same buyer already has an unapproved (`MATCHED`) order for this\ndataset at the current price, that order is returned instead of a new\none, with `reused: true` and status 200. An order left at an old price\n(the vendor repriced since) is not reused. An order is reused only when\nits query cap matches a `queryCapCents` the caller sent; leaving\n`queryCapCents` out reuses an unapproved order at the current price\nwhatever its cap. In mock mode the approve link is the relative path\n`/checkout/mock?token=..&orderId=..`.\n\nEach order stores its query spend cap (`queryCapCents`, default 1000\ncents, $10.00), which `POST /api/query` and `POST /api/billing` enforce.\nIn live mode the PayPal order also carries our order id as `custom_id`,\na description, and `experience_context` return and cancel URLs\n(`/researcher?orderId=..`). The base URL is `NEXT_PUBLIC_SITE_URL`, or the\nrequest's origin when that is unset.\n",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"datasetId\": \"{{datasetId}}\",\n  \"amount\": 49,\n  \"buyerEmail\": \"researcher@example.edu\"\n}",
@@ -723,7 +737,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "orders"]
             },
-            "description": "Actions map to escrow events: `authorize` (MATCHED → AUTHORIZED),\n`deliver` (AUTHORIZED → DELIVERED), `capture` (DELIVERED → CAPTURED),\n`payout` (CAPTURED → PAID_OUT), `void` (AUTHORIZED → VOIDED),\n`dispute` (AUTHORIZED/DELIVERED → DISPUTED), `cancel` (MATCHED →\nCANCELLED, the buyer backing out before approving; no PayPal call, since\nnothing was held), and `resolve` with `resolution: capture | void`\n(DISPUTED → CAPTURED | VOIDED).\n\nThe stored row is the source of truth for the current state and PayPal\nids. The transition is validated **before** any PayPal call, so an\nillegal move never charges anyone and never writes (409).\n",
+            "description": "Actions map to escrow events: `authorize` (MATCHED → AUTHORIZED),\n`deliver` (AUTHORIZED → DELIVERED), `capture` (DELIVERED → CAPTURED),\n`payout` (CAPTURED → PAID_OUT), `void` (AUTHORIZED → VOIDED),\n`dispute` (AUTHORIZED/DELIVERED → DISPUTED), `cancel` (MATCHED →\nCANCELLED, the buyer backing out before approving; no PayPal call, since\nnothing was held), and `resolve` with `resolution: capture | void`\n(DISPUTED → CAPTURED | VOIDED).\n\nIn live mode, `payout` sends the vendor's share (the price minus the\nplatform fee) through the PayPal Payouts API to the vendor's payout\nemail, and a vendor without one gets a 409.\n\nThe stored row is the source of truth for the current state and PayPal\nids. The transition is validated **before** any PayPal call, so an\nillegal move never charges anyone and never writes (409).\n",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"orderId\": \"{{newOrderId}}\",\n  \"action\": \"authorize\"\n}",
@@ -770,7 +784,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "query"]
             },
-            "description": "Requires an order for this dataset in `DELIVERED`, `CAPTURED` or\n`PAID_OUT`. The question is screened for identifiers and row-level asks,\ncompiled to parameterized aggregate-only SQL, re-checked, executed\nvendor-side (mocked), and put through small-cell suppression (k ≥ 11).\nOnly answered queries are billed, at the server-set per-query fee.\n",
+            "description": "Requires an order for this dataset in `DELIVERED`, `CAPTURED` or\n`PAID_OUT`. The question is screened for identifiers and row-level asks,\ncompiled to parameterized aggregate-only SQL, re-checked, executed\nvendor-side (mocked), and put through small-cell suppression (k ≥ 11).\nOnly answered queries are metered, at the server-set per-query fee, in\nour own ledger (not PayPal). If one more query would take the order past\nits `queryCapCents`, the answer is `402` before any privacy check runs,\nand nothing is metered.\n",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"datasetId\": \"{{datasetId}}\",\n  \"question\": \"average age by sex\"\n}",
@@ -850,7 +864,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "billing"]
             },
-            "description": "Records a usage row at the server-set fee (`PER_QUERY_FEE_CENTS`, 50).\n`chargeCents` is accepted only as a confirmation; any other value is\n422. The order must grant data access, otherwise 409. This is where a\nreal PayPal per-query capture would fire (mocked).\n",
+            "description": "Records a usage row at the server-set fee (`PER_QUERY_FEE_CENTS`, 50).\n`chargeCents` is accepted only as a confirmation; any other value is\n422. The order must grant data access, otherwise 409. If the charge\nwould take the order past its `queryCapCents`, it is refused with 402\nand nothing is recorded. This is where a real PayPal per-query capture\nwould fire (mocked).\n",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"question\": \"count by region\",\n  \"chargeCents\": 50\n}",
@@ -906,7 +920,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "agent"]
             },
-            "description": "Agentic commerce: given a study and a budget, the agent searches the\ncatalog, inspects datasets, sample-checks a candidate, and only then\nopens a PayPal escrow order (MATCHED + approve URL). Funds are held only\nafter the buyer approves in PayPal; the agent never authorizes or\ncaptures.\n\nClaude on Amazon Bedrock drives the tool loop when\n`LLM_PROVIDER=bedrock`; otherwise a deterministic scripted planner runs\nthe same tools (`source` says which). Guardrails are enforced in code,\nnot the prompt: price must fit `budgetCents`, a passing sample check for\nthat dataset must come first, and at most one order is created per run.\n",
+            "description": "Agentic commerce: given a study and a budget, the agent searches the\ncatalog, inspects datasets, sample-checks a candidate, and only then\nopens a PayPal escrow order (MATCHED + approve URL). Funds are held only\nafter the buyer approves in PayPal; the agent never authorizes or\ncaptures.\n\nClaude on Amazon Bedrock drives the tool loop when\n`LLM_PROVIDER=bedrock`; otherwise a deterministic scripted planner runs\nthe same tools (`source` says which). Guardrails are enforced in code,\nnot the prompt: price must fit `budgetCents`, a passing sample check for\nthat dataset must come first, at most 3 sample checks run per run, a\ndataset the buyer already owns is never bought again, and at most one\norder is created per run. `search_datasets` and `get_dataset` results\ncarry `alreadyOwned` (true when an AUTHORIZED, DELIVERED, CAPTURED,\nPAID_OUT or DISPUTED order already covers the dataset). When a sample\nfails, the scripted planner moves on to the next in-budget candidate.\nA refused call is recorded in `steps` with its `error`.\n",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"study\": \"Outcomes of statin therapy in adults with coronary heart disease\",\n  \"budgetCents\": 6000,\n  \"buyerEmail\": \"researcher@university.edu\"\n}",
@@ -960,7 +974,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "webhooks", "paypal"]
             },
-            "description": "PayPal posts payment events here. The raw body is verified with PayPal's\n`verify-webhook-signature` (headers `paypal-transmission-*`,\n`paypal-cert-url`, `paypal-auth-algo`; webhook id `PAYPAL_WEBHOOK_ID`)\nbefore it is trusted.\n\nEvery event id is recorded in the same transaction as any state change,\nso redeliveries are no-ops (`duplicate`). An event is applied only when\nits escrow transition is legal from the order's current state; anything\nelse is acknowledged as `ignored` with a reason. After verification the\nanswer is always 200 so PayPal does not retry forever; only an\nunexpected internal failure returns 500 (and the retry is safe).\n\nDemo only: with `PAYPAL_MODE=mock`, an event is accepted iff it carries\nthe header `x-mock-webhook: 1`.\n",
+            "description": "PayPal posts payment events here. The raw body is verified with PayPal's\n`verify-webhook-signature` (headers `paypal-transmission-*`,\n`paypal-cert-url`, `paypal-auth-algo`; webhook id `PAYPAL_WEBHOOK_ID`)\nbefore it is trusted.\n\nAn event is matched to an order by the ids on its resource (the resource\nid and the related authorization and PayPal order ids), and by our own\norder id, which we send as `custom_id` when the PayPal order is created.\n\nEvery event id is recorded in the same transaction as any state change,\nso redeliveries are no-ops (`duplicate`). An event is applied only when\nits escrow transition is legal from the order's current state; anything\nelse is acknowledged as `ignored` with a reason. After verification the\nanswer is always 200 so PayPal does not retry forever; only an\nunexpected internal failure returns 500 (and the retry is safe).\n\nDemo only: with `PAYPAL_MODE=mock`, an event is accepted iff it carries\nthe header `x-mock-webhook: 1`.\n",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"id\": \"WH-58D329510W468432D-8HN650336L201105X\",\n  \"event_type\": \"PAYMENT.CAPTURE.COMPLETED\",\n  \"resource_type\": \"capture\",\n  \"resource\": {\n    \"id\": \"2GG279541U471931P\",\n    \"status\": \"COMPLETED\"\n  }\n}",
