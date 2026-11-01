@@ -29,6 +29,8 @@ import { escrowRequest } from "../../lib/ui/escrow-response";
 import { suggestQuestions } from "../../lib/query/suggestions";
 import { MAX_COMPARE } from "../../lib/ui/compare";
 import AgentRun from "../components/AgentRun";
+import EscrowStepper from "../components/EscrowStepper";
+import { type EscrowFlowState } from "../../lib/ui/order-sync";
 import {
   ArrowLeft,
   Check,
@@ -37,16 +39,10 @@ import {
   ShieldCheck,
 } from "../components/icons";
 
-// The escrow lifecycle, in order. The UI advances through these as the flow
-// progresses; VOIDED is a terminal off-ramp handled separately.
-const ESCROW_FLOW = [
-  "MATCHED",
-  "AUTHORIZED",
-  "DELIVERED",
-  "CAPTURED",
-  "PAID_OUT",
-] as const;
-type EscrowState = (typeof ESCROW_FLOW)[number] | null;
+type EscrowState = EscrowFlowState | null;
+
+// What the page needs back after the buyer returns from the approval page.
+const RESUME_KEY = "meddata:researcher-resume";
 
 // PATCH action -> the escrow state it advances to (for optimistic/degrade UI).
 const ADVANCE: Record<string, Exclude<EscrowState, null>> = {
@@ -57,51 +53,6 @@ const ADVANCE: Record<string, Exclude<EscrowState, null>> = {
 
 function usd(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
-}
-
-function EscrowStepper({
-  state,
-  voided,
-  disputed,
-}: {
-  state: EscrowState;
-  voided: boolean;
-  disputed: boolean;
-}) {
-  const activeIndex = state ? ESCROW_FLOW.indexOf(state) : -1;
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {ESCROW_FLOW.map((s, i) => {
-        const reached = i <= activeIndex;
-        const held = s === "AUTHORIZED" || s === "DELIVERED";
-        return (
-          <span
-            key={s}
-            className={[
-              "rounded-full border px-3 py-1 font-mono text-xs transition-colors",
-              reached && held
-                ? "border-pp-300 bg-pp-50 text-pp-800 dark:border-pp-500/40 dark:bg-pp-500/10 dark:text-pp-300"
-                : reached
-                  ? "border-pp-600 bg-pp-600 text-white dark:border-pp-500 dark:bg-pp-500"
-                  : "border-rule bg-paper text-zinc-400 dark:text-zinc-600",
-            ].join(" ")}
-          >
-            {s}
-          </span>
-        );
-      })}
-      {disputed && (
-        <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 font-mono text-xs text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
-          DISPUTED
-        </span>
-      )}
-      {voided && (
-        <span className="rounded-full border border-rose-300 bg-rose-50 px-3 py-1 font-mono text-xs text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/10 dark:text-rose-300">
-          VOIDED
-        </span>
-      )}
-    </div>
-  );
 }
 
 const primaryBtn =
@@ -262,9 +213,10 @@ export default function ResearcherPage() {
     }
   }
 
-  // Buy = create the order then authorize it, so the escrow reaches AUTHORIZED
-  // (funds held). A server error is shown as is and nothing advances; only a
-  // request that never gets a response falls back to the labelled offline demo.
+  // Buy = create the order, then send the buyer to the approval page. Funds are
+  // only authorized after they approve there. A server error is shown as is and
+  // nothing advances; only a request that never gets a response falls back to
+  // the labelled offline demo.
   async function buyEscrow() {
     if (!selected) return;
     setBusyAction("buy");
@@ -298,30 +250,30 @@ export default function ResearcherPage() {
       }
       setOrderId(data.orderId);
       setReused(data.reused === true);
-      if (typeof data.approveUrl === "string") setApproveUrl(data.approveUrl);
-
-      // Authorize the created order -> AUTHORIZED. The server derives the `from`
-      // state and PayPal ids from the stored row, so we only send orderId.
-      const auth = await escrowRequest("/api/orders", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "authorize",
-          orderId: data.orderId,
-        }),
-      });
-      if (auth.kind === "ok") {
-        setEscrow(auth.data.escrowState ?? "AUTHORIZED");
-        const mock = data.mock || auth.data.mock ? " (mock mode)" : "";
-        setEscrowNote(
-          `Order ${data.orderId} authorized — funds held in escrow.${mock}`,
+      if (typeof data.approveUrl !== "string" || !data.approveUrl) {
+        setEscrowError(
+          "Could not open the approval page: no approve link came back.",
         );
-      } else if (auth.kind === "error") {
-        setEscrowError(`Could not authorize the order: ${auth.message}`);
-      } else {
-        setEscrow("AUTHORIZED");
-        setEscrowNote("Escrow authorize mocked for demo (service offline).");
+        return;
       }
+      // The buyer approves on the approval page (PayPal, or the local mock),
+      // which sends them back to the workspace. Keep the study text so the
+      // page can pick up where it left off.
+      try {
+        sessionStorage.setItem(
+          RESUME_KEY,
+          JSON.stringify({
+            orderId: data.orderId,
+            datasetId: selected.datasetId,
+            description,
+          }),
+        );
+      } catch {
+        // Storage can be blocked; the order id in the return link is enough.
+      }
+      setEscrowNote("Opening the approval page…");
+      window.location.assign(data.approveUrl);
+      return;
     } finally {
       setBusyAction(null);
       setTimelineKey((k) => k + 1);
@@ -683,7 +635,7 @@ export default function ResearcherPage() {
                       <AlertTriangle className="h-4 w-4" />
                     )}
                     {busyAction === "buy"
-                      ? "Authorizing…"
+                      ? "Opening approval…"
                       : `${check && !check.passed ? "Buy anyway" : "Buy (escrow)"} · ${usd(selected.priceCents)}`}
                   </button>
                 )}
@@ -816,8 +768,6 @@ export default function ResearcherPage() {
             {approveUrl && escrow === "MATCHED" && (
               <a
                 href={approveUrl}
-                target="_blank"
-                rel="noreferrer"
                 className="mt-2 inline-flex text-sm font-medium text-pp-700 hover:underline dark:text-pp-400"
               >
                 Open PayPal approval →

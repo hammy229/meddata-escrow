@@ -9,6 +9,7 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import SiteNav from "../../components/SiteNav";
+import { workspaceUrl } from "../../../lib/ui/order-sync";
 
 const primaryBtn =
   "inline-flex items-center gap-2 rounded-[3px] bg-ink px-5 py-2.5 text-sm text-paper transition-colors hover:bg-pp-600 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-ink";
@@ -79,7 +80,14 @@ export default function MockCheckout({
                 ? "Approved. The funds are now held in escrow; nothing has been captured."
                 : "Cancelled. No funds were held and the order is closed."}
             </p>
-            <Link href="/researcher" className={`mt-6 ${primaryBtn}`}>
+            <Link
+              href={
+                outcome === "cancelled"
+                  ? `${workspaceUrl(orderId)}&cancelled=1`
+                  : workspaceUrl(orderId)
+              }
+              className={`mt-6 ${primaryBtn}`}
+            >
               Back to the workspace
             </Link>
           </section>
