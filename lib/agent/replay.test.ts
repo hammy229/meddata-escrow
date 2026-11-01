@@ -81,7 +81,37 @@ test("guardrails show which ones fired", () => {
     "Orders priced above $60.00 are refused.",
   );
   assert.equal(g["One order per run"].status, "enforced");
+  assert.equal(g["Sample check limit"].status, "enforced");
   assert.equal(g["No money movement"].status, "enforced");
+});
+
+test("the sample check limit guardrail fires on a refused fourth check", () => {
+  const limited: StoredAgentRun = {
+    ...run,
+    steps: [
+      ...run.steps,
+      {
+        tool: "check_sample",
+        input: {},
+        error: "sample check limit reached (3 per run)",
+        at,
+      },
+    ],
+  };
+  const g = Object.fromEntries(
+    buildReplay(limited).guardrails.map((x) => [x.label, x]),
+  );
+  assert.equal(g["Sample check limit"].status, "triggered");
+  assert.match(g["Sample check limit"].detail, /3/);
+  // The limit refusal is not mistaken for the sample-check-first rule.
+  assert.equal(
+    Object.fromEntries(
+      buildReplay({ ...limited, steps: limited.steps.slice(2) }).guardrails.map(
+        (x) => [x.label, x.status],
+      ),
+    )["Sample check first"],
+    "enforced",
+  );
 });
 
 test("recommendation, shortlist, order and timestamp come through", () => {

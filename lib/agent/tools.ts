@@ -15,7 +15,8 @@
 // the scripted planner) asks for. An order is refused unless:
 //   - the dataset exists in the DB (the escrowed price comes from there),
 //   - its listed price is <= the run's budgetCents,
-//   - a PASSING sample check for that dataset already ran in this run,
+//   - a PASSING sample check for that dataset already ran in this run
+//     (and check_sample itself is capped at MAX_SAMPLE_CHECKS per run),
 //   - no order has been created yet in this run (at most one per run).
 // A refused call becomes an error tool result the model can read and react to;
 // it never throws out of the loop.
@@ -64,8 +65,13 @@ export interface AgentContext {
   readonly steps: AgentStep[];
   /** Dataset ids whose sample check passed earlier in this run. */
   readonly passedSamples: Set<string>;
+  /** Sample checks run so far in this run (capped at MAX_SAMPLE_CHECKS). */
+  sampleChecks: number;
   order?: AgentOrder;
 }
+
+/** Sample checks allowed per run, so a run cannot shop around forever. */
+export const MAX_SAMPLE_CHECKS = 3;
 
 export function createAgentContext(init: {
   study: string;
@@ -82,6 +88,7 @@ export function createAgentContext(init: {
     escrowDeps: init.escrowDeps ?? {},
     steps: [],
     passedSamples: new Set(),
+    sampleChecks: 0,
   };
 }
 
@@ -230,6 +237,11 @@ async function runSampleCheck(ctx: AgentContext, input: unknown) {
   const { datasetId, study } = parse(SampleInput, input);
   if (!catalogEntry(datasetId))
     throw new ToolError(`unknown datasetId: ${datasetId}`);
+  if (ctx.sampleChecks >= MAX_SAMPLE_CHECKS)
+    throw new ToolError(
+      `sample check limit reached (${MAX_SAMPLE_CHECKS} per run); decide with what you have`,
+    );
+  ctx.sampleChecks++;
   const result = await checkSample(datasetId, {
     ...ctx.ai,
     studyDescription: study,

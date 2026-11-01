@@ -65,7 +65,8 @@ const SYSTEM = [
   "You are a procurement agent buying medical research datasets for a researcher.",
   "Work in this order: search_datasets for the study; get_dataset on the best candidate;",
   "check_sample on it; then, only if the sample check passed and the listed price is",
-  "within the budget, call create_escrow_order exactly once. Use only dataset ids",
+  "within the budget, call create_escrow_order exactly once. If a sample fails, try",
+  "the next in-budget candidate (at most 3 sample checks per run). Use only dataset ids",
   "returned by the tools; never invent ids or prices. If no dataset fits the study,",
   "the budget, or the sample check, do not buy. The order only opens a PayPal escrow",
   "the researcher must approve; you cannot move money. Finish with a short plain-text",
@@ -190,47 +191,65 @@ async function runScripted(
   if (matches.length === 0)
     return done("No dataset in the catalog matches this study.");
 
-  const pick = matches.find((m) => m.withinBudget);
-  if (!pick) {
+  const candidates = matches.filter((m) => m.withinBudget);
+  if (candidates.length === 0) {
     const best = matches[0];
     return done(
       `Best match ${best.datasetId} costs ${best.priceCents === null ? "an unknown price" : dollars(best.priceCents)}, over the ${dollars(ctx.budgetCents)} budget; no matching dataset fits.`,
     );
   }
 
-  const details = await executeTool(ctx, "get_dataset", {
-    datasetId: pick.datasetId,
-  });
-  if (!details.ok) return done(`Could not inspect ${pick.datasetId}.`);
+  // Best first: inspect and sample-check each in-budget candidate until one
+  // passes. The tools cap how many checks a run may spend.
+  const failures: string[] = [];
+  for (const pick of candidates) {
+    const details = await executeTool(ctx, "get_dataset", {
+      datasetId: pick.datasetId,
+    });
+    if (!details.ok) {
+      failures.push(`${pick.datasetId} could not be inspected`);
+      continue;
+    }
 
-  const sample = await executeTool(ctx, "check_sample", {
-    datasetId: pick.datasetId,
-    study: ctx.study,
-  });
-  const check = sample.ok
-    ? (sample.output as { passed: boolean; findings: string[] })
-    : null;
-  if (!check?.passed) {
-    const why = check
-      ? check.findings.filter((f) => !f.startsWith("PASS")).join("; ")
-      : (sample as { error: string }).error;
+    const sample = await executeTool(ctx, "check_sample", {
+      datasetId: pick.datasetId,
+      study: ctx.study,
+    });
+    const check = sample.ok
+      ? (sample.output as { passed: boolean; findings: string[] })
+      : null;
+    if (!check?.passed) {
+      const why = check
+        ? check.findings.filter((f) => !f.startsWith("PASS")).join("; ")
+        : (sample as { error: string }).error;
+      failures.push(
+        `${pick.datasetId} failed its sample check${why ? ` (${why})` : ""}`,
+      );
+      // A refused check means the run's limit is spent; stop shopping.
+      if (!check) break;
+      continue;
+    }
+
+    const order = await executeTool(ctx, "create_escrow_order", {
+      datasetId: pick.datasetId,
+      justification: pick.rationale,
+    });
+    if (!order.ok)
+      return done(`Escrow order for ${pick.datasetId} failed: ${order.error}`);
+    const skipped = failures.length
+      ? ` Skipped earlier candidates: ${failures.join("; ")}.`
+      : "";
     return done(
-      `${pick.datasetId} failed its sample check, so nothing was bought${why ? `: ${why}` : "."}`,
+      `${pick.title ?? pick.datasetId} is the ${failures.length ? "best passing" : "top"} match within budget ` +
+        `(${dollars(ctx.order!.amountCents)} of ${dollars(ctx.budgetCents)}) and ` +
+        `passed its sample check (${pick.rationale}). Escrow order opened; ` +
+        `funds are held once you approve it in PayPal.${skipped}`,
+      pick.datasetId,
     );
   }
 
-  const order = await executeTool(ctx, "create_escrow_order", {
-    datasetId: pick.datasetId,
-    justification: pick.rationale,
-  });
-  if (!order.ok)
-    return done(`Escrow order for ${pick.datasetId} failed: ${order.error}`);
   return done(
-    `${pick.title ?? pick.datasetId} is the top match within budget ` +
-      `(${dollars(ctx.order!.amountCents)} of ${dollars(ctx.budgetCents)}) and ` +
-      `passed its sample check (${pick.rationale}). Escrow order opened; ` +
-      `funds are held once you approve it in PayPal.`,
-    pick.datasetId,
+    `Nothing was bought: ${failures.join("; ")}.`,
   );
 }
 

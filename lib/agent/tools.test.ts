@@ -4,7 +4,12 @@ import assert from "node:assert/strict";
 import { getOrder, listOrders, withDb } from "../db/client";
 import { fakeLlm } from "../ai/testing";
 import { withAgentDb } from "./test-db";
-import { AGENT_TOOLS, createAgentContext, executeTool } from "./tools";
+import {
+  AGENT_TOOLS,
+  createAgentContext,
+  executeTool,
+  MAX_SAMPLE_CHECKS,
+} from "./tools";
 
 const CARDIO = "ds_cardio_synthea_v1"; // 4900 cents
 const DIABETES = "ds_diabetes_synthea_v1"; // 5900 cents
@@ -219,6 +224,35 @@ test(
       assert.match((again as { error: string }).error, /at most one order/);
     }
     assert.equal(withDb((db) => listOrders(db)).length, 1);
+  }),
+);
+
+test(
+  "guardrail: a fourth sample check in one run is refused",
+  withAgentDb(async () => {
+    const c = ctx();
+    assert.equal(MAX_SAMPLE_CHECKS, 3);
+    for (const datasetId of [CARDIO, DIABETES, CARDIO]) {
+      const ok = await executeTool(c, "check_sample", {
+        datasetId,
+        study: STUDY,
+      });
+      assert.ok(ok.ok);
+    }
+    const fourth = await executeTool(c, "check_sample", {
+      datasetId: CARDIO,
+      study: STUDY,
+    });
+    assert.equal(fourth.ok, false);
+    assert.match((fourth as { error: string }).error, /sample check limit/);
+    // A refused call is still recorded, and a fresh run starts at zero.
+    assert.equal(c.steps.length, 4);
+    assert.ok(c.steps[3].error);
+    const fresh = await executeTool(ctx(), "check_sample", {
+      datasetId: CARDIO,
+      study: STUDY,
+    });
+    assert.ok(fresh.ok);
   }),
 );
 

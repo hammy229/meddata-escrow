@@ -298,6 +298,66 @@ test(
 );
 
 test(
+  "scripted planner moves on when a sample fails and buys the next candidate",
+  withAgentDb(async () => {
+    const r = await runProcurementAgent(
+      {
+        study: "pediatric asthma pilot inhaler plus hypertension registry",
+        budgetCents: 6000,
+      },
+      { useLlm: false },
+    );
+    // The pilot ranks first but has only 640 records; hypertension follows.
+    const checks = r.steps.filter((s) => s.tool === "check_sample");
+    assert.deepEqual(
+      checks.map((s) => [
+        (s.output as { datasetId: string }).datasetId,
+        (s.output as { passed: boolean }).passed,
+      ]),
+      [
+        ["ds_asthma_pediatric_pilot_v1", false],
+        ["ds_hypertension_registry_v1", true],
+      ],
+    );
+    assert.equal(r.recommendation.datasetId, "ds_hypertension_registry_v1");
+    assert.equal(r.order?.datasetId, "ds_hypertension_registry_v1");
+    assert.equal(r.order?.amountCents, 3900);
+    assert.equal(orderCount(), 1);
+  }),
+);
+
+test(
+  "scripted planner buys nothing when every in-budget candidate fails",
+  withAgentDb(async () => {
+    const r = await runProcurementAgent(
+      { study: "respiratory asthma copd", budgetCents: 6000 },
+      { useLlm: false },
+    );
+    assert.equal(r.order, undefined);
+    assert.equal(r.recommendation.datasetId, null);
+    assert.equal(r.steps.filter((s) => s.tool === "check_sample").length, 2);
+    assert.match(r.recommendation.reasoning, /ds_asthma_pediatric_pilot_v1/);
+    assert.match(r.recommendation.reasoning, /ds_copd_exacerbations_v1/);
+    assert.equal(orderCount(), 0);
+  }),
+);
+
+test(
+  "the system prompt tells the model to try the next candidate",
+  withAgentDb(async () => {
+    const { client, calls } = fakeAgentLlm([message("end_turn", [text("ok")])]);
+    await runProcurementAgent(
+      { study: STUDY, budgetCents: 5000 },
+      { client, useLlm: true },
+    );
+    assert.match(
+      String(calls[0].system),
+      /if a sample fails, try the next in-budget candidate/i,
+    );
+  }),
+);
+
+test(
   "scripted planner skips an over-budget top match for the next one in budget",
   withAgentDb(async () => {
     const r = await runProcurementAgent(

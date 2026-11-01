@@ -4,7 +4,7 @@
 // and this is easy to test.
 import { buildShortlist, type ShortlistItem } from "./shortlist";
 import type { StoredAgentRun } from "./store";
-import type { AgentStep } from "./tools";
+import { MAX_SAMPLE_CHECKS, type AgentStep } from "./tools";
 
 export interface ReplayStep {
   /** 1-based position in the run. */
@@ -99,8 +99,13 @@ function guardrails(
     },
     {
       label: "Sample check first",
-      status: status(/sample check/),
+      status: status(/no passing sample check/),
       detail: "No order without a passing sample check in the same run.",
+    },
+    {
+      label: "Sample check limit",
+      status: status(/sample check limit/),
+      detail: `At most ${MAX_SAMPLE_CHECKS} sample checks per run.`,
     },
     {
       label: "One order per run",
