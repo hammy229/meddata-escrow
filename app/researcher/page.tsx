@@ -7,7 +7,7 @@
 // (deliver -> capture -> payout, or void) -> ask a question -> POST /api/query
 // returns a privacy-safe aggregate. All data comes from the Batch-A/B APIs;
 // this file only calls them.
-import { useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import SiteNav from "../components/SiteNav";
 import MatchesGrid, {
@@ -30,7 +30,7 @@ import { suggestQuestions } from "../../lib/query/suggestions";
 import { MAX_COMPARE } from "../../lib/ui/compare";
 import AgentRun from "../components/AgentRun";
 import EscrowStepper from "../components/EscrowStepper";
-import { type EscrowFlowState } from "../../lib/ui/order-sync";
+import { orderToView, type EscrowFlowState } from "../../lib/ui/order-sync";
 import {
   ArrowLeft,
   Check,
@@ -70,7 +70,20 @@ const inputBase =
   "w-full rounded-[3px] border border-ink/20 bg-paper px-4 py-3 text-sm outline-none transition-colors focus:border-pp-500 focus:ring-2 focus:ring-pp-500/15";
 const stepBadge = "font-mono text-[0.7rem] tracking-[0.18em] text-muted";
 
-export default function ResearcherPage() {
+function first(v: string | string[] | undefined): string {
+  return (Array.isArray(v) ? v[0] : v) ?? "";
+}
+
+export default function ResearcherPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const params = use(searchParams);
+  const linkedOrderId = first(params.orderId);
+  // PayPal appends `token` on a real return from the approval page.
+  const returnToken = first(params.token);
+  const returnCancelled = first(params.cancelled) === "1";
   const [description, setDescription] = useState("");
   const [matching, setMatching] = useState(false);
   const [matchError, setMatchError] = useState<string | null>(null);
@@ -94,6 +107,7 @@ export default function ResearcherPage() {
   const [escrow, setEscrow] = useState<EscrowState>(null);
   const [voided, setVoided] = useState(false);
   const [disputed, setDisputed] = useState(false);
+  const [cancelled, setCancelled] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [escrowNote, setEscrowNote] = useState<string | null>(null);
@@ -125,6 +139,7 @@ export default function ResearcherPage() {
     setEscrow(null);
     setVoided(false);
     setDisputed(false);
+    setCancelled(false);
     setOrderId(null);
     setEscrowNote(null);
     setEscrowError(null);
@@ -137,6 +152,98 @@ export default function ResearcherPage() {
     setSummary(null);
     setCompiled(null);
   }
+
+  // Show what the server says about an order. A status we do not know leaves
+  // the screen as it is.
+  function applyOrderStatus(status: string) {
+    const view = orderToView(status);
+    if (view.escrow === null) return;
+    setEscrow((prev) => orderToView(status, prev).escrow ?? prev);
+    setVoided(view.voided);
+    setDisputed(view.disputed);
+    setCancelled(view.cancelled);
+  }
+
+  // Reopen an order from its link (?orderId=): the approval page, the agent's
+  // order card and a copied URL all land here. Each order is handled once, so
+  // a re-render never authorizes twice.
+  const handledLink = useRef<string | null>(null);
+  useEffect(() => {
+    if (!linkedOrderId || handledLink.current === linkedOrderId) return;
+    handledLink.current = linkedOrderId;
+    (async () => {
+      setEscrowError(null);
+      try {
+        const res = await fetch(
+          `/api/orders?id=${encodeURIComponent(linkedOrderId)}`,
+          { cache: "no-store" },
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.order) {
+          setEscrowError(
+            data?.error ?? `Could not load order ${linkedOrderId}.`,
+          );
+          return;
+        }
+        let status: string = data.order.status;
+        const datasetId: string = data.order.dataset_id;
+
+        const dsRes = await fetch("/api/datasets", { cache: "no-store" });
+        const dsData = await dsRes.json().catch(() => ({}));
+        const ds = Array.isArray(dsData?.datasets)
+          ? dsData.datasets.find((d: { id: string }) => d.id === datasetId)
+          : null;
+        setSelected({
+          datasetId,
+          score: 0,
+          rationale: "",
+          title: ds?.title ?? datasetId,
+          priceCents:
+            typeof ds?.priceCents === "number"
+              ? ds.priceCents
+              : data.order.amount_cents,
+        });
+        try {
+          const saved = JSON.parse(
+            sessionStorage.getItem(RESUME_KEY) ?? "null",
+          );
+          if (saved?.orderId === linkedOrderId) {
+            if (typeof saved.description === "string")
+              setDescription(saved.description);
+            sessionStorage.removeItem(RESUME_KEY);
+          }
+        } catch {
+          // No saved study text; the order itself is enough.
+        }
+        setOrderId(linkedOrderId);
+
+        // Back from the approval page with the order still waiting on it.
+        if (status === "MATCHED" && (returnToken || returnCancelled)) {
+          const action = returnCancelled ? "cancel" : "authorize";
+          const out = await escrowRequest("/api/orders", {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ orderId: linkedOrderId, action }),
+          });
+          if (out.kind === "ok") {
+            status = action === "cancel" ? "CANCELLED" : "AUTHORIZED";
+          } else if (out.kind === "error") {
+            setEscrowError(`Could not ${action} the order: ${out.message}`);
+          }
+        }
+        applyOrderStatus(status);
+        if (status === "AUTHORIZED" && returnToken) {
+          setEscrowNote("Approved. Funds are held in escrow.");
+        } else if (status === "CANCELLED") {
+          setEscrowNote("Order cancelled. Nothing was charged.");
+        }
+      } catch {
+        setEscrowError("Could not reach the escrow service.");
+      } finally {
+        setTimelineKey((k) => k + 1);
+      }
+    })();
+  }, [linkedOrderId, returnToken, returnCancelled]);
 
   async function runMatch() {
     if (!description.trim()) return;
@@ -600,7 +707,7 @@ export default function ResearcherPage() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {escrow === "MATCHED" && !voided && !check && (
+                {escrow === "MATCHED" && !voided && !cancelled && !check && (
                   <button
                     onClick={runSampleCheck}
                     disabled={checking || busyAction !== null}
@@ -610,7 +717,7 @@ export default function ResearcherPage() {
                     {checking ? "Checking sample…" : "Check sample"}
                   </button>
                 )}
-                {escrow === "MATCHED" && !voided && orderId && (
+                {escrow === "MATCHED" && !voided && !cancelled && orderId && (
                   <button
                     onClick={cancelOrder}
                     disabled={busyAction !== null}
@@ -619,7 +726,7 @@ export default function ResearcherPage() {
                     {busyAction === "cancel" ? "Cancelling…" : "Cancel order"}
                   </button>
                 )}
-                {escrow === "MATCHED" && !voided && (
+                {escrow === "MATCHED" && !voided && !cancelled && (
                   <button
                     onClick={buyEscrow}
                     disabled={busyAction !== null || checking}
@@ -743,6 +850,7 @@ export default function ResearcherPage() {
                 state={escrow}
                 voided={voided}
                 disputed={disputed}
+                cancelled={cancelled}
               />
             </div>
             {escrowError && (
@@ -765,7 +873,7 @@ export default function ResearcherPage() {
             )}
             {/* Only useful while the buyer still has to approve; once funds
                 are held the link would just offer a second approval. */}
-            {approveUrl && escrow === "MATCHED" && (
+            {approveUrl && escrow === "MATCHED" && !cancelled && (
               <a
                 href={approveUrl}
                 className="mt-2 inline-flex text-sm font-medium text-pp-700 hover:underline dark:text-pp-400"
