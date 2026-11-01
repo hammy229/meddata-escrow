@@ -4,12 +4,16 @@ import assert from "node:assert/strict";
 import { ESCROW_STATES, can } from "../escrow/state-machine";
 import { needsAction, vendorActionsFor } from "./vendor-actions";
 
-test("only disputed orders can be released or refunded", () => {
+test("only legal actions are offered in each state", () => {
   for (const state of ESCROW_STATES) {
     const ids = vendorActionsFor(state).map((a) => a.id);
     assert.deepEqual(
       ids,
-      state === "DISPUTED" ? ["release", "refund"] : [],
+      state === "DISPUTED"
+        ? ["release", "refund"]
+        : state === "AUTHORIZED"
+          ? ["deliver"]
+          : [],
       state,
     );
   }
@@ -19,7 +23,11 @@ test("every offered action is legal in the state machine", () => {
   for (const state of ESCROW_STATES) {
     for (const a of vendorActionsFor(state)) {
       const event =
-        a.resolution === "capture" ? "RESOLVE_CAPTURE" : "RESOLVE_VOID";
+        a.id === "deliver"
+          ? "DELIVER"
+          : a.resolution === "capture"
+            ? "RESOLVE_CAPTURE"
+            : "RESOLVE_VOID";
       assert.ok(can(state, event), `${a.id} from ${state}`);
     }
   }
@@ -28,6 +36,8 @@ test("every offered action is legal in the state machine", () => {
 test("release captures and refund voids", () => {
   const [release, refund] = vendorActionsFor("DISPUTED");
   assert.equal(release.resolution, "capture");
+  assert.equal(vendorActionsFor("AUTHORIZED")[0].action, "deliver");
+  assert.equal(vendorActionsFor("AUTHORIZED")[0].resolution, undefined);
   assert.equal(refund.resolution, "void");
   assert.equal(release.action, "resolve");
 });

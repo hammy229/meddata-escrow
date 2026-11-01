@@ -22,7 +22,11 @@ import type { ColDef } from "ag-grid-community";
 import type { AgGridReact, CustomCellRendererProps } from "ag-grid-react";
 import DataGrid from "./DataGrid";
 import OrderTimeline from "./OrderTimeline";
-import { needsAction, vendorActionsFor } from "../../lib/ui/vendor-actions";
+import {
+  needsAction,
+  vendorActionsFor,
+  type VendorAction,
+} from "../../lib/ui/vendor-actions";
 
 // Mirrors lib/db/client OrderRow (the GET endpoint returns raw DB rows). Kept
 // local so this client component never imports the server-only db module.
@@ -102,14 +106,19 @@ interface Controls {
   busyId: string | null;
   open: ReadonlySet<string>;
   acted: Record<string, number>;
-  resolve: (orderId: string, resolution: "capture" | "void") => void;
+  /** Optional resolution notes typed per order. */
+  notes: Record<string, string>;
+  setNote: (orderId: string, text: string) => void;
+  act: (orderId: string, action: VendorAction) => void;
   toggleHistory: (orderId: string) => void;
 }
 const ControlsContext = createContext<Controls>({
   busyId: null,
   open: new Set(),
   acted: {},
-  resolve: () => {},
+  notes: {},
+  setNote: () => {},
+  act: () => {},
   toggleHistory: () => {},
 });
 
@@ -118,25 +127,39 @@ function StatusCell({ data }: CustomCellRendererProps<GridRow>) {
 }
 
 function ActionsCell({ data }: CustomCellRendererProps<GridRow>) {
-  const { busyId, open, resolve, toggleHistory } = useContext(ControlsContext);
+  const { busyId, open, notes, setNote, act, toggleHistory } =
+    useContext(ControlsContext);
   if (data?.kind !== "order") return null;
   const expanded = open.has(data.id);
   const busy = busyId !== null;
+  const actions = vendorActionsFor(data.status);
+  const resolving = actions.some((a) => a.action === "resolve");
   return (
     <div className="flex h-full flex-wrap items-center gap-2">
-      {vendorActionsFor(data.status).map((a) => (
+      {resolving && (
+        <input
+          type="text"
+          value={notes[data.id] ?? ""}
+          onChange={(e) => setNote(data.id, e.target.value)}
+          maxLength={500}
+          aria-label={`Resolution note for ${data.id}`}
+          placeholder="Resolution note (optional)"
+          className="w-44 rounded-[3px] border border-ink/20 bg-paper px-2 py-1 text-xs outline-none focus:border-pp-500"
+        />
+      )}
+      {actions.map((a) => (
         <button
           key={a.id}
           type="button"
-          onClick={() => resolve(data.id, a.resolution)}
+          onClick={() => act(data.id, a)}
           disabled={busy}
           className={`${resolveBtn} ${
-            a.id === "release"
+            a.id !== "refund"
               ? "bg-ink text-paper hover:bg-pp-600"
               : "border border-rose-300 text-rose-700 hover:bg-rose-50 dark:border-rose-500/40 dark:text-rose-300 dark:hover:bg-rose-500/10"
           }`}
         >
-          {busyId === data.id ? "Resolving…" : a.label}
+          {busyId === data.id ? "Working…" : a.label}
         </button>
       ))}
       <button
@@ -250,6 +273,7 @@ export default function IncomingOrders() {
   const [open, setOpen] = useState<ReadonlySet<string>>(new Set());
   const [acted, setActed] = useState<Record<string, number>>({});
   // The grid's external-filter callbacks read this, so they never go stale.
+  const [notes, setNotes] = useState<Record<string, string>>({});
   const needsOnlyRef = useRef(false);
 
   const toggleHistory = useCallback((orderId: string) => {
@@ -295,28 +319,44 @@ export default function IncomingOrders() {
     gridRef.current?.api?.onFilterChanged();
   }, [needsOnly]);
 
-  // Resolve a disputed order: capture = release the held funds to the vendor;
-  // void = refund the buyer. On success we refetch so the row reflects the DB.
-  const resolve = useCallback(
-    async (orderId: string, resolution: "capture" | "void") => {
+  const setNote = useCallback((orderId: string, text: string) => {
+    setNotes((prev) => ({ ...prev, [orderId]: text }));
+  }, []);
+
+  // Deliver an authorized order, or resolve a disputed one: capture releases
+  // the held funds to the vendor, void refunds the buyer. A resolution note is
+  // sent as PATCH `note`. On success we refetch so the row reflects the DB.
+  const act = useCallback(
+    async (orderId: string, a: VendorAction) => {
       setBusyId(orderId);
       setMessage(null);
+      const note = (notes[orderId] ?? "").trim();
+      const body: Record<string, string> = { action: a.action, orderId };
+      if (a.resolution) body.resolution = a.resolution;
+      if (a.action === "resolve" && note) body.note = note;
       try {
         const res = await fetch("/api/orders", {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "resolve", resolution, orderId }),
+          body: JSON.stringify(body),
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
           setMessage(
-            resolution === "capture"
-              ? `Dispute resolved — funds released to vendor (${data.escrowState ?? "CAPTURED"}).`
-              : `Dispute resolved — buyer refunded (${data.escrowState ?? "VOIDED"}).`,
+            a.id === "deliver"
+              ? `Data delivered (${data.escrowState ?? "DELIVERED"}).`
+              : a.id === "release"
+                ? `Dispute resolved — funds released to vendor (${data.escrowState ?? "CAPTURED"}).`
+                : `Dispute resolved — buyer refunded (${data.escrowState ?? "VOIDED"}).`,
           );
+          setNotes((prev) => {
+            const { [orderId]: _sent, ...rest } = prev;
+            void _sent;
+            return rest;
+          });
           await load();
         } else {
-          setMessage(data?.error ?? `Resolve failed (${res.status}).`);
+          setMessage(data?.error ?? `${a.label} failed (${res.status}).`);
         }
       } catch {
         setMessage("Could not reach the order service.");
@@ -325,12 +365,12 @@ export default function IncomingOrders() {
         setActed((prev) => ({ ...prev, [orderId]: (prev[orderId] ?? 0) + 1 }));
       }
     },
-    [load],
+    [load, notes],
   );
 
   const controls = useMemo<Controls>(
-    () => ({ busyId, open, acted, resolve, toggleHistory }),
-    [busyId, open, acted, resolve, toggleHistory],
+    () => ({ busyId, open, acted, notes, setNote, act, toggleHistory }),
+    [busyId, open, acted, notes, setNote, act, toggleHistory],
   );
 
   // Each order, followed by its history row while that is open.
