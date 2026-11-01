@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import {
   MOCK_WEBHOOK_KINDS,
   buildMockWebhookEvent,
+  mockWebhookFits,
   type MockWebhookKind,
   type MockWebhookOrder,
 } from "../../lib/escrow/mock-webhook-events";
@@ -37,6 +38,8 @@ export default function WebhookSimulator() {
   const [orderId, setOrderId] = useState("");
   const [kind, setKind] = useState<MockWebhookKind>("capture_completed");
   const [sending, setSending] = useState(false);
+  // The last payload POSTed, so "Replay last event" can send it again as is.
+  const [last, setLast] = useState<Record<string, unknown> | null>(null);
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(
     null,
   );
@@ -78,9 +81,9 @@ export default function WebhookSimulator() {
 
   if (!mock) return null;
 
-  async function send() {
-    const order = orders.find((o) => o.id === orderId);
-    if (!order) return;
+  const selected = orders.find((o) => o.id === orderId);
+
+  async function post(payload: Record<string, unknown>) {
     setSending(true);
     setResult(null);
     try {
@@ -90,7 +93,7 @@ export default function WebhookSimulator() {
           "content-type": "application/json",
           "x-mock-webhook": "1",
         },
-        body: JSON.stringify(buildMockWebhookEvent(kind, order)),
+        body: JSON.stringify(payload),
       });
       const body = await res.json().catch(() => ({}));
       setResult({ ok: res.ok, text: describe(res.status, body) });
@@ -100,6 +103,14 @@ export default function WebhookSimulator() {
     } finally {
       setSending(false);
     }
+  }
+
+  async function send() {
+    const order = orders.find((o) => o.id === orderId);
+    if (!order) return;
+    const payload = buildMockWebhookEvent(kind, order);
+    setLast(payload);
+    await post(payload);
   }
 
   return (
@@ -112,7 +123,7 @@ export default function WebhookSimulator() {
         An event that does not fit the order&apos;s current state is ignored, as
         it would be in production.
       </p>
-      <div className="grid gap-3 sm:grid-cols-[2fr_1.2fr_auto] sm:items-end">
+      <div className="grid gap-3 sm:grid-cols-[2fr_1.2fr_auto_auto] sm:items-end">
         <label className="block text-sm">
           <span className="mb-1 block text-muted">Order</span>
           <select
@@ -138,6 +149,9 @@ export default function WebhookSimulator() {
             {MOCK_WEBHOOK_KINDS.map((k) => (
               <option key={k.kind} value={k.kind}>
                 {k.label}
+                {selected && !mockWebhookFits(k.kind, selected.status)
+                  ? " (will be ignored)"
+                  : ""}
               </option>
             ))}
           </select>
@@ -149,6 +163,15 @@ export default function WebhookSimulator() {
           className="rounded-[3px] bg-ink px-4 py-2 text-sm text-paper transition-colors hover:bg-ink/85 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
         >
           {sending ? "Sending…" : "Send event"}
+        </button>
+        <button
+          type="button"
+          onClick={() => last && post(last)}
+          disabled={!last || sending}
+          title="Send the exact same payload again; the event id repeats, so it should be treated as a duplicate"
+          className="rounded-[3px] border border-ink/25 px-4 py-2 text-sm text-ink transition-colors hover:border-ink active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Replay last event
         </button>
       </div>
       {result && (

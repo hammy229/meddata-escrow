@@ -3,6 +3,8 @@
 // lib/escrow/paypal-webhooks matches on (authorization id, PayPal order id).
 // Pure and framework-free, so the vendor UI and the tests share it.
 
+import { can, isEscrowState } from "./state-machine";
+
 export type MockWebhookKind =
   "capture_completed" | "authorization_voided" | "dispute_created";
 
@@ -135,5 +137,25 @@ export function buildMockWebhookEvent(
           ],
         },
       };
+  }
+}
+
+/**
+ * Would the webhook processor act on `kind` for an order in `status`? Mirrors
+ * the mapping in paypal-webhooks: a false answer means the event is recorded
+ * but ignored as not applicable from that state.
+ */
+export function mockWebhookFits(
+  kind: MockWebhookKind,
+  status: string,
+): boolean {
+  if (!isEscrowState(status)) return false;
+  switch (kind) {
+    case "capture_completed":
+      return can(status, "CAPTURE") || can(status, "RESOLVE_CAPTURE");
+    case "authorization_voided":
+      return can(status, "VOID") || can(status, "RESOLVE_VOID");
+    case "dispute_created":
+      return can(status, "DISPUTE");
   }
 }

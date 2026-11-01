@@ -21,6 +21,7 @@ import { processPayPalWebhookEvent } from "./paypal-webhooks";
 import {
   MOCK_WEBHOOK_KINDS,
   buildMockWebhookEvent,
+  mockWebhookFits,
 } from "./mock-webhook-events";
 
 /** Run `fn` with an order moved through `path`, on an isolated temp DB. */
@@ -159,3 +160,44 @@ test("payloads look like PayPal events and get fresh ids", () => {
     "WH-FIXED",
   );
 });
+
+const PATHS: Record<string, EscrowEvent[]> = {
+  MATCHED: [],
+  AUTHORIZED: ["AUTHORIZE"],
+  DELIVERED: ["AUTHORIZE", "DELIVER"],
+  DISPUTED: ["AUTHORIZE", "DISPUTE"],
+  CAPTURED: ["AUTHORIZE", "DELIVER", "CAPTURE"],
+  PAID_OUT: ["AUTHORIZE", "DELIVER", "CAPTURE", "PAYOUT"],
+  VOIDED: ["AUTHORIZE", "VOID"],
+  CANCELLED: ["CANCEL"],
+};
+
+for (const { kind } of MOCK_WEBHOOK_KINDS) {
+  for (const [status, path] of Object.entries(PATHS)) {
+    test(
+      `mockWebhookFits(${kind}, ${status}) agrees with the processor`,
+      withOrder(path, (order) => {
+        assert.equal(order.status, status);
+        const out = processPayPalWebhookEvent(
+          buildMockWebhookEvent(kind, order),
+        );
+        assert.equal(mockWebhookFits(kind, status), out.kind !== "ignored");
+      }),
+    );
+  }
+}
+
+test("mockWebhookFits is false for an unknown status", () => {
+  assert.equal(mockWebhookFits("capture_completed", "NOPE"), false);
+});
+
+test(
+  "replaying the identical payload is a duplicate",
+  withOrder(["AUTHORIZE", "DELIVER"], (order) => {
+    const evt = buildMockWebhookEvent("capture_completed", order);
+    const replay = JSON.parse(JSON.stringify(evt));
+    assert.equal(processPayPalWebhookEvent(evt).kind, "applied");
+    assert.equal(processPayPalWebhookEvent(replay).kind, "duplicate");
+    assert.equal(stateOf(order.id).status, "CAPTURED");
+  }),
+);
