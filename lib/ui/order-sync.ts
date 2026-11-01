@@ -50,6 +50,50 @@ export function orderToView(
   }
 }
 
+const SETTLED: ReadonlySet<string> = new Set([
+  "PAID_OUT",
+  "VOIDED",
+  "CANCELLED",
+]);
+
+/** Keep polling the server only while the order can still change. */
+export function shouldPoll(status: string | null | undefined): boolean {
+  return typeof status === "string" && status !== "" && !SETTLED.has(status);
+}
+
+function shortDate(iso: unknown): string | null {
+  if (typeof iso !== "string") return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/**
+ * One line about the PayPal hold from the `authorization` field of
+ * GET /api/orders?id=. Null when there is no hold or the data is unusable.
+ */
+export function describeHold(auth: unknown): string | null {
+  if (!auth || typeof auth !== "object") return null;
+  const a = auth as Record<string, unknown>;
+  if (a.state === "expired") {
+    return "Hold expired · reauthorize before capturing";
+  }
+  if (a.state !== "honor" && a.state !== "valid") return null;
+  if (typeof a.daysLeft !== "number") return null;
+  const honor = shortDate(a.honorUntil);
+  if (!honor) return null;
+  const days = `${a.daysLeft} ${a.daysLeft === 1 ? "day" : "days"} left`;
+  const tail =
+    a.state === "honor"
+      ? `honor period ends ${honor}`
+      : `honor period ended ${honor}`;
+  return `Funds held · ${days} · ${tail}`;
+}
+
 /** Link that reopens an order in the researcher workspace. */
 export function workspaceUrl(orderId: string): string {
   return `/researcher?orderId=${encodeURIComponent(orderId)}`;

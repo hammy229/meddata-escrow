@@ -30,7 +30,12 @@ import { suggestQuestions } from "../../lib/query/suggestions";
 import { MAX_COMPARE } from "../../lib/ui/compare";
 import AgentRun from "../components/AgentRun";
 import EscrowStepper from "../components/EscrowStepper";
-import { orderToView, type EscrowFlowState } from "../../lib/ui/order-sync";
+import {
+  describeHold,
+  orderToView,
+  shouldPoll,
+  type EscrowFlowState,
+} from "../../lib/ui/order-sync";
 import {
   ArrowLeft,
   Check,
@@ -43,6 +48,8 @@ type EscrowState = EscrowFlowState | null;
 
 // What the page needs back after the buyer returns from the approval page.
 const RESUME_KEY = "meddata:researcher-resume";
+
+const POLL_MS = 4000;
 
 // PATCH action -> the escrow state it advances to (for optimistic/degrade UI).
 const ADVANCE: Record<string, Exclude<EscrowState, null>> = {
@@ -108,6 +115,8 @@ export default function ResearcherPage({
   const [voided, setVoided] = useState(false);
   const [disputed, setDisputed] = useState(false);
   const [cancelled, setCancelled] = useState(false);
+  // "Funds held · 28 days left · ..." from the order's authorization window.
+  const [holdLine, setHoldLine] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [escrowNote, setEscrowNote] = useState<string | null>(null);
@@ -140,6 +149,7 @@ export default function ResearcherPage({
     setVoided(false);
     setDisputed(false);
     setCancelled(false);
+    setHoldLine(null);
     setOrderId(null);
     setEscrowNote(null);
     setEscrowError(null);
@@ -163,6 +173,44 @@ export default function ResearcherPage({
     setDisputed(view.disputed);
     setCancelled(view.cancelled);
   }
+
+  // Poll the order while it can still change, so a vendor delivering,
+  // resolving a dispute or a void shows up without a reload. Paused while one
+  // of our own actions is in flight; its answer would race the poll.
+  const watchedStatus = !orderId
+    ? null
+    : voided
+      ? "VOIDED"
+      : cancelled
+        ? "CANCELLED"
+        : disputed
+          ? "DISPUTED"
+          : escrow;
+  const watching = shouldPoll(watchedStatus) && busyAction === null;
+  useEffect(() => {
+    if (!orderId || !watching) return;
+    let stale = false;
+    async function tick() {
+      try {
+        const res = await fetch(
+          `/api/orders?id=${encodeURIComponent(orderId!)}`,
+          { cache: "no-store" },
+        );
+        const data = await res.json().catch(() => ({}));
+        if (stale || !res.ok || typeof data?.order?.status !== "string") return;
+        applyOrderStatus(data.order.status);
+        setHoldLine(describeHold(data.authorization));
+      } catch {
+        // Offline for a moment; the next tick tries again.
+      }
+    }
+    void tick();
+    const timer = setInterval(tick, POLL_MS);
+    return () => {
+      stale = true;
+      clearInterval(timer);
+    };
+  }, [orderId, watching, watchedStatus]);
 
   // Reopen an order from its link (?orderId=): the approval page, the agent's
   // order card and a copied URL all land here. Each order is handled once, so
@@ -232,6 +280,9 @@ export default function ResearcherPage({
           }
         }
         applyOrderStatus(status);
+        if (status === data.order.status) {
+          setHoldLine(describeHold(data.authorization));
+        }
         if (status === "AUTHORIZED" && returnToken) {
           setEscrowNote("Approved. Funds are held in escrow.");
         } else if (status === "CANCELLED") {
@@ -755,7 +806,7 @@ export default function ResearcherPage({
                     >
                       {busyAction === "deliver"
                         ? "Delivering…"
-                        : "Deliver dataset"}
+                        : "Vendor delivers (demo)"}
                     </button>
                     <button
                       onClick={disputeEscrow}
@@ -853,6 +904,11 @@ export default function ResearcherPage({
                 cancelled={cancelled}
               />
             </div>
+            {holdLine && !voided && !cancelled && (
+              <p className="mt-3 inline-flex rounded-full border border-pp-300 bg-pp-50 px-3 py-1 font-mono text-xs text-pp-800 dark:border-pp-500/40 dark:bg-pp-500/10 dark:text-pp-300">
+                {holdLine}
+              </p>
+            )}
             {escrowError && (
               <p
                 role="alert"

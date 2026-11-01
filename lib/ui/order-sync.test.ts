@@ -1,7 +1,68 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { orderToView, workspaceUrl } from "./order-sync";
+import {
+  describeHold,
+  orderToView,
+  shouldPoll,
+  workspaceUrl,
+} from "./order-sync";
+
+test("shouldPoll stops on terminal states and unknowns", () => {
+  for (const s of [
+    "MATCHED",
+    "AUTHORIZED",
+    "DELIVERED",
+    "CAPTURED",
+    "DISPUTED",
+  ])
+    assert.equal(shouldPoll(s), true, s);
+  for (const s of ["PAID_OUT", "VOIDED", "CANCELLED", "", null, undefined])
+    assert.equal(shouldPoll(s), false, String(s));
+});
+
+const hold = (state: string, daysLeft: number) => ({
+  state,
+  daysLeft,
+  honorUntil: "2026-11-04T10:00:00.000Z",
+  expiresAt: "2026-11-30T10:00:00.000Z",
+});
+
+test("describeHold words the honor period", () => {
+  assert.equal(
+    describeHold(hold("honor", 28)),
+    "Funds held · 28 days left · honor period ends Nov 4",
+  );
+});
+
+test("describeHold says the guarantee ended once past honor", () => {
+  assert.equal(
+    describeHold(hold("valid", 10)),
+    "Funds held · 10 days left · honor period ended Nov 4",
+  );
+});
+
+test("describeHold uses singular for one day", () => {
+  assert.match(describeHold(hold("valid", 1)) ?? "", /1 day left/);
+});
+
+test("describeHold flags an expired hold", () => {
+  assert.equal(
+    describeHold(hold("expired", 0)),
+    "Hold expired · reauthorize before capturing",
+  );
+});
+
+test("describeHold returns null without usable data", () => {
+  assert.equal(describeHold(null), null);
+  assert.equal(describeHold(undefined), null);
+  assert.equal(describeHold({ state: "honor" }), null);
+  assert.equal(describeHold("nope"), null);
+  assert.equal(
+    describeHold({ ...hold("honor", 3), honorUntil: "garbage" }),
+    null,
+  );
+});
 
 test("orderToView maps every escrow state", () => {
   const view = (escrow: string | null, flags: string[] = []) => ({
