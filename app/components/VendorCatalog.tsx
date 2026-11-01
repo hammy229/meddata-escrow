@@ -6,8 +6,17 @@
 // the API refuses the price (4xx) it rolls back and the error is shown above
 // the grid.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { CellValueChangedEvent, ColDef } from "ag-grid-community";
+import type {
+  CellValueChangedEvent,
+  ColDef,
+  ColGroupDef,
+} from "ag-grid-community";
 import { dollarsToCents } from "../../lib/catalog/price-rules";
+import {
+  listingStats,
+  type ListingStats,
+  type StatOrder,
+} from "../../lib/ui/listing-stats";
 import DataGrid from "./DataGrid";
 
 // Mirrors lib/db/datasets Dataset (GET /api/datasets). Kept local so this
@@ -20,40 +29,111 @@ export interface CatalogRow {
   recordCount: number | null;
 }
 
-const columns: ColDef<CatalogRow>[] = [
-  { field: "title", headerName: "Dataset", flex: 2, minWidth: 220 },
+// A catalog row plus its order performance (null stats = no orders yet).
+interface GridRow extends CatalogRow {
+  stats: ListingStats | null;
+}
+
+function usd(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+function parseTs(ts: string | null | undefined): Date | null {
+  if (!ts) return null;
+  const d = new Date(ts.includes("Z") || ts.includes("T") ? ts : `${ts}Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+const moneyCol = (
+  colId: string,
+  headerName: string,
+  pick: (s: ListingStats) => number,
+): ColDef<GridRow> => ({
+  colId,
+  headerName,
+  maxWidth: 140,
+  type: "rightAligned",
+  cellClass: "font-mono tabular-nums",
+  valueGetter: (p) => (p.data?.stats ? pick(p.data.stats) : 0),
+  valueFormatter: (p) => (typeof p.value === "number" ? usd(p.value) : ""),
+});
+
+const columns: (ColDef<GridRow> | ColGroupDef<GridRow>)[] = [
   {
-    field: "tags",
-    headerName: "Tags",
-    flex: 2,
-    minWidth: 180,
-    valueFormatter: (p) => (Array.isArray(p.value) ? p.value.join(", ") : ""),
+    headerName: "Listing",
+    children: [
+      {
+        field: "title",
+        headerName: "Dataset",
+        flex: 2,
+        minWidth: 220,
+        pinned: "left",
+      },
+      {
+        field: "tags",
+        headerName: "Tags",
+        flex: 2,
+        minWidth: 180,
+        valueFormatter: (p) =>
+          Array.isArray(p.value) ? p.value.join(", ") : "",
+      },
+      {
+        field: "recordCount",
+        headerName: "Records",
+        maxWidth: 140,
+        valueFormatter: (p) =>
+          typeof p.value === "number" ? p.value.toLocaleString() : "",
+      },
+      {
+        colId: "price",
+        headerName: "Price (click to edit)",
+        maxWidth: 170,
+        editable: true,
+        cellEditor: "agNumberCellEditor",
+        cellEditorParams: { precision: 2, step: 0.01 },
+        cellClass: "font-mono tabular-nums",
+        // The grid works in dollars; the row keeps the cents the API speaks.
+        valueGetter: (p) =>
+          typeof p.data?.priceCents === "number"
+            ? p.data.priceCents / 100
+            : null,
+        valueSetter: (p) => {
+          if (!p.data || typeof p.newValue !== "number") return false;
+          p.data.priceCents = dollarsToCents(p.newValue);
+          return true;
+        },
+        valueFormatter: (p) =>
+          typeof p.value === "number" ? `$${p.value.toFixed(2)}` : "",
+      },
+    ],
   },
   {
-    field: "recordCount",
-    headerName: "Records",
-    maxWidth: 140,
-    valueFormatter: (p) =>
-      typeof p.value === "number" ? p.value.toLocaleString() : "",
-  },
-  {
-    colId: "price",
-    headerName: "Price (click to edit)",
-    maxWidth: 170,
-    editable: true,
-    cellEditor: "agNumberCellEditor",
-    cellEditorParams: { precision: 2, step: 0.01 },
-    cellClass: "font-mono tabular-nums",
-    // The grid works in dollars; the row keeps the cents the API speaks.
-    valueGetter: (p) =>
-      typeof p.data?.priceCents === "number" ? p.data.priceCents / 100 : null,
-    valueSetter: (p) => {
-      if (!p.data || typeof p.newValue !== "number") return false;
-      p.data.priceCents = dollarsToCents(p.newValue);
-      return true;
-    },
-    valueFormatter: (p) =>
-      typeof p.value === "number" ? `$${p.value.toFixed(2)}` : "",
+    headerName: "Performance",
+    children: [
+      {
+        colId: "orders",
+        headerName: "Orders",
+        maxWidth: 110,
+        type: "rightAligned",
+        cellClass: "tabular-nums",
+        valueGetter: (p) => p.data?.stats?.orders ?? 0,
+      },
+      moneyCol("inEscrow", "In escrow", (s) => s.inEscrowCents),
+      moneyCol("earnedNet", "Earned (net)", (s) => s.netCents),
+      {
+        colId: "lastOrder",
+        headerName: "Last order",
+        maxWidth: 170,
+        valueGetter: (p) =>
+          parseTs(p.data?.stats?.lastOrderAt)?.getTime() ?? null,
+        valueFormatter: (p) =>
+          typeof p.value === "number"
+            ? new Date(p.value).toLocaleDateString(undefined, {
+                dateStyle: "medium",
+              })
+            : "None yet",
+      },
+    ],
   },
 ];
 
@@ -62,17 +142,28 @@ type Load =
   | { status: "error"; message: string }
   | { status: "ready"; rows: CatalogRow[] };
 
+const POLL_MS = 5000;
+
 const statLabel =
   "font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase";
 
 export default function VendorCatalog() {
   const [state, setState] = useState<Load>({ status: "loading" });
   const [editError, setEditError] = useState<string | null>(null);
+  const [orders, setOrders] = useState<StatOrder[]>([]);
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/datasets", { cache: "no-store" });
+      const [res, ordersRes] = await Promise.all([
+        fetch("/api/datasets", { cache: "no-store" }),
+        // Performance columns are best effort: a failure leaves them at zero.
+        fetch("/api/orders", { cache: "no-store" }).catch(() => null),
+      ]);
       const data = await res.json().catch(() => ({}));
+      const ordersData = ordersRes?.ok
+        ? await ordersRes.json().catch(() => ({}))
+        : {};
+      if (Array.isArray(ordersData.orders)) setOrders(ordersData.orders);
       if (!res.ok) {
         setState({
           status: "error",
@@ -91,15 +182,23 @@ export default function VendorCatalog() {
 
   useEffect(() => {
     const first = setTimeout(load, 0);
-    return () => clearTimeout(first);
+    const poll = setInterval(load, POLL_MS);
+    return () => {
+      clearTimeout(first);
+      clearInterval(poll);
+    };
   }, [load]);
 
   const rows = useMemo(
     () => (state.status === "ready" ? state.rows : []),
     [state],
   );
+  const gridRows = useMemo<GridRow[]>(() => {
+    const stats = listingStats(orders);
+    return rows.map((r) => ({ ...r, stats: stats.get(r.id) ?? null }));
+  }, [rows, orders]);
 
-  async function onPriceChanged(e: CellValueChangedEvent<CatalogRow>) {
+  async function onPriceChanged(e: CellValueChangedEvent<GridRow>) {
     if (e.colDef.colId !== "price" || e.source === "rollback" || !e.data) {
       return;
     }
@@ -188,8 +287,8 @@ export default function VendorCatalog() {
             {editError}
           </p>
         )}
-        <DataGrid<CatalogRow>
-          rowData={rows}
+        <DataGrid<GridRow>
+          rowData={gridRows}
           columnDefs={columns}
           getRowId={(r) => r.id}
           height={Math.min(80 + Math.max(rows.length, 1) * 44, 480)}
@@ -205,7 +304,7 @@ export default function VendorCatalog() {
 
 // Put the old dollar value back in the cell. The "rollback" source stops the
 // resulting change event from being sent to the API again.
-function rollback(e: CellValueChangedEvent<CatalogRow>, previous: unknown) {
+function rollback(e: CellValueChangedEvent<GridRow>, previous: unknown) {
   if (typeof previous === "number") {
     e.node.setDataValue("price", previous, "rollback");
   }
