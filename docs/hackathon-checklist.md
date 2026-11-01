@@ -1,8 +1,10 @@
 # Hackathon Submission Checklist
 
-Tracking every PayPal AI Hackathon submission requirement. Last verified
-2026-10-22 (repo settings via `gh`, lint/typecheck/test/build locally, CI
-green on `main`). Write-up draft: [`devpost.md`](devpost.md).
+Tracking every PayPal AI Hackathon submission requirement. Local gates were
+re-run on 2026-11-01 (lint with the ignore pattern, typecheck, test, build).
+CI and repo settings were last checked on 2026-10-22 and have not been
+re-checked since the November commits, which are not pushed yet. Write-up
+draft: [`devpost.md`](devpost.md).
 
 ## Repository & licensing
 
@@ -29,29 +31,30 @@ green on `main`). Write-up draft: [`devpost.md`](devpost.md).
 
 ## Tools documented (used & how)
 
-- [x] PayPal (sandbox) — authorize/capture escrow + per-query billing
-- [x] Claude on Amazon Bedrock — matching, NL→plan, privacy review, sample check, agent
-- [x] AG Grid — catalog + results tables
-- [x] Render — hosting (`render.yaml`)
-- [x] Postman — API collection
+- [x] PayPal (sandbox): authorize/capture escrow and Payouts. Per-query charges are metered in our own ledger, not billed through PayPal
+- [x] Claude on Amazon Bedrock: matching, NL→plan, privacy review, sample check, agent
+- [x] AG Grid: catalog, vendor order queue, ledger and results tables
+- [x] Render: hosting (`render.yaml`)
+- [x] Postman: API collection (regenerated from the 0.4.0 spec)
 
 ## Demo
 
 - [ ] Devpost write-up finalized from [`devpost.md`](devpost.md)
-
 - [ ] Hosted demo link (placeholder → real URL)
-- [ ] Demo video link — YouTube, **under 3 minutes** (placeholder → real URL)
+- [ ] Demo video link: YouTube, **under 3 minutes** (placeholder → real URL)
 
 ## Quality gates
 
-- [x] `npm install` succeeds
-- [x] `npm run lint` passes
-- [x] `npm run typecheck` passes
-- [x] `npm run build` passes
-- [x] CI green on `main`
+- [x] `npm install` succeeds (last seen 2026-10-22; not re-run today)
+- [ ] `npm run lint` passes. Not today: it also scans `.claude/worktrees`. `npx eslint --ignore-pattern '.claude/**' .` passes on 2026-11-01
+- [x] `npm run typecheck` passes (re-run 2026-11-01)
+- [x] `npm test` passes: 511 tests (2026-11-01)
+- [x] `npm run build` passes (re-run 2026-11-01)
+- [ ] CI green on `main` (last seen 2026-10-22; re-check after the November commits are pushed)
 
 ## Data & privacy
 
-- [x] All data synthetic (Synthea) — **no real patient data**
+- [x] All data synthetic (Synthea): **no real patient data**
 - [x] Raw records never leave the vendor; only privacy-safe aggregates returned
 - [x] No secrets committed (only `.env.example` with empty placeholders)
+- [x] Download links are labelled as mock links; S3 presigned delivery is planned, not in use
