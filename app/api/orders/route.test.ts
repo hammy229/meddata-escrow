@@ -575,6 +575,8 @@ test(
     assert.equal(json.summary.heldCents, 1000);
     assert.equal(json.summary.capturedCents, 5000);
     assert.equal(json.summary.paidOutCents, 3000);
+    assert.equal(json.summary.vendorPaidOutCents, 2700);
+    assert.equal(json.summary.platformFeeCents, 300);
     assert.equal(json.summary.releasedCents, 500);
   }),
 );

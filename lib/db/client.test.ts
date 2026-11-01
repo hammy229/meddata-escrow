@@ -18,6 +18,7 @@ import {
   recordWebhookEvent,
 } from "./client";
 import { DatabaseSync } from "node:sqlite";
+import { platformFeeCents, vendorPayoutCents } from "../escrow/fees";
 import {
   InvalidTransitionError,
   ESCROW_STATES,
@@ -323,6 +324,52 @@ test("summarizeOrders buckets amounts by escrow state, optionally per dataset", 
   assert.equal(cardio.countsByStatus.CAPTURED, 0);
   assert.equal(cardio.capturedCents, 4900);
   assert.equal(cardio.heldCents, 0);
+  db.close();
+});
+
+test("summarizeOrders reports vendor payouts net of the platform fee, per order", () => {
+  const db = freshDb();
+  const add = (amountCents: number) =>
+    createOrder(db, {
+      datasetId: "ds_x",
+      buyerEmail: "b@example.com",
+      amountCents,
+      status: "PAID_OUT",
+    });
+  const empty = summarizeOrders(db);
+  assert.equal(empty.vendorPaidOutCents, 0);
+  assert.equal(empty.platformFeeCents, 0);
+
+  add(4900);
+  let s = summarizeOrders(db);
+  assert.equal(s.paidOutCents, 4900);
+  assert.equal(s.platformFeeCents, 490);
+  assert.equal(s.vendorPaidOutCents, 4410);
+
+  // Odd amounts round per order (matching lib/escrow/fees), not on the sum.
+  add(4999);
+  add(101);
+  s = summarizeOrders(db);
+  const fee =
+    platformFeeCents(4900) + platformFeeCents(4999) + platformFeeCents(101);
+  assert.equal(s.platformFeeCents, fee);
+  assert.equal(
+    s.vendorPaidOutCents,
+    vendorPayoutCents(4900) + vendorPayoutCents(4999) + vendorPayoutCents(101),
+  );
+  assert.equal(s.vendorPaidOutCents + s.platformFeeCents, s.paidOutCents);
+  db.close();
+});
+
+test("findOrderByPayPalRef matches our own order id too", () => {
+  const db = freshDb();
+  const order = createOrder(db, {
+    datasetId: "ds_x",
+    buyerEmail: "b@example.com",
+    amountCents: 100,
+  });
+  assert.equal(findOrderByPayPalRef(db, [order.id])?.id, order.id);
+  assert.equal(findOrderByPayPalRef(db, ["ord_nope"]), undefined);
   db.close();
 });
 

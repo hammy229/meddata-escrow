@@ -15,6 +15,8 @@ interface OrderSummary {
   heldCents: number;
   capturedCents: number;
   paidOutCents: number;
+  vendorPaidOutCents: number;
+  platformFeeCents: number;
   releasedCents: number;
 }
 
@@ -126,6 +128,7 @@ export default function EarningsSummary({
     hint: string;
     accent?: boolean;
     held?: boolean;
+    small?: boolean;
   }[] = [
     {
       label: "In escrow",
@@ -139,7 +142,17 @@ export default function EarningsSummary({
       hint: "Buyer charged",
       accent: true,
     },
-    { label: "Paid out", cents: s?.paidOutCents, hint: "Sent to you" },
+    {
+      label: "Paid out to you",
+      cents: s?.vendorPaidOutCents,
+      hint: "after the 10% platform fee",
+    },
+    {
+      label: "Platform fees",
+      cents: s?.platformFeeCents,
+      hint: "Withheld from payouts",
+      small: true,
+    },
     {
       label: "Released to buyers",
       cents: s?.releasedCents,
@@ -149,7 +162,7 @@ export default function EarningsSummary({
 
   return (
     <div aria-busy={state.status === "loading"}>
-      <dl className="grid grid-cols-2 gap-x-8 gap-y-6 lg:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-x-8 gap-y-6 lg:grid-cols-5">
         {tiles.map((t) => (
           <div key={t.label} className={tile}>
             <dt className="flex items-center gap-2 font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase">
@@ -162,9 +175,9 @@ export default function EarningsSummary({
               {t.label}
             </dt>
             <dd
-              className={`mt-2 font-serif text-3xl font-light tabular-nums ${
-                t.accent ? "text-pp-600 dark:text-pp-400" : ""
-              }`}
+              className={`mt-2 font-serif font-light tabular-nums ${
+                t.small ? "text-xl text-muted" : "text-3xl"
+              } ${t.accent ? "text-pp-600 dark:text-pp-400" : ""}`}
             >
               {value(t.cents)}
             </dd>

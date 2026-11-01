@@ -20,6 +20,7 @@ import {
   type EscrowState,
   type EscrowEvent,
 } from "../escrow/state-machine";
+import { platformFeeCents, vendorPayoutCents } from "../escrow/fees";
 
 const SCHEMA_PATH = join(dirname(fileURLToPath(import.meta.url)), "schema.sql");
 
@@ -203,6 +204,10 @@ export interface OrderSummary {
   capturedCents: number;
   /** Captured funds already paid out to the vendor: PAID_OUT. */
   paidOutCents: number;
+  /** What the vendor actually received for PAID_OUT orders (after the fee). */
+  vendorPaidOutCents: number;
+  /** Platform fee withheld from PAID_OUT orders; vendor + fee == paidOutCents. */
+  platformFeeCents: number;
   /** Authorizations released back to the buyer: VOIDED. */
   releasedCents: number;
 }
@@ -241,11 +246,27 @@ export function summarizeOrders(
   }
   const sum = (states: readonly EscrowState[]) =>
     states.reduce((t, s) => t + cents[s], 0);
+  // Fees round per order, so fold the paid-out orders one by one.
+  const paid = db
+    .prepare(
+      `SELECT amount_cents FROM orders WHERE status = 'PAID_OUT' ${
+        filter.datasetId ? "AND dataset_id = ?" : ""
+      }`,
+    )
+    .all(...values) as { amount_cents: number }[];
+  let vendorPaidOutCents = 0;
+  let feeCents = 0;
+  for (const p of paid) {
+    vendorPaidOutCents += vendorPayoutCents(p.amount_cents);
+    feeCents += platformFeeCents(p.amount_cents);
+  }
   return {
     countsByStatus,
     heldCents: sum(HELD_STATES),
     capturedCents: sum(CAPTURED_STATES),
     paidOutCents: cents.PAID_OUT,
+    vendorPaidOutCents,
+    platformFeeCents: feeCents,
     releasedCents: cents.VOIDED,
   };
 }
