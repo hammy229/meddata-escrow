@@ -18,6 +18,7 @@ import {
 } from "react";
 import type {
   ColDef,
+  ColGroupDef,
   GridApi,
   GridState,
   ProcessCellForExportParams,
@@ -27,6 +28,8 @@ import DataGrid from "./DataGrid";
 import OrderDetail from "./OrderDetail";
 import StatusSetFilter from "./StatusSetFilter";
 import { Download, Search } from "./icons";
+import { TOTAL_ID, ledgerTotals, type LedgerTotals } from "../../lib/ui/ledger";
+import { platformFeeCents, vendorPayoutCents } from "../../lib/escrow/fees";
 
 // Mirrors lib/db/client OrderRow (raw DB rows from GET /api/orders). Kept
 // local so this client component never imports the server-only db module.
@@ -38,10 +41,13 @@ interface OrderRow {
   amount_cents: number;
   created_at: string;
   updated_at: string | null;
+  // Only on the pinned total row: sums of the per-order fee and net, so the
+  // footer adds up exactly instead of re-splitting the summed amount.
+  fee_cents?: number;
+  net_cents?: number;
 }
 
 const POLL_MS = 5000;
-const TOTAL_ID = "Total";
 
 // SQLite CURRENT_TIMESTAMP is UTC without a zone ("2026-10-21 12:00:00").
 function parseTs(ts: string | null | undefined): Date | null {
@@ -111,7 +117,10 @@ function exportCell(p: ProcessCellForExportParams<OrderRow>): string {
     if (typeof v === "number") return new Date(v).toISOString();
     return "";
   }
-  if (id === "amount_cents" && typeof p.value === "number") {
+  if (
+    (id === "amount_cents" || id === "fee" || id === "net") &&
+    typeof p.value === "number"
+  ) {
     return (p.value / 100).toFixed(2);
   }
   return p.value == null ? "" : String(p.value);
@@ -121,7 +130,7 @@ function exportCell(p: ProcessCellForExportParams<OrderRow>): string {
 // filters, in this browser's localStorage. Storage can be missing or throw
 // (private mode, blocked site data, SSR), so every access is guarded and the
 // grid simply starts from its defaults.
-const VIEW_KEY = "meddata-escrow:vendor-ledger-view:v1";
+const VIEW_KEY = "meddata-escrow:vendor-ledger-view:v2";
 
 function readView(): GridState | undefined {
   try {
@@ -177,18 +186,18 @@ const LEDGER_COL_DEF: ColDef<OrderRow> = {
 const toolBtn =
   "inline-flex items-center gap-1.5 rounded-[3px] border border-ink/25 px-3 py-1.5 text-xs text-ink transition-colors hover:border-ink active:translate-y-px disabled:cursor-not-allowed disabled:opacity-40";
 
-interface Totals {
-  count: number;
-  cents: number;
-}
-
 export default function OrdersLedger() {
   const gridRef = useRef<AgGridReact<OrderRow>>(null);
   const [orders, setOrders] = useState<OrderRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [quick, setQuick] = useState("");
-  const [totals, setTotals] = useState<Totals>({ count: 0, cents: 0 });
+  const [totals, setTotals] = useState<LedgerTotals>({
+    count: 0,
+    amountCents: 0,
+    feeCents: 0,
+    netCents: 0,
+  });
   // Saved layout, read once per grid mount (initialState is init-only), and a
   // key bumped by "Reset view" to remount the grid with its defaults.
   const [savedView, setSavedView] = useState<GridState | undefined>(readView);
@@ -244,15 +253,18 @@ export default function OrdersLedger() {
 
   // Sum only the rows passing the current filters (column + quick filter).
   const recomputeTotals = useCallback((api: GridApi<OrderRow>) => {
-    let count = 0;
-    let cents = 0;
+    const rows: OrderRow[] = [];
     api.forEachNodeAfterFilter((n) => {
-      if (!n.data) return;
-      count += 1;
-      cents += n.data.amount_cents || 0;
+      if (n.data) rows.push(n.data);
     });
+    const next = ledgerTotals(rows);
     setTotals((prev) =>
-      prev.count === count && prev.cents === cents ? prev : { count, cents },
+      prev.count === next.count &&
+      prev.amountCents === next.amountCents &&
+      prev.feeCents === next.feeCents &&
+      prev.netCents === next.netCents
+        ? prev
+        : next,
     );
   }, []);
 
@@ -265,7 +277,9 @@ export default function OrdersLedger() {
         dataset_id: `${totals.count} order${totals.count === 1 ? "" : "s"}`,
         buyer_email: "",
         status: "",
-        amount_cents: totals.cents,
+        amount_cents: totals.amountCents,
+        fee_cents: totals.feeCents,
+        net_cents: totals.netCents,
         created_at: "",
         updated_at: null,
       } satisfies OrderRow,
@@ -273,10 +287,10 @@ export default function OrdersLedger() {
     [totals],
   );
 
-  const columns = useMemo<ColDef<OrderRow>[]>(
+  const columns = useMemo<(ColDef<OrderRow> | ColGroupDef<OrderRow>)[]>(
     () => [
-      // minWidths sum to 920px so all seven columns fit the ~930px card at a
-      // 1280px viewport without horizontal scroll; flex shares any extra.
+      // Money columns are grouped; the grid scrolls sideways if a narrow
+      // viewport cannot fit them, flex shares any extra width.
       {
         field: "id",
         headerName: "Order",
@@ -308,19 +322,52 @@ export default function OrdersLedger() {
         cellRenderer: StatusCell,
       },
       {
-        field: "amount_cents",
-        headerName: "Amount",
-        minWidth: 100,
-        type: "rightAligned",
-        cellClass: "font-mono tabular-nums",
-        filter: "agNumberColumnFilter",
-        // Filter in dollars, the unit shown in the cell.
-        filterValueGetter: (p) =>
-          typeof p.data?.amount_cents === "number"
-            ? p.data.amount_cents / 100
-            : null,
-        valueFormatter: (p) =>
-          typeof p.value === "number" ? usd(p.value) : "",
+        headerName: "Money",
+        children: [
+          {
+            field: "amount_cents",
+            headerName: "Amount",
+            minWidth: 100,
+            type: "rightAligned",
+            cellClass: "font-mono tabular-nums",
+            filter: "agNumberColumnFilter",
+            // Filter in dollars, the unit shown in the cell.
+            filterValueGetter: (p) =>
+              typeof p.data?.amount_cents === "number"
+                ? p.data.amount_cents / 100
+                : null,
+            valueFormatter: (p) =>
+              typeof p.value === "number" ? usd(p.value) : "",
+          },
+          {
+            colId: "fee",
+            headerName: "Platform fee",
+            minWidth: 100,
+            type: "rightAligned",
+            cellClass: "font-mono tabular-nums text-muted",
+            filter: false,
+            valueGetter: (p) =>
+              p.node?.rowPinned
+                ? (p.data?.fee_cents ?? 0)
+                : platformFeeCents(p.data?.amount_cents ?? 0),
+            valueFormatter: (p) =>
+              typeof p.value === "number" ? usd(p.value) : "",
+          },
+          {
+            colId: "net",
+            headerName: "Vendor net",
+            minWidth: 100,
+            type: "rightAligned",
+            cellClass: "font-mono tabular-nums",
+            filter: false,
+            valueGetter: (p) =>
+              p.node?.rowPinned
+                ? (p.data?.net_cents ?? 0)
+                : vendorPayoutCents(p.data?.amount_cents ?? 0),
+            valueFormatter: (p) =>
+              typeof p.value === "number" ? usd(p.value) : "",
+          },
+        ],
       },
       {
         colId: "created",
@@ -438,6 +485,9 @@ export default function OrdersLedger() {
           paginationAutoPageSize: true,
           pinnedBottomRowData: pinnedBottom,
           getRowClass: (p) => (p.node.rowPinned ? "ledger-total" : undefined),
+          rowClassRules: {
+            "ledger-disputed": (p) => p.data?.status === "DISPUTED",
+          },
           localeText: { noRowsToShow: "No orders yet" },
           onFilterChanged: (e) => recomputeTotals(e.api),
           onRowDataUpdated: (e) => recomputeTotals(e.api),

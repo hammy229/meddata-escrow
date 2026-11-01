@@ -188,6 +188,11 @@ a {
   font-weight: 600;
 }
 
+/* Vendor ledger: a disputed order is tinted amber so it stands out. */
+.ag-row.ledger-disputed {
+  background-color: color-mix(in srgb, var(--color-amber-500) 14%, transparent);
+}
+
 /* Landing hero: faint square grid behind the dataset field, faded at the edges. */
 .dataset-grid {
   background-image:

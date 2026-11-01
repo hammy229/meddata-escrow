@@ -109,6 +109,15 @@ export default function DataGrid<T>({
   options,
 }: DataGridProps<T>) {
   const dark = usePrefersDark();
+  // The selected-row highlight merges with any rules the caller passes.
+  const rowClassRules =
+    getRowId && selectedRowId
+      ? {
+          ...options?.rowClassRules,
+          "dg-row-selected": (p: { data?: T }) =>
+            !!p.data && getRowId(p.data) === selectedRowId,
+        }
+      : options?.rowClassRules;
 
   return (
     <div style={{ height, width: "100%" }}>
@@ -121,18 +130,11 @@ export default function DataGrid<T>({
         tooltipShowDelay={250}
         getRowId={getRowId ? (p) => getRowId(p.data) : undefined}
         rowClass={onRowClicked ? "cursor-pointer" : undefined}
-        rowClassRules={
-          getRowId && selectedRowId
-            ? {
-                "dg-row-selected": (p) =>
-                  !!p.data && getRowId(p.data) === selectedRowId,
-              }
-            : undefined
-        }
         onRowClicked={
           onRowClicked ? (e) => e.data && onRowClicked(e.data) : undefined
         }
         {...options}
+        {...(rowClassRules ? { rowClassRules } : {})}
       />
     </div>
   );
