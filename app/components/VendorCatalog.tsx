@@ -292,7 +292,8 @@ export default function VendorCatalog() {
           rowData={gridRows}
           columnDefs={columns}
           getRowId={(r) => r.id}
-          height={Math.min(80 + Math.max(rows.length, 1) * 44, 480)}
+          // Two header rows (column groups) plus one 46px row per listing.
+          height={Math.min(96 + Math.max(rows.length, 1) * 46, 520)}
           options={{
             loading: state.status === "loading",
             undoRedoCellEditing: true,

@@ -53,6 +53,8 @@ type GridRow = OrderGridRow | DetailRow;
 
 const POLL_MS = 5000;
 const ROW_HEIGHT = 56;
+// Disputed rows stack the resolution note above the two resolve buttons.
+const DISPUTE_ROW_HEIGHT = 96;
 const DETAIL_HEIGHT = 300;
 
 // Escrow state -> badge styling. Held/terminal/disputed states get their own
@@ -135,7 +137,7 @@ function ActionsCell({ data }: CustomCellRendererProps<GridRow>) {
   const actions = vendorActionsFor(data.status);
   const resolving = actions.some((a) => a.action === "resolve");
   return (
-    <div className="flex h-full flex-wrap items-center gap-2">
+    <div className="flex h-full flex-wrap content-center items-center gap-2">
       {resolving && (
         <input
           type="text"
@@ -144,7 +146,7 @@ function ActionsCell({ data }: CustomCellRendererProps<GridRow>) {
           maxLength={500}
           aria-label={`Resolution note for ${data.id}`}
           placeholder="Resolution note (optional)"
-          className="w-44 rounded-[3px] border border-ink/20 bg-paper px-2 py-1 text-xs outline-none focus:border-pp-500"
+          className="w-full rounded-[3px] border border-ink/20 bg-paper px-2 py-1 text-xs outline-none focus:border-pp-500"
         />
       )}
       {actions.map((a) => (
@@ -388,11 +390,18 @@ export default function IncomingOrders() {
   const disputeCount = orders.filter((o) => o.status === "DISPUTED").length;
   const needsCount = orders.filter((o) => needsAction(o.status)).length;
   const visibleOrders = needsOnly ? needsCount : orders.length;
+  const orderRowsHeight = orders
+    .filter((o) => !needsOnly || needsAction(o.status))
+    .reduce(
+      (sum, o) =>
+        sum + (o.status === "DISPUTED" ? DISPUTE_ROW_HEIGHT : ROW_HEIGHT),
+      0,
+    );
   const visibleDetails = orders.filter(
     (o) => open.has(o.id) && (!needsOnly || needsAction(o.status)),
   ).length;
   const gridHeight = Math.min(
-    46 + visibleOrders * ROW_HEIGHT + visibleDetails * DETAIL_HEIGHT + 2,
+    46 + orderRowsHeight + visibleDetails * DETAIL_HEIGHT + 2,
     640,
   );
 
@@ -444,7 +453,11 @@ export default function IncomingOrders() {
               // sits under its order; sorting would pull them apart.
               defaultColDef: QUEUE_COL_DEF,
               getRowHeight: (p) =>
-                p.data?.kind === "detail" ? DETAIL_HEIGHT : ROW_HEIGHT,
+                p.data?.kind === "detail"
+                  ? DETAIL_HEIGHT
+                  : p.data?.status === "DISPUTED"
+                    ? DISPUTE_ROW_HEIGHT
+                    : ROW_HEIGHT,
               isFullWidthRow: (p) => p.rowNode.data?.kind === "detail",
               fullWidthCellRenderer: DetailCell,
               isExternalFilterPresent: () => needsOnlyRef.current,
