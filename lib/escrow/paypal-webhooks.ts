@@ -76,6 +76,8 @@ const paymentRefs = (r: Record<string, unknown>) => [
   str(r.id),
   str(relatedIds(r).authorization_id),
   str(relatedIds(r).order_id),
+  // Our own order id, set as purchase_unit.custom_id at creation.
+  str(r.custom_id),
 ];
 
 /** Dispute resources: the disputed transactions' ids. */

@@ -299,10 +299,11 @@ export function findOrderByPayPalRef(
        WHERE authorization_id IN (${marks})
           OR paypal_order_id IN (${marks})
           OR payout_batch_id IN (${marks})
+          OR id IN (${marks})
        ORDER BY created_at DESC, id DESC
        LIMIT 1`,
     )
-    .get(...refs, ...refs, ...refs) as OrderRow | undefined;
+    .get(...refs, ...refs, ...refs, ...refs) as OrderRow | undefined;
 }
 
 /** A processed PayPal webhook delivery (dedupe ledger row). */

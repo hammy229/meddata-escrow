@@ -89,6 +89,18 @@ test("AUTHORIZATION.CREATED on an already-authorized order is record-only", () =
   db.close();
 });
 
+test("a capture carrying only our custom_id still finds and applies to the order", () => {
+  const db = freshDb();
+  const order = orderAt(db, "DELIVERED");
+  const out = applyPayPalWebhookEvent(
+    db,
+    evt("PAYMENT.CAPTURE.COMPLETED", { id: "CAP-X", custom_id: order.id }),
+  );
+  assert.equal(out.kind, "applied");
+  assert.equal(getOrder(db, order.id)!.status, "CAPTURED");
+  db.close();
+});
+
 test("a void during a dispute resolves the dispute as RESOLVE_VOID", () => {
   const db = freshDb();
   const order = orderAt(db, "DISPUTED");
