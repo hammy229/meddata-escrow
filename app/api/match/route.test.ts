@@ -76,6 +76,22 @@ test("sampleCheck returns the rules verdict for a catalog dataset (200)", async 
   assert.ok(Array.isArray(sampleCheck.findings));
 });
 
+test("sampleCheck reports a failing verdict for the built-to-fail datasets", async () => {
+  for (const id of ["ds_asthma_pediatric_pilot_v1", "ds_copd_exacerbations_v1"]) {
+    const res = await POST(req({ sampleCheck: id, description: "asthma" }));
+    assert.equal(res.status, 200);
+    const { sampleCheck } = await res.json();
+    assert.equal(sampleCheck.passed, false, id);
+    assert.ok(sampleCheck.findings.some((f: string) => f.startsWith("FAIL")));
+  }
+});
+
+test("the catalog lists all six datasets (200)", async () => {
+  const res = await POST(req({ description: "synthetic" }));
+  const json = await res.json();
+  assert.equal(json.matches.length, 6);
+});
+
 test("sampleCheck for an unknown dataset -> 404", async () => {
   const res = await POST(req({ sampleCheck: "ds_nope" }));
   assert.equal(res.status, 404);

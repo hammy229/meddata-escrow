@@ -19,6 +19,22 @@ const COLUMNS: Record<string, Columns> = {
     numeric: ["value", "bmi"],
     groups: ["year", "sex"],
   },
+  ds_hypertension_registry_v1: {
+    numeric: ["value", "age"],
+    groups: ["region", "sex"],
+  },
+  ds_heart_failure_readmissions_v1: {
+    numeric: ["age", "bmi"],
+    groups: ["diagnosis", "year"],
+  },
+  ds_asthma_pediatric_pilot_v1: {
+    numeric: ["age", "value"],
+    groups: ["region", "sex"],
+  },
+  ds_copd_exacerbations_v1: {
+    numeric: ["value", "age"],
+    groups: ["diagnosis", "region"],
+  },
 };
 
 // Unknown datasets still get questions, from the columns every dataset has.

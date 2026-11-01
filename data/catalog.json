@@ -16,5 +16,42 @@
     "priceCents": 5900,
     "recordCount": 8000,
     "tags": ["diabetes", "endocrinology", "synthetic", "synthea"]
+  },
+  {
+    "id": "ds_hypertension_registry_v1",
+    "vendorId": "vnd_northstar_labs",
+    "title": "Hypertension Registry",
+    "description": "Synthetic blood pressure readings, antihypertensive prescriptions and clinic visits. Fully synthetic, no real patient data.",
+    "priceCents": 3900,
+    "recordCount": 12000,
+    "tags": ["hypertension", "blood-pressure", "synthetic"]
+  },
+  {
+    "id": "ds_heart_failure_readmissions_v1",
+    "vendorId": "vnd_northstar_labs",
+    "title": "Heart Failure Readmissions",
+    "description": "Synthetic hospital stays and 30-day readmissions for heart failure patients, with discharge medications. Fully synthetic, no real patient data.",
+    "priceCents": 24000,
+    "recordCount": 25000,
+    "tags": ["heart-failure", "readmission", "synthetic"]
+  },
+  {
+    "id": "ds_asthma_pediatric_pilot_v1",
+    "vendorId": "vnd_demo_health",
+    "title": "Pediatric Asthma Pilot",
+    "description": "Small synthetic pilot of pediatric asthma visits, inhaler use and triggers. Fully synthetic, no real patient data.",
+    "priceCents": 1900,
+    "recordCount": 640,
+    "tags": ["asthma", "pediatrics", "respiratory", "synthetic"]
+  },
+  {
+    "id": "ds_copd_exacerbations_v1",
+    "vendorId": "vnd_northstar_labs",
+    "title": "COPD Exacerbations Panel",
+    "description": "Synthetic chronic obstructive pulmonary disease records: spirometry, exacerbations and hospital admissions. Fully synthetic, no real patient data.",
+    "priceCents": 4400,
+    "recordCount": 9000,
+    "tags": ["copd", "respiratory", "pulmonology", "synthetic"],
+    "mockSample": { "duplicateRowPct": 3.4 }
   }
 ]

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { matchDatasets } from "./matcher";
+import { loadCatalog, matchDatasets } from "./matcher";
 import { failingLlm, fakeLlm, promptOf } from "./testing";
 
 const CARDIO = "ds_cardio_synthea_v1";
@@ -21,7 +21,8 @@ test("ranks the diabetes dataset first for a diabetes study", async () => {
 
 test("returns every catalog dataset, sorted by score descending", async () => {
   const ranked = await matchDatasets("diabetes");
-  assert.equal(ranked.length, 2);
+  assert.equal(ranked.length, loadCatalog().length);
+  assert.equal(ranked.length, 6);
   assert.ok(ranked[0].score >= ranked[1].score);
   assert.ok(ranked[0].rationale.length > 0);
 });
@@ -42,12 +43,15 @@ test("uses the LLM ranking when enabled and tags it source=llm", async () => {
   assert.equal(calls.length, 1);
   assert.match(promptOf(calls[0]), /HbA1c trajectories/);
   assert.deepEqual(
-    ranked.map((m) => [m.datasetId, m.score, m.source]),
+    ranked.slice(0, 2).map((m) => [m.datasetId, m.score, m.source]),
     [
       [DIABETES, 92, "llm"],
       [CARDIO, 35, "llm"],
     ],
   );
+  // Datasets the model did not rank trail behind at score 0.
+  assert.equal(ranked.length, loadCatalog().length);
+  assert.ok(ranked.slice(2).every((m) => m.score === 0));
   assert.equal(ranked[0].rationale, "Has HbA1c labs.");
 });
 
@@ -62,7 +66,7 @@ test("drops hallucinated and duplicate ids and appends skipped datasets", async 
   const ranked = await matchDatasets("diabetes", { client, useLlm: true });
   assert.deepEqual(
     ranked.map((m) => m.datasetId),
-    [CARDIO, DIABETES],
+    [CARDIO, ...loadCatalog().map((d) => d.id).filter((id) => id !== CARDIO)],
   );
   assert.equal(ranked[0].score, 80);
   assert.equal(ranked[0].rationale, "Good fit.");

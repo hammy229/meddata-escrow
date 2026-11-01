@@ -23,8 +23,30 @@ test("the mock sample profile is deterministic", () => {
   assert.deepEqual(cardioProfile(), cardioProfile());
 });
 
+const BUILT_TO_FAIL = [
+  "ds_asthma_pediatric_pilot_v1",
+  "ds_copd_exacerbations_v1",
+];
+
+test("the pediatric pilot fails on record count", async () => {
+  const v = await checkSample("ds_asthma_pediatric_pilot_v1", {
+    useLlm: false,
+  });
+  assert.equal(v.passed, false);
+  assert.ok(v.findings.some((f) => /^FAIL: record count 640/.test(f)));
+});
+
+test("the COPD panel fails on its mock sample's duplicate rate", async () => {
+  const entry = loadCatalog().find((d) => d.id === "ds_copd_exacerbations_v1")!;
+  assert.equal(sampleProfile(entry).duplicateRowPct, 3.4);
+  const v = await checkSample(entry.id, { useLlm: false });
+  assert.equal(v.passed, false);
+  assert.ok(v.findings.some((f) => /^FAIL: duplicate rows 3\.4%/.test(f)));
+});
+
 test("catalog datasets pass the rules check", async () => {
   for (const { id } of loadCatalog()) {
+    if (BUILT_TO_FAIL.includes(id)) continue;
     const v = await checkSample(id, { useLlm: false });
     assert.equal(v.passed, true, v.findings.join("; "));
     assert.equal(v.source, "rules");

@@ -40,6 +40,16 @@ export interface SampleCheck {
   source: "llm" | "rules";
 }
 
+/** Catalog entries may carry a mock-only override of the fake profile. */
+type MockSampleEntry = CatalogEntry & {
+  mockSample?: Partial<
+    Pick<
+      SampleProfile,
+      "duplicateRowPct" | "fieldCompletenessPct" | "identifierColumns"
+    >
+  >;
+};
+
 /** Below this many records a cohort is too small to be worth buying. */
 export const MIN_RECORDS = 1000;
 /** Every profiled field must be at least this complete. */
@@ -75,6 +85,10 @@ export function sampleProfile(entry: CatalogEntry): SampleProfile {
     fieldCompletenessPct,
     duplicateRowPct: (hash(`${entry.id}:dup`) % 15) / 10,
     identifierColumns: [],
+    // MOCK ONLY: a catalog entry may pin parts of the fake profile so the
+    // demo has datasets that fail their sample check. A real vendor profile
+    // is computed from real rows and never carries this override.
+    ...(entry as MockSampleEntry).mockSample,
   };
 }
 

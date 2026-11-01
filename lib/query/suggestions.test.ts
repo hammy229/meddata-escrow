@@ -44,6 +44,13 @@ test("every suggestion compiles to an aggregate through the keyword planner", as
   }
 });
 
+test("every catalog dataset has its own column entry, not the defaults", () => {
+  const fallback = suggestQuestions("ds_unknown");
+  for (const { id } of catalog) {
+    assert.notDeepEqual(suggestQuestions(id), fallback, id);
+  }
+});
+
 test("each suggestion plans the operation its wording names", () => {
   const [total, grouped, average, extreme] = suggestQuestions(
     "ds_cardio_synthea_v1",
