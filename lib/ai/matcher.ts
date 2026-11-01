@@ -37,10 +37,40 @@ export function loadCatalog(): CatalogEntry[] {
   return JSON.parse(readFileSync(CATALOG_URL, "utf8")) as CatalogEntry[];
 }
 
-// Lowercase word tokens of length >= 3 (drops noise like "2", "of", "a").
+// Common English filler that appears in both studies and dataset blurbs
+// ("for", "with") and would otherwise count as a matching term.
+const STOP_WORDS = new Set([
+  "and",
+  "are",
+  "but",
+  "for",
+  "from",
+  "has",
+  "have",
+  "into",
+  "its",
+  "not",
+  "our",
+  "that",
+  "the",
+  "their",
+  "this",
+  "was",
+  "were",
+  "what",
+  "which",
+  "who",
+  "will",
+  "with",
+  "you",
+  "your",
+]);
+
+// Lowercase word tokens of length >= 3 (drops noise like "2", "of", "a"),
+// minus filler words.
 function tokens(text: string): string[] {
   return (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
-    (t) => t.length >= 3,
+    (t) => t.length >= 3 && !STOP_WORDS.has(t),
   );
 }
 

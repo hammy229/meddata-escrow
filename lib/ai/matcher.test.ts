@@ -66,7 +66,12 @@ test("drops hallucinated and duplicate ids and appends skipped datasets", async 
   const ranked = await matchDatasets("diabetes", { client, useLlm: true });
   assert.deepEqual(
     ranked.map((m) => m.datasetId),
-    [CARDIO, ...loadCatalog().map((d) => d.id).filter((id) => id !== CARDIO)],
+    [
+      CARDIO,
+      ...loadCatalog()
+        .map((d) => d.id)
+        .filter((id) => id !== CARDIO),
+    ],
   );
   assert.equal(ranked[0].score, 80);
   assert.equal(ranked[0].rationale, "Good fit.");
@@ -93,4 +98,11 @@ test("does not call the LLM when it is disabled", async () => {
   assert.equal(calls.length, 0);
   assert.equal(ranked[0].datasetId, DIABETES);
   assert.equal(ranked[0].source, "keyword");
+});
+
+test("filler words like 'for' and 'with' never count as a match", async () => {
+  const ranked = await matchDatasets("for the and with from this that");
+  for (const m of ranked) {
+    assert.equal(m.score, 0, `${m.datasetId} matched on filler words`);
+  }
 });
