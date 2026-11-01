@@ -17,9 +17,9 @@ openapi/openapi.yaml ──┬── GET /api/openapi            (served JSON / 
   bodies and status codes the route code and its tests actually produce, plus
   realistic examples.
 - Shared shapes live under `components.schemas`: `Dataset`, `OrderRow`,
-  `OrderEventRow`, `AuthorizationWindow`, `Receipt`, `UsageRow`,
-  `OrderSummary`, `ShortlistItem`, the `EscrowState` enum (all 8 states) and
-  `Error` (`{ error, reasons? }`).
+  `OrderEventRow`, `AuthorizationWindow`, `DeliveryLink`, `Receipt`,
+  `UsageRow`, `OrderSummary`, `ShortlistItem`, `QueryCapReached`, the
+  `EscrowState` enum (all 8 states) and `Error` (`{ error, reasons? }`).
 - `operationId`s are camelCase (`createOrder`, `advanceOrder`, `runQuery`, …).
   SDK generators use them as method names.
 - Every documented operation has a route handler. An operation whose code is
@@ -100,11 +100,29 @@ Command names and flags can vary between CLI versions. Check
 - `GET /api/orders` returns one of four shapes depending on the query string
   (`OrderListResponse`, `OrderDetailResponse`, `OrderReceiptResponse`,
   `OrderSummaryResponse`), so it is modelled as a `oneOf`. A detail response
-  always carries `authorization`, which is `null` unless funds are held.
+  always carries `authorization` and `delivery`. Each is `null` unless it
+  applies: `authorization` while funds are held, `delivery` once the buyer may
+  have the data.
+- `delivery` is a `DeliveryLink` (`{ url, expiresAt, mock }`). Every read mints
+  a new link with a 900 second lifetime, so clients should read the order again
+  rather than cache the URL. For now the link is always a mock link.
+- Order rows carry `query_cap_cents`. `POST /api/orders` takes an optional
+  `queryCapCents` (integer, 50 to 100000, default 1000), and anything else is
+  `422`. An unapproved order is reused only when a sent cap matches; leaving the
+  cap out reuses an unapproved order at the current price whatever its cap.
+- `POST /api/query` and `POST /api/billing` return `402` once one more query
+  would pass the order's cap. The body is `QueryCapReached`:
+  `{ error, spentCents, capCents }`. Nothing is metered on a `402`.
+- `POST /api/demo/reset` takes an optional JSON body. `{ "seed": "story" }` adds
+  six sample orders; an empty body is a plain reset. Any other `seed` value, or
+  invalid JSON, is `422`. Outside mock mode the route is `404`, whatever the body.
 - In mock mode (`PAYPAL_MODE=mock`), responses add `mock: true` and use
   `MOCK-*` PayPal ids. In live mode, PayPal failures pass PayPal's status
   through (the `default` response).
 - `POST /api/orders` can return `200` (an existing unapproved order, with
   `reused: true`) or `201` (a new order). Mock-mode approve links are relative
   (`/checkout/mock?...`), so `approveUrl` is typed `uri-reference`.
-- Regenerate SDKs after the spec changes. `info.version` is 0.3.0.
+- The agent's `search_datasets` and `get_dataset` results carry `alreadyOwned`,
+  and the agent never buys a dataset the buyer already owns. Each run gets at
+  most 3 sample checks; a fourth is refused.
+- Regenerate SDKs after the spec changes. `info.version` is 0.4.0.
