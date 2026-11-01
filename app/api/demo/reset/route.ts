@@ -30,7 +30,11 @@ export async function POST(req?: Request) {
         ? (body as { seed?: unknown }).seed
         : undefined;
     if (seed === "story") story = true;
-    else if (seed !== undefined || body === undefined || typeof body !== "object")
+    else if (
+      seed !== undefined ||
+      body === undefined ||
+      typeof body !== "object"
+    )
       return Response.json(
         { error: 'seed, if provided, must be "story"' },
         { status: 422 },

@@ -77,7 +77,10 @@ test("sampleCheck returns the rules verdict for a catalog dataset (200)", async 
 });
 
 test("sampleCheck reports a failing verdict for the built-to-fail datasets", async () => {
-  for (const id of ["ds_asthma_pediatric_pilot_v1", "ds_copd_exacerbations_v1"]) {
+  for (const id of [
+    "ds_asthma_pediatric_pilot_v1",
+    "ds_copd_exacerbations_v1",
+  ]) {
     const res = await POST(req({ sampleCheck: id, description: "asthma" }));
     assert.equal(res.status, 200);
     const { sampleCheck } = await res.json();

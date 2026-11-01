@@ -13,12 +13,7 @@ import type { DatabaseSync } from "node:sqlite";
 
 import { DEFAULT_BUYER_EMAIL } from "../escrow/service";
 import type { EscrowState } from "../escrow/state-machine";
-import {
-  advanceOrder,
-  createOrder,
-  getDataset,
-  type OrderRow,
-} from "./client";
+import { advanceOrder, createOrder, getDataset, type OrderRow } from "./client";
 import { recordUsage } from "./usage";
 
 export const STORY_BUYER_EMAIL = "lab@example.edu";
@@ -86,7 +81,8 @@ export function seedDemoStory(
 ): OrderRow[] {
   return BEATS.map((beat, i) => {
     const dataset = getDataset(db, beat.datasetId);
-    if (!dataset) throw new Error(`demo story: unknown dataset ${beat.datasetId}`);
+    if (!dataset)
+      throw new Error(`demo story: unknown dataset ${beat.datasetId}`);
     const key = `story${i + 1}`;
     let order = createOrder(db, {
       id: `ord_${key}`,

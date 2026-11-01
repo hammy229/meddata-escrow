@@ -324,19 +324,26 @@ test(
     const { matches } = (search as { output: unknown }).output as {
       matches: { datasetId: string; alreadyOwned: boolean }[];
     };
-    assert.equal(matches.find((m) => m.datasetId === CARDIO)?.alreadyOwned, true);
+    assert.equal(
+      matches.find((m) => m.datasetId === CARDIO)?.alreadyOwned,
+      true,
+    );
     assert.equal(
       matches.find((m) => m.datasetId === DIABETES)?.alreadyOwned,
       false,
     );
-    const detail = await executeTool(mine, "get_dataset", { datasetId: CARDIO });
+    const detail = await executeTool(mine, "get_dataset", {
+      datasetId: CARDIO,
+    });
     assert.equal(
       ((detail as { output: unknown }).output as { alreadyOwned: boolean })
         .alreadyOwned,
       true,
     );
     // Another buyer (the default) owns nothing.
-    const other = await executeTool(ctx(), "get_dataset", { datasetId: CARDIO });
+    const other = await executeTool(ctx(), "get_dataset", {
+      datasetId: CARDIO,
+    });
     assert.equal(
       ((other as { output: unknown }).output as { alreadyOwned: boolean })
         .alreadyOwned,

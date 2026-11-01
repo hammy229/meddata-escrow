@@ -20,7 +20,8 @@ test("the story builds six orders across six states", () => {
   const story = seedDemoStory(db);
   assert.equal(story.length, 6);
   const counts: Record<string, number> = {};
-  for (const o of listOrders(db)) counts[o.status] = (counts[o.status] ?? 0) + 1;
+  for (const o of listOrders(db))
+    counts[o.status] = (counts[o.status] ?? 0) + 1;
   assert.deepEqual(counts, {
     PAID_OUT: 1,
     CAPTURED: 1,

@@ -110,7 +110,10 @@ test(
     for (const body of ['{"seed":"nope"}', '{"seed":5}', "not json"]) {
       const res = await post(body);
       assert.equal(res.status, 422, body);
-      assert.equal(typeof ((await res.json()) as { error: string }).error, "string");
+      assert.equal(
+        typeof ((await res.json()) as { error: string }).error,
+        "string",
+      );
     }
     assert.equal(orderCount(url), 1);
   }, "mock"),

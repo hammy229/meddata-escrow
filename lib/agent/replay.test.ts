@@ -123,7 +123,8 @@ test("the duplicate purchase guardrail fires when the buyer already owns it", ()
       {
         tool: "create_escrow_order",
         input: { datasetId: "ds_a" },
-        error: "you already own ds_a (an order is CAPTURED); not buying it again",
+        error:
+          "you already own ds_a (an order is CAPTURED); not buying it again",
         at,
       },
     ],
