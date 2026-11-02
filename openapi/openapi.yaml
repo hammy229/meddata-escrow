@@ -1689,6 +1689,13 @@ components:
       properties:
         order: { $ref: "#/components/schemas/OrderRow" }
         receipt: { $ref: "#/components/schemas/Receipt" }
+        dua:
+          type: object
+          description: Plain-text data use agreement for the order (permitted use, no re-identification, aggregate-only, retention) and the SHA-256 hex fingerprint of that exact text.
+          required: [text, sha256]
+          properties:
+            text: { type: string }
+            sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
     OrderArbitrationResponse:
       type: object
       required: [order, recommendation]

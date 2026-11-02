@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { rmSync } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 
 import { GET, POST, PATCH } from "./route";
 import { recordUsage, PER_QUERY_FEE_CENTS } from "../../../lib/db/usage";
@@ -706,6 +706,29 @@ test(
       Number(r.platformFeeCents) + Number(r.vendorPayoutCents),
       r.amountCents,
     );
+  }),
+);
+
+test(
+  "GET ?id=&receipt=1 also returns a data use agreement with a matching fingerprint",
+  withEnv(async ({ url }) => {
+    const order = seedOrder(url, { status: "CAPTURED" });
+    const res = await GET(getReq(`?id=${order.id}&receipt=1`));
+    const body = (await res.json()) as {
+      dua: { text: string; sha256: string };
+    };
+    assert.ok(body.dua.text.includes(order.id));
+    assert.ok(body.dua.text.includes("Cardio Cohort"));
+    assert.ok(body.dua.text.includes("Demo Health"));
+    assert.equal(
+      body.dua.sha256,
+      createHash("sha256").update(body.dua.text, "utf8").digest("hex"),
+    );
+    // Same order, same agreement.
+    const again = (await (
+      await GET(getReq(`?id=${order.id}&receipt=1`))
+    ).json()) as typeof body;
+    assert.equal(again.dua.sha256, body.dua.sha256);
   }),
 );
 

@@ -37,6 +37,8 @@ import { presignDelivery } from "../../../lib/delivery/mock-s3";
 import {
   withDb,
   getOrder,
+  getDataset,
+  getVendor,
   listOrders,
   listOrderEvents,
   summarizeOrders,
@@ -46,6 +48,7 @@ import { authorizationWindow } from "../../../lib/escrow/auth-window";
 import { arbitrate } from "../../../lib/ai/arbiter";
 import { checkSample } from "../../../lib/ai/sample-check";
 import { buildReceipt } from "../../../lib/escrow/receipt";
+import { generateDua } from "../../../lib/escrow/dua";
 import { listUsage } from "../../../lib/db/usage";
 import {
   createEscrowOrder,
@@ -89,7 +92,8 @@ function errorResponse(err: unknown): Response {
 //          confidence, rationale, evidence. Read-only: it never changes the
 //          order or moves money. 409 unless the order is DISPUTED.
 //   GET /api/orders?id=ord_..&receipt=1
-//       -> { order, receipt } fee breakdown (lib/escrow/receipt): amount,
+//       -> { order, receipt, dua } (dua: { text, sha256 }, the data use
+//          agreement from lib/escrow/dua) fee breakdown (lib/escrow/receipt): amount,
 //          platform fee, vendor payout, per-query charges and the total. All
 //          money fields are 0 for a VOIDED or CANCELLED order.
 //   GET /api/orders?summary=1[&datasetId=..]
@@ -138,12 +142,26 @@ export async function GET(request: Request) {
       if (params.get("receipt") !== null) {
         const found = withDb((db) => {
           const order = getOrder(db, id);
-          return order && { order, usage: listUsage(db, id) };
+          if (!order) return null;
+          const dataset = getDataset(db, order.dataset_id);
+          const vendor = dataset && getVendor(db, dataset.vendor_id);
+          return { order, usage: listUsage(db, id), dataset, vendor };
         });
         if (!found) return bad(`unknown orderId: ${id}`, 404);
+        // The DUA is a sibling of `receipt` so the receipt shape is unchanged.
+        const dua = generateDua({
+          orderId: found.order.id,
+          datasetId: found.order.dataset_id,
+          datasetTitle: found.dataset?.title ?? found.order.dataset_id,
+          vendorName: found.vendor?.name ?? "Unknown vendor",
+          buyerEmail: found.order.buyer_email,
+          amountCents: found.order.amount_cents,
+          issuedAt: found.order.created_at,
+        });
         return Response.json({
           order: found.order,
           receipt: buildReceipt(found.order, found.usage),
+          dua,
         });
       }
       const result = withDb((db) => {
