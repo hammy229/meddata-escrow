@@ -2,6 +2,38 @@
 
 All notable changes to MedData Escrow. Newest first.
 
+## 2026-11-02: Mandates, MCP, trust scores, insights, guided demo
+
+### Added
+
+- **Spending mandates.** A buyer signs a policy (total budget, per-order cap,
+  allowed vendors and tags, expiry) with HMAC-SHA256 via `POST /api/mandates`.
+  `POST /api/agent` takes it as `mandate`; the agent refuses any order the
+  mandate does not allow, and the run result reports spent, remaining and each
+  denial. A bad, tampered or expired token is a `401`. The spend ledger is in
+  memory and resets on restart. Issuing is rate limited to 30 a minute.
+- **MCP server.** `npm run mcp` starts a stdio MCP server with `search_datasets`,
+  `sample_check`, `place_escrow_order` and `get_order`, so an outside agent can
+  buy through PayPal escrow. Placing an order needs a valid mandate and a passing
+  sample check in the same session. See `docs/mcp.md`.
+- **Trust score.** `GET /api/trust` scores vendors and datasets from 0 to 100 on
+  sample-check pass rate, dispute rate, dispute outcomes, delivery speed and
+  volume, with a reason for each factor.
+- **Dispute arbiter.** `GET /api/orders?id=&arbitrate=1` returns an advisory
+  refund, release, split or needs-human recommendation for a disputed order. It
+  never moves money, and low confidence is forced to needs-human.
+- **Data use agreement.** The receipt response carries a `dua` with the agreement
+  text and its SHA-256 fingerprint.
+- **Insights.** `GET /api/insights` and an `/insights` page with a KPI strip and
+  two AG Grid tables.
+- **Guided demo.** `/demo` plays a seven-step story through the real APIs in
+  mock mode, with pause and next controls.
+
+### Changed
+
+- OpenAPI and the Postman collection cover the new routes. Tests went from 511
+  to 626.
+
 ## 2026-11-01: Query caps, download links, a fuller vendor desk
 
 ### Added
