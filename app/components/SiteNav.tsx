@@ -10,6 +10,7 @@ export const NAV: Array<{ href: string; label: string }> = [
   { href: "/researcher", label: "Researchers" },
   { href: "/vendor", label: "Vendors" },
   { href: "/insights", label: "Insights" },
+  { href: "/demo", label: "Demo" },
   { href: "/#how", label: "How it works" },
 ];
 
