@@ -1252,6 +1252,109 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/insights:
+    get:
+      tags: [System]
+      operationId: getInsights
+      summary: Marketplace insights roll-up
+      description: |
+        Aggregates every order, audit event and query charge. Money is bucketed
+        by escrow state: `heldCents` is AUTHORIZED, DELIVERED and DISPUTED;
+        `releasedCents` is CAPTURED and PAID_OUT; `refundedCents` is VOIDED.
+        `gmvCents` is held plus released. `platformFeeCents` is earned only on
+        released orders. `disputeRate` is orders ever disputed over orders ever
+        authorized. `avgTimeToDeliverHours` is null until an order is delivered.
+        An empty book returns zeros. Never cached.
+      responses:
+        "200":
+          description: The roll-up.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [insights]
+                properties:
+                  insights:
+                    type: object
+                    required:
+                      - orderCount
+                      - gmvCents
+                      - heldCents
+                      - releasedCents
+                      - refundedCents
+                      - platformFeeCents
+                      - disputeRate
+                      - avgTimeToDeliverHours
+                      - queryCount
+                      - queryRevenueCents
+                      - byStatus
+                      - topDatasets
+                      - byVendor
+                    properties:
+                      orderCount: { type: integer }
+                      gmvCents: { type: integer }
+                      heldCents: { type: integer }
+                      releasedCents: { type: integer }
+                      refundedCents: { type: integer }
+                      platformFeeCents: { type: integer }
+                      disputeRate: { type: number, minimum: 0, maximum: 1 }
+                      avgTimeToDeliverHours: { type: [number, "null"] }
+                      queryCount: { type: integer }
+                      queryRevenueCents: { type: integer }
+                      byStatus:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            status: { $ref: "#/components/schemas/EscrowState" }
+                            count: { type: integer }
+                            amountCents: { type: integer }
+                      topDatasets:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            datasetId: { type: string }
+                            title: { type: string }
+                            vendorName: { type: string }
+                            orders: { type: integer }
+                            gmvCents: { type: integer }
+                            queries: { type: integer }
+                            queryCents: { type: integer }
+                      byVendor:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            vendorId: { type: string }
+                            name: { type: string }
+                            orders: { type: integer }
+                            gmvCents: { type: integer }
+                            heldCents: { type: integer }
+                            releasedCents: { type: integer }
+                            feeCents: { type: integer }
+                            netCents: { type: integer }
+                            disputes: { type: integer }
+              examples:
+                empty:
+                  value:
+                    insights:
+                      orderCount: 0
+                      gmvCents: 0
+                      heldCents: 0
+                      releasedCents: 0
+                      refundedCents: 0
+                      platformFeeCents: 0
+                      disputeRate: 0
+                      avgTimeToDeliverHours: null
+                      queryCount: 0
+                      queryRevenueCents: 0
+                      byStatus: []
+                      topDatasets: []
+                      byVendor: []
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/webhooks/paypal:
     post:
       tags: [Webhooks]

@@ -494,6 +494,20 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "Marketplace insights roll-up",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/insights",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "insights"]
+            },
+            "description": "Aggregates every order, audit event and query charge. Money is bucketed\nby escrow state: `heldCents` is AUTHORIZED, DELIVERED and DISPUTED;\n`releasedCents` is CAPTURED and PAID_OUT; `refundedCents` is VOIDED.\n`gmvCents` is held plus released. `platformFeeCents` is earned only on\nreleased orders. `disputeRate` is orders ever disputed over orders ever\nauthorized. `avgTimeToDeliverHours` is null until an order is delivered.\nAn empty book returns zeros. Never cached.\n"
+          },
+          "response": []
         }
       ]
     },
