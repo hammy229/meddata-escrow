@@ -262,6 +262,37 @@ test("persistent account lifecycle and API isolation", async (t) => {
       },
     );
     await t.test(
+      "an own order id in the URL cannot unlock another order in the body",
+      async () => {
+        const created = await ordersPost(
+          req("/api/orders", otherToken, "POST", { datasetId: "ds_owned" }),
+        );
+        const { orderId: ownId } = await created.json();
+        const smuggled = await ordersPatch(
+          req(`/api/orders?orderId=${ownId}`, otherToken, "PATCH", {
+            orderId: order.id,
+            action: "cancel",
+          }),
+        );
+        assert.equal(smuggled.status, 404);
+        assert.equal(
+          (
+            await ordersGet(
+              req(
+                `/api/orders?orderId=${ownId}&id=${order.id}&events=1`,
+                otherToken,
+              ),
+            )
+          ).status,
+          404,
+        );
+        const untouched = await (
+          await ordersGet(req(`/api/orders?id=${order.id}`, token))
+        ).json();
+        assert.equal(untouched.order.status, "MATCHED");
+      },
+    );
+    await t.test(
       "researcher and provider can complete the authenticated escrow lifecycle",
       async () => {
         const created = await ordersPost(

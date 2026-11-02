@@ -46,15 +46,22 @@ export function secure(
             .clone()
             .json()
             .catch(() => null);
-    const orderId =
-      params.get("orderId") ??
-      (params.has("id") ? params.get("id") : body?.orderId);
-    if (
-      orderId &&
-      (typeof orderId !== "string" ||
-        !(await withDb(async (db) => await ownsOrder(db, account, orderId))))
-    )
-      return Response.json({ error: "Order not found" }, { status: 404 });
+    // Handlers read the order id from different places (?id=, ?orderId= or
+    // the body), so every id the request carries must belong to the caller.
+    // Checking only one let a request pass with its own id in the URL and
+    // act on someone else's order named in the body.
+    const orderIds = [
+      params.get("orderId"),
+      params.get("id"),
+      body?.orderId,
+    ].filter((id) => id !== null && id !== undefined);
+    for (const orderId of orderIds) {
+      if (
+        typeof orderId !== "string" ||
+        !(await withDb(async (db) => await ownsOrder(db, account, orderId)))
+      )
+        return Response.json({ error: "Order not found" }, { status: 404 });
+    }
     if (
       resource === "datasets" &&
       request.method === "PATCH" &&
