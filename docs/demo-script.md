@@ -112,6 +112,21 @@ owns COPD. The same study then buys Hypertension straight away, and a COPD-only
 study ends with "Nothing was bought: you already own ds_copd_exacerbations_v1."
 That is the no-rebuy guardrail, and it can be its own short beat.
 
+## 8b. A mandate keeps the agent on a leash (optional, 15s)
+
+Issue a mandate with `POST /api/mandates` (for example a $50 total and a $45
+per-order cap), then pass its `token` to `POST /api/agent` as `mandate`. The run
+result shows what was spent, what remains, and any order the mandate denied. Say
+that the limit is checked in code, so a prompt cannot talk the agent past it. The
+same tools are available to outside agents over `npm run mcp` (see `docs/mcp.md`).
+
+## 8c. Insights and the guided demo (optional, 15s)
+
+Open `/insights` for money held versus released, fees and the dispute rate. If you
+want a single clean take of the whole arc, open `/demo` in mock mode and press
+Start: it resets, matches, sample-checks, holds, delivers, queries and releases
+through the real APIs, with a caption for each step.
+
 ## 9. Vendor hold with 2 days left (optional, 15s)
 
 Take this on a **Reset with sample orders** run. On `/vendor`, click the
