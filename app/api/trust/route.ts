@@ -1,4 +1,4 @@
-// GET /api/trust — explainable 0-100 trust scores (see lib/trust/score).
+// GET /api/trust: explainable 0-100 trust scores (see lib/trust/score).
 //   ?vendorId=..   -> { vendorId, name, trust }
 //   ?datasetId=..  -> { datasetId, vendorId, title, trust }
 //   (neither)      -> { vendors: [...], datasets: [...] }
