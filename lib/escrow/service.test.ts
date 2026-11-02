@@ -649,3 +649,24 @@ test(
     assert.equal(getOrder(openDb(url), order.id)?.status, "AUTHORIZED");
   }),
 );
+
+test(
+  "an order cannot get two events with the same number",
+  withDbEnv(async ({ url }) => {
+    const order = seedOrder(url);
+    const db = openDb(url);
+    try {
+      assert.throws(
+        () =>
+          db
+            .prepare(
+              "INSERT INTO order_events (id, order_id, seq, event, from_state, to_state) VALUES (?, ?, 0, 'CREATE', NULL, 'MATCHED')",
+            )
+            .run("evt_dupe", order.id),
+        /UNIQUE/,
+      );
+    } finally {
+      db.close();
+    }
+  }),
+);

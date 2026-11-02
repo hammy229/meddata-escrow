@@ -91,6 +91,10 @@ CREATE TABLE IF NOT EXISTS paypal_webhook_events (
 -- Read an order's timeline oldest-first (by seq).
 CREATE INDEX IF NOT EXISTS idx_order_events_order
   ON order_events (order_id, seq);
+-- Each order's events are numbered once. Every writer holds the order row
+-- lock today; this stops a future writer from silently reusing a number.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_order_events_seq_unique
+  ON order_events (order_id, seq);
 
 -- Application identity. Passwords use salted scrypt; only session token hashes persist.
 CREATE TABLE IF NOT EXISTS accounts (
