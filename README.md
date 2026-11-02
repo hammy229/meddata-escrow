@@ -98,6 +98,22 @@ Added Nov 2 for the PayPal AI Hackathon. All of it runs in mock mode with no key
 | **Render**                                | One-click Blueprint deploy via [`render.yaml`](./render.yaml): seeded SQLite demo, `/api/health` check                                                                             |
 | **Postman**                               | API collection to exercise and demo every endpoint ([`postman/`](./postman))                                                                                                       |
 
+## Prize map
+
+Where each judging area and prize is addressed. "Mock" means it runs end to end
+locally without credentials; see the status line above for what is not yet live.
+
+| Prize or criterion           | Where to look                                                                                                                                               |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Best Use of Agentic Commerce | Procurement agent with code-enforced spending mandates (`lib/agent`), and an MCP server so outside agents can buy through PayPal escrow (`docs/mcp.md`)     |
+| Best Use of PayPal + AI      | Authorize-then-capture escrow, Payouts, verified webhooks, with Claude for matching, sample checks and an advisory dispute arbiter (`lib/escrow`, `lib/ai`) |
+| Most Impactful               | Cuts weeks of data sourcing for medical researchers; buyers never pay for failed samples, vendors never hand over raw records                               |
+| Best Demo Delivery           | `/demo` runs the whole story through the real APIs in one click; script in `docs/demo-script.md`                                                            |
+| Most Creative                | Pay-per-query aggregates, trust scores and a signed data use agreement on every order                                                                       |
+| AG Grid                      | Catalog, compare, order queue, ledger, insights and trust tables (`app/components`, `/insights`)                                                            |
+| APIMatic                     | OpenAPI 3.1 spec with drift tests (`openapi/openapi.yaml`); SDK generation steps in `docs/api.md`. Not run through APIMatic yet                             |
+| Render                       | `render.yaml` Blueprint with a seeded SQLite demo and health check. A hosted deploy is still pending                                                        |
+
 ## Architecture
 
 See [`docs/architecture.md`](docs/architecture.md) for the full design and the escrow-flow Mermaid diagram.
