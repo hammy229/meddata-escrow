@@ -440,9 +440,18 @@ export async function advanceEscrowOrder(
   // Persist the advance (optionally patching PayPal ids) once the money move
   // has succeeded, then announce it.
   const advance = async (patch?: OrderPatch) => {
+    // Another request can move the order between our check above and this
+    // write (two capture clicks at once). The loser gets the same 409 as the
+    // early check, not a 500.
     const row = await withDb(
       async (db) => await advanceOrder(db, orderId, event, patch, note),
-    );
+    ).catch((err) => {
+      if (err instanceof InvalidTransitionError)
+        throw new EscrowError(409, err.message, "INVALID_TRANSITION", {
+          cause: err,
+        });
+      throw err;
+    });
     announce(deps, row, event, order.status);
     return row;
   };

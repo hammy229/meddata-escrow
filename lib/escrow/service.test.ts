@@ -651,6 +651,32 @@ test(
 );
 
 test(
+  "two captures at once: one wins, the other is a 409, not a 500",
+  withDbEnv(
+    async ({ url }) => {
+      const order = seedOrder(url, {
+        status: "DELIVERED",
+        authorization_id: "AUTH-1",
+      });
+      const capture = () =>
+        advanceEscrowOrder({ orderId: order.id, action: "capture" });
+      const results = await Promise.allSettled([capture(), capture()]);
+      const won = results.filter((r) => r.status === "fulfilled");
+      const lost = results.filter(
+        (r): r is PromiseRejectedResult => r.status === "rejected",
+      );
+      assert.equal(won.length, 1);
+      assert.equal(lost.length, 1);
+      assert.ok(lost[0].reason instanceof EscrowError, String(lost[0].reason));
+      assert.equal(lost[0].reason.status, 409);
+      assert.equal(lost[0].reason.code, "INVALID_TRANSITION");
+      assert.equal(getOrder(openDb(url), order.id)?.status, "CAPTURED");
+    },
+    { mock: true },
+  ),
+);
+
+test(
   "an order cannot get two events with the same number",
   withDbEnv(async ({ url }) => {
     const order = seedOrder(url);
