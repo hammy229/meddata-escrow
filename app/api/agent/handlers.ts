@@ -1,5 +1,4 @@
 import { verifyMandate } from "../../../lib/agent/mandate";
-import { withDb } from "../../../lib/db/store";
 import type { Account } from "../../../lib/auth/store";
 // /api/agent — the AI procurement agent (lib/agent).
 //
@@ -67,16 +66,7 @@ export async function POST(request: Request, account?: Account) {
       mandate,
       accountId: account?.id,
     });
-    await saveAgentRun(input, run);
-    if (account)
-      await withDb(
-        async (db) =>
-          await db
-            .prepare(
-              "INSERT INTO account_agent_runs (run_id, account_id) VALUES (?, ?)",
-            )
-            .run(run.runId, account.id),
-      );
+    await saveAgentRun(input, run, { accountId: account?.id });
     return Response.json(run);
   } catch (err) {
     return internalError(err);

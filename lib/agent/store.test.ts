@@ -46,3 +46,15 @@ test(
     await assert.rejects(async () => await saveAgentRun(input, run));
   }),
 );
+test(
+  "a run whose account link fails is not saved at all",
+  withAgentDb(async () => {
+    const input = { study: STUDY, budgetCents: 100 };
+    const run = await runProcurementAgent(input, { useLlm: false });
+    // No such account, so the link row breaks its foreign key.
+    await assert.rejects(
+      async () => await saveAgentRun(input, run, { accountId: "acct_missing" }),
+    );
+    assert.equal(await getAgentRun(run.runId), undefined);
+  }),
+);
