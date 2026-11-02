@@ -234,6 +234,10 @@ paths:
           in: query
           description: With `id`, return the order's receipt (any value). Money fields are 0 for a VOIDED or CANCELLED order.
           schema: { type: string, examples: ["1"] }
+        - name: arbitrate
+          in: query
+          description: With `id` of a DISPUTED order, return `{ order, recommendation }`, an advisory outcome (refund, release, split or needs_human) with confidence, rationale and evidence. Never moves money; 409 if the order is not DISPUTED.
+          schema: { type: string, examples: ["1"] }
         - name: events
           in: query
           description: With `id`, also return the order's audit events (any value).
@@ -266,6 +270,7 @@ paths:
                   - $ref: "#/components/schemas/OrderDetailResponse"
                   - $ref: "#/components/schemas/OrderSummaryResponse"
                   - $ref: "#/components/schemas/OrderReceiptResponse"
+                  - $ref: "#/components/schemas/OrderArbitrationResponse"
               examples:
                 list:
                   value:
@@ -361,6 +366,12 @@ paths:
                       totalCents: 5000
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: "`arbitrate` was requested for an order that is not DISPUTED."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "422":
           description: Unknown `status` filter value.
           content:
@@ -1133,8 +1144,18 @@ paths:
         neutral prior so tiny histories never look perfect. Pass `vendorId` or
         `datasetId` for one subject; pass neither to list all.
       parameters:
-        - { name: vendorId, in: query, required: false, schema: { type: string } }
-        - { name: datasetId, in: query, required: false, schema: { type: string } }
+        - {
+            name: vendorId,
+            in: query,
+            required: false,
+            schema: { type: string },
+          }
+        - {
+            name: datasetId,
+            in: query,
+            required: false,
+            schema: { type: string },
+          }
       responses:
         "200":
           description: One subject's trust (`vendorId` or `datasetId` mode) or the full list.
@@ -1668,6 +1689,27 @@ components:
       properties:
         order: { $ref: "#/components/schemas/OrderRow" }
         receipt: { $ref: "#/components/schemas/Receipt" }
+    OrderArbitrationResponse:
+      type: object
+      required: [order, recommendation]
+      properties:
+        order: { $ref: "#/components/schemas/OrderRow" }
+        recommendation:
+          type: object
+          description: Advisory only. The arbiter never moves money; confidence below 0.6 is forced to `needs_human`.
+          required:
+            [outcome, confidence, rationale, evidence, source, advisoryOnly]
+          properties:
+            outcome:
+              type: string
+              enum: [refund, release, split, needs_human]
+            confidence: { type: number, minimum: 0, maximum: 1 }
+            rationale: { type: string }
+            evidence:
+              type: array
+              items: { type: string }
+            source: { type: string, enum: [llm, rules] }
+            advisoryOnly: { type: boolean, enum: [true] }
     Receipt:
       type: object
       description: What the buyer paid and how it splits between vendor and platform. `platformFeeCents + vendorPayoutCents = amountCents`. VOIDED and CANCELLED orders are all zeros for money.

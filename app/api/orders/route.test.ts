@@ -15,6 +15,7 @@ import {
   openDb,
   createOrder,
   getOrder,
+  listOrderEvents,
   advanceOrder,
   type OrderRow,
 } from "../../../lib/db/client";
@@ -914,4 +915,51 @@ test(
     },
     { mock: true },
   ),
+);
+
+// --- Dispute arbiter (advisory only) ---
+
+test(
+  "GET ?arbitrate=1 on a DISPUTED order returns an advisory recommendation and moves nothing",
+  withEnv(async ({ url }) => {
+    const order = seedOrder(url, { status: "AUTHORIZED" });
+    const db = openDb(url);
+    advanceOrder(db, order.id, "DELIVER");
+    advanceOrder(db, order.id, "DISPUTE", undefined, "rows are missing values");
+    const before = listOrderEvents(db, order.id).length;
+    db.close();
+
+    const res = await GET(getReq(`?id=${order.id}&arbitrate=1`));
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.order.id, order.id);
+    const rec = body.recommendation;
+    assert.ok(
+      ["refund", "release", "split", "needs_human"].includes(rec.outcome),
+    );
+    assert.equal(rec.advisoryOnly, true);
+    assert.ok(Array.isArray(rec.evidence));
+
+    const after = openDb(url);
+    assert.equal(getOrder(after, order.id)?.status, "DISPUTED");
+    assert.equal(listOrderEvents(after, order.id).length, before);
+    after.close();
+  }),
+);
+
+test(
+  "GET ?arbitrate=1 on a non-DISPUTED order is 409",
+  withEnv(async ({ url }) => {
+    const order = seedOrder(url, { status: "AUTHORIZED" });
+    const res = await GET(getReq(`?id=${order.id}&arbitrate=1`));
+    assert.equal(res.status, 409);
+  }),
+);
+
+test(
+  "GET ?arbitrate=1 on an unknown order is 404",
+  withEnv(async () => {
+    const res = await GET(getReq("?id=ord_nope&arbitrate=1"));
+    assert.equal(res.status, 404);
+  }),
 );

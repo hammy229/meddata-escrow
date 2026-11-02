@@ -658,6 +658,12 @@
                   "description": "With `id`, return the order's receipt (any value). Money fields are 0 for a VOIDED or CANCELLED order."
                 },
                 {
+                  "key": "arbitrate",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "With `id` of a DISPUTED order, return `{ order, recommendation }`, an advisory outcome (refund, release, split or needs_human) with confidence, rationale and evidence. Never moves money; 409 if the order is not DISPUTED."
+                },
+                {
                   "key": "events",
                   "value": "1",
                   "disabled": true,
