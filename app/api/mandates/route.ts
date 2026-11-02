@@ -1,4 +1,4 @@
-// /api/mandates — issue a signed spending mandate (lib/agent/mandate).
+// /api/mandates: issue a signed spending mandate (lib/agent/mandate).
 //
 //   POST { maxTotalCents, maxPerOrderCents?, allowedVendors?, allowedTags?,
 //          buyerId?, expiresAt? }
