@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
+import { tmpdir } from "node:os";
 
 import { withAgentDb } from "../agent/test-db";
 import { issueMandate } from "../agent/mandate";
@@ -249,6 +250,23 @@ test(
 test("bad tool arguments are tool errors, not protocol errors", async () => {
   const r = await call(createSession(), "search_datasets", { study: 5 });
   assert.equal(r.isError, true);
+});
+
+test("a database failure in get_order is a tool error, not a crash", async () => {
+  const saved = process.env.DATABASE_URL;
+  // A directory is not a database file, so opening it throws.
+  process.env.DATABASE_URL = tmpdir();
+  const logged = console.error;
+  console.error = () => {};
+  try {
+    const r = await call(createSession(), "get_order", { orderId: "ord_x" });
+    assert.equal(r.isError, true);
+    assert.equal(r.data.error, "tool failed unexpectedly");
+  } finally {
+    console.error = logged;
+    if (saved === undefined) delete process.env.DATABASE_URL;
+    else process.env.DATABASE_URL = saved;
+  }
 });
 
 test("serveStdio frames one JSON message per line", async () => {

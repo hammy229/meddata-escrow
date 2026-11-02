@@ -309,7 +309,7 @@ async function runTool(
       case "place_escrow_order":
         return await placeEscrowOrder(session, args);
       default:
-        return getOrderTool(args);
+        return await getOrderTool(args);
     }
   } catch (err) {
     console.error(`mcp tool ${name} failed:`, err);
