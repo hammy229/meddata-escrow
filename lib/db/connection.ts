@@ -56,8 +56,11 @@ export function postgresConnection(client: PostgresQueryable): AppDatabase {
     },
   };
 }
-let pool: Pool | undefined;
-let configuredUrl: string | undefined;
+// Kept on globalThis so Next.js hot reloads and separate route bundles share
+// one pool instead of each opening up to `max` connections of their own.
+const shared = globalThis as typeof globalThis & {
+  __meddataPool?: { pool: Pool; url: string };
+};
 export const databaseScope = new AsyncLocalStorage<string>();
 export function appDatabaseUrl(): string | undefined {
   return (
@@ -69,10 +72,11 @@ export function isPostgres(url = appDatabaseUrl()): boolean {
   return !!url && /^postgres(?:ql)?:\/\//.test(url);
 }
 function getPool(url: string): Pool {
-  if (pool && url !== configuredUrl)
+  const existing = shared.__meddataPool;
+  if (existing && url !== existing.url)
     throw new Error("Database configuration changed; restart the application");
-  if (!pool) {
-    pool = new Pool({
+  if (!existing) {
+    const pool = new Pool({
       ...postgresConfig(url, {
         allowLocal: process.env.NODE_ENV !== "production",
         ca: process.env.APP_DATABASE_CA_CERT,
@@ -84,14 +88,14 @@ function getPool(url: string): Pool {
     pool.on("error", () =>
       console.error("App PostgreSQL pool connection error"),
     );
-    configuredUrl = url;
+    shared.__meddataPool = { pool, url };
   }
-  return pool;
+  return shared.__meddataPool!.pool;
 }
 export async function closeAppDatabase(): Promise<void> {
-  if (pool) await pool.end();
-  pool = undefined;
-  configuredUrl = undefined;
+  const existing = shared.__meddataPool;
+  shared.__meddataPool = undefined;
+  if (existing) await existing.pool.end();
 }
 const sqliteQueues = new Map<string, Promise<unknown>>();
 export async function withDb<T>(
@@ -101,10 +105,13 @@ export async function withDb<T>(
   const url = explicitUrl ?? appDatabaseUrl();
   if (isPostgres(url)) {
     const client: PoolClient = await getPool(url!).connect();
+    const db = postgresConnection(client);
     try {
-      return await fn(postgresConnection(client));
+      return await fn(db);
     } finally {
-      client.release();
+      // A connection whose ROLLBACK failed may still be inside a broken
+      // transaction; destroy it rather than hand it to the next request.
+      client.release(brokenConnections.has(db));
     }
   }
   const key = url ?? "default";
@@ -127,6 +134,7 @@ export async function withDb<T>(
   }
 }
 const activeTransactions = new WeakSet<AppDatabase>();
+const brokenConnections = new WeakSet<AppDatabase>();
 export async function transaction<T>(
   db: AppDatabase,
   fn: () => Promise<T>,
@@ -139,7 +147,8 @@ export async function transaction<T>(
     await db.exec("COMMIT");
     return value;
   } catch (err) {
-    await db.exec("ROLLBACK");
+    // Report the error that started this, not a ROLLBACK failure after it.
+    await db.exec("ROLLBACK").catch(() => brokenConnections.add(db));
     throw err;
   } finally {
     activeTransactions.delete(db);
