@@ -22,6 +22,7 @@ export interface QueryPlan {
 }
 
 export interface CompiledQuery {
+  execution?: "postgres" | "mock";
   sql: string;
   plan?: QueryPlan;
   explanation?: string;
@@ -183,6 +184,11 @@ export default function QueryResult({
         <div>
           <div className="mb-2 flex items-center justify-between gap-3">
             <p className="text-sm text-muted">
+              {compiled?.execution === "postgres"
+                ? "Live PostgreSQL · "
+                : compiled?.execution === "mock"
+                  ? "Demo results · "
+                  : ""}
               {rows.length} row{rows.length === 1 ? "" : "s"}
             </p>
             <button

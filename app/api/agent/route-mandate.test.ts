@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { POST } from "./route";
+import { POST } from "./handlers";
 import { withAgentDb } from "../../../lib/agent/test-db";
 import { issueMandate } from "../../../lib/agent/mandate";
 import { resetMandateLedger } from "../../../lib/agent/mandate-ledger";

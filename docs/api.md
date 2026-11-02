@@ -1,5 +1,13 @@
 # API spec, Postman and APIMatic
 
+Workspace endpoints require an HttpOnly `meddata_session` cookie and completed
+account setup. Use `POST /api/auth/signup` or `/api/auth/login`, then
+`POST /api/auth/setup`; see [accounts](accounts.md). Researchers create and
+approve their own purchases; providers deliver their datasets and collect
+payouts. API reads, summaries, edits, and procurement replays enforce ownership.
+The generated Postman demo sequence needs separate authenticated researcher and
+provider sessions. Global demo reset now always returns 403.
+
 The whole HTTP API is described by one OpenAPI 3.1 document,
 [`openapi/openapi.yaml`](../openapi/openapi.yaml). Every other API artifact
 comes from it: the Postman collection, the served spec, and any SDKs or docs
@@ -10,6 +18,12 @@ openapi/openapi.yaml ──┬── GET /api/openapi            (served JSON / 
                        ├── npm run postman:gen  ──►  postman/*.json  ──►  Postman app / Newman
                        └── APIMatic import      ──►  SDKs (TS, Python, Java, …) + API portal
 ```
+
+Providers manage encrypted PostgreSQL sources through `GET|POST|DELETE
+/api/connections`, and publish synthetic cohorts through `POST /api/datasets`.
+Research query responses include `execution: postgres|mock`; source failures
+return errors without a mock fallback or a query charge. See
+[live databases](live-databases.md) for the view and permissions contract.
 
 ## The spec
 

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "MedData Escrow API",
-    "description": "Generated from openapi/openapi.yaml (v0.4.0) by `npm run postman:gen`. Do not edit by hand.\n\nMedData Escrow lets a researcher describe a study in plain English, match it\nto vendor datasets, and buy access through an **escrow** built on PayPal\nauthorize-then-capture. Funds are held (authorized) while the data is\ndelivered, captured once the buyer accepts it, and paid out to the vendor.\nA buyer can dispute while funds are held, and an operator resolves the\ndispute toward capture or void.\n\nAfter delivery the researcher asks plain-English questions. Each question is\nscreened for identifiers, compiled to aggregate-only SQL, re-checked, run\nvendor-side, put through small-cell suppression, and metered per answer at a\nserver-set fee. Metering is kept in our own ledger, not billed through\nPayPal. Each order has a query spend cap (`queryCapCents`, default 1000);\nonce a query would go past it, the server answers `402` and bills nothing.\n\n**All data is synthetic** (Synthea-generated cohorts). No real patient data\nis stored or returned.\n\nThe server, not the client, decides who pays what and who sees what:\nthe escrowed amount is always the dataset's listed price, queries require a\npaid and delivered order, and the per-query fee is fixed server-side.\n\nErrors are always `{ \"error\": string }`, plus `reasons: string[]` on\nprivacy rejections.\n\nRun with `PAYPAL_MODE=mock` to drive the whole escrow arc with no PayPal\ncredentials; responses then carry `mock: true` and `MOCK-*` ids. In mock\nmode the approve link is a local page (`/checkout/mock`), and\n`POST /api/demo/reset` starts the demo over (optionally with sample orders).\n",
+    "description": "Generated from openapi/openapi.yaml (v0.4.0) by `npm run postman:gen`. Do not edit by hand.\n\nMedData Escrow lets a researcher describe a study in plain English, match it\nto vendor datasets, and buy access through an **escrow** built on PayPal\nauthorize-then-capture. Funds are held (authorized) while the data is\ndelivered, captured once the buyer accepts it, and paid out to the vendor.\nA buyer can dispute while funds are held, and an operator resolves the\ndispute toward capture or void.\n\nAfter delivery the researcher asks plain-English questions. Each question is\nscreened for identifiers, compiled to aggregate-only SQL, re-checked, run\nvendor-side, put through small-cell suppression, and metered per answer at a\nserver-set fee. Metering is kept in our own ledger, not billed through\nPayPal. Each order has a query spend cap (`queryCapCents`, default 1000);\nonce a query would go past it, the server answers `402` and bills nothing.\n\n**All data is synthetic** (Synthea-generated cohorts). No real patient data\nis stored or returned.\n\nThe server, not the client, decides who pays what and who sees what:\nthe escrowed amount is always the dataset's listed price, queries require a\npaid and delivered order, and the per-query fee is fixed server-side.\n\nErrors are always `{ \"error\": string }`, plus `reasons: string[]` on\nprivacy rejections.\n\nRun with `PAYPAL_MODE=mock` to drive the whole escrow arc with no PayPal\ncredentials; responses then carry `mock: true` and `MOCK-*` ids. In mock\nmode the approve link is a local page (`/checkout/mock`), and\nshared demo resets are disabled. Accounts and setup are required for workspaces.\nOrder access uses account IDs, and provider access is scoped to the owning vendor.\n",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -406,6 +406,20 @@
       "description": "Health and API metadata.",
       "item": [
         {
+          "name": "Sign up, sign in, sign out, or save account setup",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/{action}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "{action}"]
+            },
+            "description": "Signup takes name, email, password (12–128 characters), and role\n(researcher or vendor). Login takes email and password. Both set an\nHttpOnly session cookie and return a local redirect path. Setup requires\na session and takes organization, purpose (10–2000 characters), and\npayoutEmail (required for vendors). Logout revokes the current session.\nCross-origin writes are rejected. Attempts are rate limited per IP.\n"
+          },
+          "response": []
+        },
+        {
           "name": "Liveness and readiness probe",
           "event": [
             {
@@ -468,30 +482,16 @@
           "response": []
         },
         {
-          "name": "Reset the demo database (mock mode only)",
+          "name": "Shared demo reset is disabled",
           "request": {
             "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/api/demo/reset",
               "host": ["{{baseUrl}}"],
               "path": ["api", "demo", "reset"]
             },
-            "description": "Clears orders, order events, query usage, webhook dedupe rows and agent\nruns, then reseeds the catalog (including its prices), so a live demo\ncan start over between takes. Returns 404 unless `PAYPAL_MODE=mock`.\n\nAn optional JSON body `{ \"seed\": \"story\" }` also inserts six sample\norders in different escrow states (a paid-out sale, a capture, a dispute,\na hold with 2 days left, a void and an unapproved match), all in one\ntransaction with the reset. An empty body is a plain reset. A body with\nany other `seed` value, or invalid JSON, is `422` and nothing is touched.\n",
-            "body": {
-              "mode": "raw",
-              "raw": "{}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
+            "description": "Disabled to prevent erasing other accounts' orders."
           },
           "response": []
         },
@@ -506,6 +506,48 @@
               "path": ["api", "insights"]
             },
             "description": "Aggregates every order, audit event and query charge. Money is bucketed\nby escrow state: `heldCents` is AUTHORIZED, DELIVERED and DISPUTED;\n`releasedCents` is CAPTURED and PAID_OUT; `refundedCents` is VOIDED.\n`gmvCents` is held plus released. `platformFeeCents` is earned only on\nreleased orders. `disputeRate` is orders ever disputed over orders ever\nauthorized. `avgTimeToDeliverHours` is null until an order is delivered.\nAn empty book returns zeros. Never cached.\n"
+          },
+          "response": []
+        },
+        {
+          "name": "Run an isolated mock walkthrough step",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/demo/session/{...path}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "demo", "session", "{...path}"]
+            },
+            "description": "Opaque browser session cookie scopes all reads and writes to temporary synthetic demo data. Reset cannot affect the authenticated app database. Available only in PAYPAL_MODE=mock."
+          },
+          "response": []
+        },
+        {
+          "name": "Run an isolated mock walkthrough step",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/demo/session/{...path}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "demo", "session", "{...path}"]
+            },
+            "description": "Opaque browser session cookie scopes all reads and writes to temporary synthetic demo data. Reset cannot affect the authenticated app database. Available only in PAYPAL_MODE=mock."
+          },
+          "response": []
+        },
+        {
+          "name": "Run an isolated mock walkthrough step",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/demo/session/{...path}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "demo", "session", "{...path}"]
+            },
+            "description": "Opaque browser session cookie scopes all reads and writes to temporary synthetic demo data. Reset cannot affect the authenticated app database. Available only in PAYPAL_MODE=mock."
           },
           "response": []
         }
@@ -526,6 +568,19 @@
               "path": ["api", "datasets"]
             },
             "description": "Returns every listed dataset with the price stored in the database,\nwhich is the price escrow orders charge.\n"
+          },
+          "response": []
+        },
+        {
+          "name": "Publish a synthetic cohort from an owned live PostgreSQL source",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/datasets",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "datasets"]
+            }
           },
           "response": []
         },
@@ -580,6 +635,45 @@
               ]
             },
             "description": "A 0-100 score with a letter grade and five weighted factors (sample\ncheck pass rate, dispute rate, dispute outcomes, delivery speed, order\nvolume), each with a plain-English reason. Rates are shrunk toward a\nneutral prior so tiny histories never look perfect. Pass `vendorId` or\n`datasetId` for one subject; pass neither to list all.\n"
+          },
+          "response": []
+        },
+        {
+          "name": "List owned database connections without credentials",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "connections"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Test and save an encrypted PostgreSQL source, or retest an existing source",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "connections"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Remove an owned connection that has no published datasets",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/connections",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "connections"]
+            }
           },
           "response": []
         }

@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { Inter_Tight, JetBrains_Mono, Spectral } from "next/font/google";
-import DemoBar from "./components/DemoBar";
 import "./globals.css";
 
 // Editorial pairing: Spectral (serif) sets the headlines, Inter Tight carries
@@ -75,10 +74,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${serif.variable} ${sans.variable} ${mono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        {children}
-        <DemoBar />
-      </body>
+      <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );
 }

@@ -171,6 +171,9 @@ export async function checkSample(
   datasetId: string,
   opts: SampleCheckOptions = {},
 ): Promise<SampleCheck> {
+  const { checkLiveSample } = await import("../sources/sample");
+  const live = await checkLiveSample(datasetId);
+  if (live) return live;
   const entry = loadCatalog().find((d) => d.id === datasetId);
   if (!entry) throw new Error(`unknown dataset: ${datasetId}`);
   const profile = sampleProfile(entry);

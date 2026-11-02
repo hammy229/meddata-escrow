@@ -7,7 +7,7 @@
 // the result always covers the whole catalog exactly once. When the LLM is off
 // or the call fails, the deterministic keyword/tag overlap scorer is used
 // instead, so the flow never depends on AWS.
-import { readFileSync } from "node:fs";
+import catalogData from "../../data/catalog.json";
 import * as z from "zod/v4";
 
 import { llmEnabled, structured, type LlmClient } from "../llm/client";
@@ -31,10 +31,8 @@ export interface CatalogEntry {
 
 export type { AiOptions };
 
-const CATALOG_URL = new URL("../../data/catalog.json", import.meta.url);
-
 export function loadCatalog(): CatalogEntry[] {
-  return JSON.parse(readFileSync(CATALOG_URL, "utf8")) as CatalogEntry[];
+  return structuredClone(catalogData) as CatalogEntry[];
 }
 
 // Common English filler that appears in both studies and dataset blurbs
@@ -163,7 +161,8 @@ export async function matchDatasets(
   studyDescription: string,
   opts: AiOptions = {},
 ): Promise<DatasetMatch[]> {
-  const catalog = loadCatalog();
+  const { availableCatalog } = await import("../catalog/live");
+  const catalog = await availableCatalog();
   if (opts.useLlm ?? llmEnabled()) {
     try {
       return await llmMatch(studyDescription, catalog, opts.client);

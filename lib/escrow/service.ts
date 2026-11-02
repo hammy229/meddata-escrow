@@ -49,7 +49,7 @@ import {
   advanceOrder,
   type OrderRow,
   type OrderPatch,
-} from "../db/client";
+} from "../db/store";
 import { mockId, isMockMode } from "../mock/ids";
 import { vendorPayoutCents } from "./fees";
 import { PER_QUERY_FEE_CENTS, MAX_QUERY_CAP_CENTS } from "../query/pricing";
@@ -58,10 +58,8 @@ import {
   type EscrowTransition,
 } from "../events/outbound";
 import { randomUUID } from "node:crypto";
-
 /** Buyer identity when the caller omits it (local demo — no auth layer yet). */
 export const DEFAULT_BUYER_EMAIL = "demo-buyer@meddata.test";
-
 /** Caller-facing actions and the state-machine event each one maps to. */
 const ACTION_EVENT = {
   authorize: "AUTHORIZE",
@@ -72,16 +70,13 @@ const ACTION_EVENT = {
   dispute: "DISPUTE",
   cancel: "CANCEL",
 } as const satisfies Record<string, EscrowEvent>;
-
 export type EscrowAction = keyof typeof ACTION_EVENT | "resolve";
 export type EscrowResolution = "capture" | "void";
-
 /** Every action `advanceEscrowOrder` accepts (for tool schemas / validation). */
 export const ESCROW_ACTIONS: readonly EscrowAction[] = [
   ...(Object.keys(ACTION_EVENT) as (keyof typeof ACTION_EVENT)[]),
   "resolve",
 ];
-
 export type EscrowErrorCode =
   | "VALIDATION" // bad input (422)
   | "NOT_FOUND" // unknown order (404)
@@ -89,7 +84,6 @@ export type EscrowErrorCode =
   | "PRECONDITION" // order lacks a PayPal id / vendor payout email (409)
   | "PAYPAL" // PayPal returned non-2xx (PayPal's status)
   | "NOT_CONFIGURED"; // PayPal credentials missing (503)
-
 /** A typed, expected failure. `status` is an HTTP-ish code; `message` is safe
  *  to show a caller (never credentials or PayPal internals). */
 export class EscrowError extends Error {
@@ -97,13 +91,14 @@ export class EscrowError extends Error {
     readonly status: number,
     message: string,
     readonly code: EscrowErrorCode,
-    options?: { cause?: unknown },
+    options?: {
+      cause?: unknown;
+    },
   ) {
     super(message, options);
     this.name = "EscrowError";
   }
 }
-
 /** Injectable dependencies (tests / alternative wiring). */
 export interface EscrowDeps {
   /** Factory for the real PayPal client; defaults to payPalClientFromEnv. */
@@ -114,7 +109,6 @@ export interface EscrowDeps {
    */
   emit?: (transition: EscrowTransition) => void;
 }
-
 /**
  * Announce a persisted creation/transition. Fire-and-forget: never awaited,
  * never throws into the caller (the money already moved; a lost notification
@@ -141,11 +135,11 @@ export function announce(
     console.error("escrow transition announce failed:", err);
   }
 }
-
 export interface CreateEscrowOrderInput {
   datasetId: string;
   /** Defaults to DEFAULT_BUYER_EMAIL. */
   buyerEmail?: string;
+  accountId?: string;
   /** Optional confirmation of the listed price, in major units (e.g. 49.00). */
   amount?: number;
   currency?: string;
@@ -155,7 +149,6 @@ export interface CreateEscrowOrderInput {
   /** Request origin, used for PayPal return urls when NEXT_PUBLIC_SITE_URL is unset. */
   origin?: string;
 }
-
 export interface CreateEscrowOrderResult {
   /** Our DB order id (`ord_...`). */
   orderId: string;
@@ -169,7 +162,6 @@ export interface CreateEscrowOrderResult {
   reused?: true;
   mock?: true;
 }
-
 export interface AdvanceEscrowOrderInput {
   orderId: string;
   action: EscrowAction;
@@ -180,7 +172,6 @@ export interface AdvanceEscrowOrderInput {
   /** PayPal idempotency key for the money move (PayPal-Request-Id). */
   requestId?: string;
 }
-
 export interface AdvanceEscrowOrderResult {
   /** The persisted row after the transition. */
   order: OrderRow;
@@ -192,9 +183,7 @@ export interface AdvanceEscrowOrderResult {
   status?: string;
   mock?: true;
 }
-
 const MAX_NOTE = 500;
-
 /**
  * Deterministic PayPal-Request-Id for a money move on one of our orders, e.g.
  * `ord_…:capture`. Keyed by the PayPal operation (not the caller's action), so
@@ -207,16 +196,13 @@ export function paypalRequestId(
 ): string {
   return `${orderId}:${operation}`;
 }
-
 /** Payouts sender_batch_id for an order — one payout batch per order, ever. */
 export function payoutSenderBatchId(orderId: string): string {
   return `payout_${orderId}`;
 }
-
 function invalid(message: string): EscrowError {
   return new EscrowError(422, message, "VALIDATION");
 }
-
 /** Map a PayPal/config failure onto an EscrowError; rethrow anything else. */
 function fromPayPalFailure(err: unknown): never {
   if (err instanceof EscrowError) throw err;
@@ -233,12 +219,10 @@ function fromPayPalFailure(err: unknown): never {
     );
   throw err;
 }
-
 /** Local stand-in for PayPal's approval page (app/checkout/mock). */
 function mockApproveUrl(paypalOrderId: string, orderId: string): string {
   return `/checkout/mock?token=${paypalOrderId}&orderId=${orderId}`;
 }
-
 /**
  * PayPal's hosted approval page for an order we created earlier. PayPal only
  * returns the link at creation, so a reused order rebuilds it from the
@@ -249,7 +233,6 @@ function paypalApproveUrl(paypalOrderId: string): string {
   const host = !base || base.includes("sandbox") ? "www.sandbox." : "www.";
   return `https://${host}paypal.com/checkoutnow?token=${paypalOrderId}`;
 }
-
 /**
  * Where PayPal sends the buyer back to after approving or cancelling. Site
  * base is NEXT_PUBLIC_SITE_URL, else the request origin; none = no urls.
@@ -257,7 +240,10 @@ function paypalApproveUrl(paypalOrderId: string): string {
 function returnUrls(
   orderId: string,
   origin: unknown,
-): { returnUrl?: string; cancelUrl?: string } {
+): {
+  returnUrl?: string;
+  cancelUrl?: string;
+} {
   const raw =
     process.env.NEXT_PUBLIC_SITE_URL ||
     (typeof origin === "string" ? origin : "");
@@ -266,7 +252,6 @@ function returnUrls(
   const returnUrl = `${base}/researcher?orderId=${encodeURIComponent(orderId)}`;
   return { returnUrl, cancelUrl: `${returnUrl}&cancelled=1` };
 }
-
 /** Create an escrow order for a dataset at its listed price. */
 export async function createEscrowOrder(
   input: CreateEscrowOrderInput,
@@ -302,12 +287,10 @@ export async function createEscrowOrder(
     typeof input.buyerEmail === "string" && input.buyerEmail.trim() !== ""
       ? input.buyerEmail
       : DEFAULT_BUYER_EMAIL;
-
   // The dataset must exist (orders.dataset_id is a FK) — a clean 422 instead of
   // a DB-level foreign-key throw.
-  const dataset = withDb((db) => getDataset(db, datasetId));
+  const dataset = await withDb(async (db) => await getDataset(db, datasetId));
   if (!dataset) throw invalid(`unknown datasetId: ${datasetId}`);
-
   // The server's listed price is the only source of the escrowed amount. A
   // client amount is compared in cents (no float equality) and must match.
   const amountCents = dataset.price_cents;
@@ -318,14 +301,17 @@ export async function createEscrowOrder(
   )
     throw invalid("amount does not match the listed price");
   const amount = amountCents / 100;
-
   // The same buyer asking again for the same dataset gets their still-
   // unapproved order back instead of a second PayPal order and DB row. An
   // order at an old price (the vendor repriced since) is not reused.
-  const existing = withDb((db) =>
-    listOrders(db, { status: "MATCHED", datasetId, buyerEmail }),
+  const existing = (
+    await withDb(
+      async (db) =>
+        await listOrders(db, { status: "MATCHED", datasetId, buyerEmail }),
+    )
   ).find(
     (o) =>
+      (!input.accountId || o.account_id === input.accountId) &&
       o.paypal_order_id &&
       o.amount_cents === amountCents &&
       (queryCapCents === undefined || o.query_cap_cents === queryCapCents),
@@ -344,18 +330,19 @@ export async function createEscrowOrder(
       ...(isMockMode() ? { mock: true as const } : {}),
     };
   }
-
   if (isMockMode()) {
     const paypalOrderId = mockId("MOCK-ORDER");
-    const order = withDb((db) =>
-      createOrder(db, {
-        datasetId,
-        buyerEmail,
-        amountCents,
-        paypalOrderId,
-        status: "MATCHED",
-        queryCapCents,
-      }),
+    const order = await withDb(
+      async (db) =>
+        await createOrder(db, {
+          datasetId,
+          buyerEmail,
+          accountId: input.accountId,
+          amountCents,
+          paypalOrderId,
+          status: "MATCHED",
+          queryCapCents,
+        }),
     );
     announce(deps, order, "CREATE", null);
     return {
@@ -367,7 +354,6 @@ export async function createEscrowOrder(
       mock: true,
     };
   }
-
   try {
     // Mint our order id up front so the PayPal create call can carry an
     // idempotency key derived from it.
@@ -384,16 +370,18 @@ export async function createEscrowOrder(
       ...returnUrls(orderId, input.origin),
     });
     // Persist only after PayPal confirms the order — no dangling rows.
-    const order = withDb((db) =>
-      createOrder(db, {
-        id: orderId,
-        datasetId,
-        buyerEmail,
-        amountCents,
-        paypalOrderId: ppOrder.orderId,
-        status: "MATCHED",
-        queryCapCents,
-      }),
+    const order = await withDb(
+      async (db) =>
+        await createOrder(db, {
+          id: orderId,
+          datasetId,
+          buyerEmail,
+          accountId: input.accountId,
+          amountCents,
+          paypalOrderId: ppOrder.orderId,
+          status: "MATCHED",
+          queryCapCents,
+        }),
     );
     announce(deps, order, "CREATE", null);
     return {
@@ -407,7 +395,6 @@ export async function createEscrowOrder(
     return fromPayPalFailure(err);
   }
 }
-
 /** Resolve an action (+ resolution) to its state-machine event, or throw 422. */
 function eventFor(action: unknown, resolution: unknown): EscrowEvent {
   if (action === "resolve") {
@@ -423,22 +410,18 @@ function eventFor(action: unknown, resolution: unknown): EscrowEvent {
     throw invalid(`action must be one of: ${ESCROW_ACTIONS.join(", ")}`);
   return event;
 }
-
 /** Advance a stored escrow order by one action. */
 export async function advanceEscrowOrder(
   input: AdvanceEscrowOrderInput,
   deps: EscrowDeps = {},
 ): Promise<AdvanceEscrowOrderResult> {
   const event = eventFor(input.action, input.resolution);
-
   const orderId: unknown = input.orderId;
   if (typeof orderId !== "string" || orderId.trim() === "")
     throw invalid("orderId is required");
-
-  const order = withDb((db) => getOrder(db, orderId));
+  const order = await withDb(async (db) => await getOrder(db, orderId));
   if (!order)
     throw new EscrowError(404, `unknown orderId: ${orderId}`, "NOT_FOUND");
-
   // Validate BEFORE any PayPal call so an illegal move never charges anyone.
   // (advanceOrder re-validates inside the write as well.)
   try {
@@ -450,15 +433,16 @@ export async function advanceEscrowOrder(
       });
     throw err;
   }
-
   const note =
     typeof input.note === "string" && input.note.trim() !== ""
       ? input.note.trim().slice(0, MAX_NOTE)
       : undefined;
   // Persist the advance (optionally patching PayPal ids) once the money move
   // has succeeded, then announce it.
-  const advance = (patch?: OrderPatch) => {
-    const row = withDb((db) => advanceOrder(db, orderId, event, patch, note));
+  const advance = async (patch?: OrderPatch) => {
+    const row = await withDb(
+      async (db) => await advanceOrder(db, orderId, event, patch, note),
+    );
     announce(deps, row, event, order.status);
     return row;
   };
@@ -470,54 +454,52 @@ export async function advanceEscrowOrder(
     escrowState: row.status,
     ...extra,
   });
-
   // DELIVER, DISPUTE and CANCEL are internal state changes — no PayPal, in
   // either mode (a MATCHED order was never authorized, so nothing is held).
   if (event === "DELIVER" || event === "DISPUTE" || event === "CANCEL")
-    return done(advance(), isMockMode() ? { mock: true } : {});
-
+    return done(await advance(), isMockMode() ? { mock: true } : {});
   // MOCK MODE: deterministic-shape ids, no PayPal client, no network.
   if (isMockMode()) {
     if (event === "AUTHORIZE") {
       const authorizationId = mockId("MOCK-AUTH");
-      return done(advance({ authorizationId }), {
+      return done(await advance({ authorizationId }), {
         authorizationId,
         status: "COMPLETED",
         mock: true,
       });
     }
     if (event === "CAPTURE" || event === "RESOLVE_CAPTURE")
-      return done(advance(), {
+      return done(await advance(), {
         captureId: mockId("MOCK-CAP"),
         status: "COMPLETED",
         mock: true,
       });
     if (event === "PAYOUT") {
       const payoutBatchId = mockId("MOCK-PAYOUT");
-      return done(advance({ payoutBatchId }), {
+      return done(await advance({ payoutBatchId }), {
         payoutBatchId,
         status: "PENDING",
         mock: true,
       });
     }
     // VOID or RESOLVE_VOID
-    return done(advance(), { mock: true });
+    return done(await advance(), { mock: true });
   }
-
   // Caller-supplied idempotency key wins; otherwise derive one per operation.
   const requestIdFor = (op: "authorize" | "capture" | "void" | "payout") =>
     typeof input.requestId === "string" && input.requestId.trim() !== ""
       ? input.requestId
       : paypalRequestId(orderId, op);
-
   try {
     const pp = (deps.paypal ?? payPalClientFromEnv)();
     if (event === "PAYOUT") {
       // Pay the dataset's vendor its share (captured amount minus the
       // platform fee) at their PayPal email.
-      const receiver = withDb((db) => {
-        const dataset = getDataset(db, order.dataset_id);
-        return dataset ? getVendor(db, dataset.vendor_id)?.payout_email : null;
+      const receiver = await withDb(async (db) => {
+        const dataset = await getDataset(db, order.dataset_id);
+        return dataset
+          ? (await getVendor(db, dataset.vendor_id))?.payout_email
+          : null;
       });
       if (!receiver)
         throw new EscrowError(
@@ -534,7 +516,7 @@ export async function advanceEscrowOrder(
         emailSubject: "You have a MedData Escrow payout",
         requestId: requestIdFor("payout"),
       });
-      return done(advance({ payoutBatchId: payout.payoutBatchId }), {
+      return done(await advance({ payoutBatchId: payout.payoutBatchId }), {
         payoutBatchId: payout.payoutBatchId,
         status: payout.batchStatus,
       });
@@ -549,7 +531,7 @@ export async function advanceEscrowOrder(
       const auth = await pp.authorizeOrder(order.paypal_order_id, {
         requestId: requestIdFor("authorize"),
       });
-      return done(advance({ authorizationId: auth.authorizationId }), {
+      return done(await advance({ authorizationId: auth.authorizationId }), {
         authorizationId: auth.authorizationId,
         status: auth.status,
       });
@@ -564,7 +546,10 @@ export async function advanceEscrowOrder(
       const cap = await pp.captureAuthorization(order.authorization_id, {
         requestId: requestIdFor("capture"),
       });
-      return done(advance(), { captureId: cap.captureId, status: cap.status });
+      return done(await advance(), {
+        captureId: cap.captureId,
+        status: cap.status,
+      });
     }
     // VOID or RESOLVE_VOID
     if (!order.authorization_id)
@@ -576,7 +561,7 @@ export async function advanceEscrowOrder(
     await pp.voidAuthorization(order.authorization_id, {
       requestId: requestIdFor("void"),
     });
-    return done(advance());
+    return done(await advance());
   } catch (err) {
     return fromPayPalFailure(err);
   }

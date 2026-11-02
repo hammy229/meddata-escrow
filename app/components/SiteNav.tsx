@@ -12,6 +12,7 @@ export const NAV: Array<{ href: string; label: string }> = [
   { href: "/insights", label: "Insights" },
   { href: "/demo", label: "Demo" },
   { href: "/#how", label: "How it works" },
+  { href: "/login", label: "Sign in" },
 ];
 
 export default function SiteNav({ current }: { current: string }) {
@@ -45,7 +46,9 @@ export default function SiteNav({ current }: { current: string }) {
             <span className="text-sm">MedData Escrow</span>
           </Link>
           <div className="flex gap-5 text-sm text-muted">
-            {NAV.slice(1, 3).map((n) => (
+            {NAV.filter((n) =>
+              ["/researcher", "/vendor", "/login"].includes(n.href),
+            ).map((n) => (
               <Link
                 key={n.label}
                 href={n.href}

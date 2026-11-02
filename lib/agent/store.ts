@@ -9,12 +9,10 @@
 // read/write. If it later moves into schema.sql, this statement becomes a
 // harmless no-op. `recommendation_json` keeps the agent's reasoning, the part
 // of a run an auditor most needs.
-import type { DatabaseSync } from "node:sqlite";
-
-import { withDb } from "../db/client";
+import type { AppDatabase as DatabaseSync } from "../db/connection";
+import { withDb } from "../db/store";
 import type { AgentStep } from "./tools";
 import type { AgentRunInput, AgentRunResult } from "./run";
-
 const DDL = `CREATE TABLE IF NOT EXISTS agent_runs (
   id                  TEXT PRIMARY KEY,
   study               TEXT,
@@ -25,11 +23,9 @@ const DDL = `CREATE TABLE IF NOT EXISTS agent_runs (
   recommendation_json TEXT,
   created_at          TEXT DEFAULT CURRENT_TIMESTAMP
 )`;
-
-function ensureTable(db: DatabaseSync): void {
-  db.exec(DDL);
+async function ensureTable(db: DatabaseSync): Promise<void> {
+  await db.exec(DDL);
 }
-
 /** A stored run, as returned by GET /api/agent?runId=. */
 export interface StoredAgentRun {
   runId: string;
@@ -41,7 +37,6 @@ export interface StoredAgentRun {
   recommendation: AgentRunResult["recommendation"] | null;
   createdAt: string;
 }
-
 interface AgentRunRow {
   id: string;
   study: string;
@@ -52,40 +47,41 @@ interface AgentRunRow {
   recommendation_json: string | null;
   created_at: string;
 }
-
 /** Persist one run. Throws if the DB is unavailable (callers decide). */
-export function saveAgentRun(
+export async function saveAgentRun(
   input: AgentRunInput,
   run: AgentRunResult,
   url?: string,
-): void {
-  withDb((db) => {
-    ensureTable(db);
-    db.prepare(
-      `INSERT INTO agent_runs
+): Promise<void> {
+  await withDb(async (db) => {
+    await ensureTable(db);
+    await db
+      .prepare(
+        `INSERT INTO agent_runs
          (id, study, budget_cents, source, order_id, steps_json, recommendation_json)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ).run(
-      run.runId,
-      input.study,
-      input.budgetCents,
-      run.source,
-      run.order?.orderId ?? null,
-      JSON.stringify(run.steps),
-      JSON.stringify(run.recommendation),
-    );
+      )
+      .run(
+        run.runId,
+        input.study,
+        input.budgetCents,
+        run.source,
+        run.order?.orderId ?? null,
+        JSON.stringify(run.steps),
+        JSON.stringify(run.recommendation),
+      );
   }, url);
 }
-
 /** Read one stored run, or undefined if unknown. */
-export function getAgentRun(
+export async function getAgentRun(
   runId: string,
   url?: string,
-): StoredAgentRun | undefined {
-  const row = withDb((db) => {
-    ensureTable(db);
-    return db.prepare(`SELECT * FROM agent_runs WHERE id = ?`).get(runId) as
-      AgentRunRow | undefined;
+): Promise<StoredAgentRun | undefined> {
+  const row = await withDb(async (db) => {
+    await ensureTable(db);
+    return (await db
+      .prepare(`SELECT * FROM agent_runs WHERE id = ?`)
+      .get(runId)) as AgentRunRow | undefined;
   }, url);
   if (!row) return undefined;
   return {

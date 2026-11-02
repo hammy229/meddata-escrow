@@ -7,7 +7,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-
 import {
   openDb,
   createOrder,
@@ -23,14 +22,15 @@ import {
   buildMockWebhookEvent,
   mockWebhookFits,
 } from "./mock-webhook-events";
-
 /** Run `fn` with an order moved through `path`, on an isolated temp DB. */
 function withOrder(
   path: EscrowEvent[],
-  fn: (order: OrderRow) => void,
-  opts: { authorizationId?: string | null } = {},
-): () => void {
-  return () => {
+  fn: (order: OrderRow) => void | Promise<void>,
+  opts: {
+    authorizationId?: string | null;
+  } = {},
+): () => Promise<void> {
+  return async () => {
     const file = join(tmpdir(), `meddata-mockwh-${randomUUID()}.sqlite`);
     const saved = process.env.DATABASE_URL;
     process.env.DATABASE_URL = `file:${file}`;
@@ -55,7 +55,7 @@ function withOrder(
       for (const e of path) advanceOrder(db, order.id, e);
       const current = getOrder(db, order.id)!;
       db.close();
-      fn(current);
+      await fn(current);
     } finally {
       if (saved === undefined) delete process.env.DATABASE_URL;
       else process.env.DATABASE_URL = saved;
@@ -63,7 +63,6 @@ function withOrder(
     }
   };
 }
-
 function stateOf(id: string) {
   const db = openDb();
   try {
@@ -75,11 +74,10 @@ function stateOf(id: string) {
     db.close();
   }
 }
-
 test(
   "capture completed captures a delivered order",
-  withOrder(["AUTHORIZE", "DELIVER"], (order) => {
-    const out = processPayPalWebhookEvent(
+  withOrder(["AUTHORIZE", "DELIVER"], async (order) => {
+    const out = await processPayPalWebhookEvent(
       buildMockWebhookEvent("capture_completed", order),
     );
     assert.equal(out.kind, "applied");
@@ -91,50 +89,45 @@ test(
     );
   }),
 );
-
 test(
   "authorization voided voids an authorized order",
-  withOrder(["AUTHORIZE"], (order) => {
-    const out = processPayPalWebhookEvent(
+  withOrder(["AUTHORIZE"], async (order) => {
+    const out = await processPayPalWebhookEvent(
       buildMockWebhookEvent("authorization_voided", order),
     );
     assert.equal(out.kind, "applied");
     assert.equal(stateOf(order.id).status, "VOIDED");
   }),
 );
-
 test(
   "dispute created opens a dispute on a delivered order",
-  withOrder(["AUTHORIZE", "DELIVER"], (order) => {
-    const out = processPayPalWebhookEvent(
+  withOrder(["AUTHORIZE", "DELIVER"], async (order) => {
+    const out = await processPayPalWebhookEvent(
       buildMockWebhookEvent("dispute_created", order),
     );
     assert.equal(out.kind, "applied");
     assert.equal(stateOf(order.id).status, "DISPUTED");
   }),
 );
-
 test(
   "a repeated event id is a duplicate and changes nothing",
-  withOrder(["AUTHORIZE"], (order) => {
+  withOrder(["AUTHORIZE"], async (order) => {
     const evt = buildMockWebhookEvent("authorization_voided", order);
-    assert.equal(processPayPalWebhookEvent(evt).kind, "applied");
-    assert.equal(processPayPalWebhookEvent(evt).kind, "duplicate");
+    assert.equal((await processPayPalWebhookEvent(evt)).kind, "applied");
+    assert.equal((await processPayPalWebhookEvent(evt)).kind, "duplicate");
     assert.equal(stateOf(order.id).events.length, 3);
   }),
 );
-
 test(
   "an event that is illegal from the current state is ignored, not forced",
-  withOrder([], (order) => {
-    const out = processPayPalWebhookEvent(
+  withOrder([], async (order) => {
+    const out = await processPayPalWebhookEvent(
       buildMockWebhookEvent("capture_completed", order),
     );
     assert.equal(out.kind, "ignored");
     assert.equal(stateOf(order.id).status, "MATCHED");
   }),
 );
-
 test("payloads look like PayPal events and get fresh ids", () => {
   const order = {
     id: "ord_1",
@@ -153,17 +146,23 @@ test("payloads look like PayPal events and get fresh ids", () => {
     assert.equal(typeof a.resource, "object");
   }
   const capture = buildMockWebhookEvent("capture_completed", order);
-  assert.deepEqual((capture.resource as { amount: unknown }).amount, {
-    currency_code: "USD",
-    value: "49.00",
-  });
+  assert.deepEqual(
+    (
+      capture.resource as {
+        amount: unknown;
+      }
+    ).amount,
+    {
+      currency_code: "USD",
+      value: "49.00",
+    },
+  );
   assert.equal(
     buildMockWebhookEvent("capture_completed", order, { eventId: "WH-FIXED" })
       .id,
     "WH-FIXED",
   );
 });
-
 const PATHS: Record<string, EscrowEvent[]> = {
   MATCHED: [],
   AUTHORIZED: ["AUTHORIZE"],
@@ -174,7 +173,6 @@ const PATHS: Record<string, EscrowEvent[]> = {
   VOIDED: ["AUTHORIZE", "VOID"],
   CANCELLED: ["CANCEL"],
 };
-
 // capture_refunded never moves an order (it is always just recorded), so only
 // the kinds that can change state are compared with the processor.
 for (const { kind } of MOCK_WEBHOOK_KINDS.filter(
@@ -183,9 +181,9 @@ for (const { kind } of MOCK_WEBHOOK_KINDS.filter(
   for (const [status, path] of Object.entries(PATHS)) {
     test(
       `mockWebhookFits(${kind}, ${status}) agrees with the processor`,
-      withOrder(path, (order) => {
+      withOrder(path, async (order) => {
         assert.equal(order.status, status);
-        const out = processPayPalWebhookEvent(
+        const out = await processPayPalWebhookEvent(
           buildMockWebhookEvent(kind, order),
         );
         assert.equal(mockWebhookFits(kind, status), out.kind === "applied");
@@ -193,40 +191,40 @@ for (const { kind } of MOCK_WEBHOOK_KINDS.filter(
     );
   }
 }
-
 test("mockWebhookFits is false for an unknown status", () => {
   assert.equal(mockWebhookFits("capture_completed", "NOPE"), false);
 });
-
 test(
   "replaying the identical payload is a duplicate",
-  withOrder(["AUTHORIZE", "DELIVER"], (order) => {
+  withOrder(["AUTHORIZE", "DELIVER"], async (order) => {
     const evt = buildMockWebhookEvent("capture_completed", order);
     const replay = JSON.parse(JSON.stringify(evt));
-    assert.equal(processPayPalWebhookEvent(evt).kind, "applied");
-    assert.equal(processPayPalWebhookEvent(replay).kind, "duplicate");
+    assert.equal((await processPayPalWebhookEvent(evt)).kind, "applied");
+    assert.equal((await processPayPalWebhookEvent(replay)).kind, "duplicate");
     assert.equal(stateOf(order.id).status, "CAPTURED");
   }),
 );
-
 test(
   "authorization created authorizes a matched order and stores the new id",
   withOrder(
     [],
-    (order) => {
+    async (order) => {
       assert.equal(order.authorization_id, null);
       const evt = buildMockWebhookEvent("authorization_created", order);
       const resource = evt.resource as {
         id: string;
-        supplementary_data: { related_ids: { order_id: string } };
+        supplementary_data: {
+          related_ids: {
+            order_id: string;
+          };
+        };
       };
       assert.match(resource.id, /^MOCK-AUTH-/);
       assert.equal(
         resource.supplementary_data.related_ids.order_id,
         "MOCK-ORDER-1",
       );
-
-      const out = processPayPalWebhookEvent(evt);
+      const out = await processPayPalWebhookEvent(evt);
       assert.equal(out.kind, "applied");
       const db = openDb();
       try {
@@ -236,16 +234,15 @@ test(
       } finally {
         db.close();
       }
-      assert.equal(processPayPalWebhookEvent(evt).kind, "duplicate");
+      assert.equal((await processPayPalWebhookEvent(evt)).kind, "duplicate");
     },
     { authorizationId: null },
   ),
 );
-
 test(
   "capture refunded is recorded without moving the order",
-  withOrder(["AUTHORIZE", "DELIVER", "CAPTURE"], (order) => {
-    const out = processPayPalWebhookEvent(
+  withOrder(["AUTHORIZE", "DELIVER", "CAPTURE"], async (order) => {
+    const out = await processPayPalWebhookEvent(
       buildMockWebhookEvent("capture_refunded", order),
     );
     assert.equal(out.kind, "recorded");

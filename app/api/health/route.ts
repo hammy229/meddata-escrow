@@ -7,16 +7,18 @@
 // Runs a trivial read (SELECT 1) through the normal DB path, so a missing or
 // unopenable DATABASE_URL shows up here. `mode` reports PAYPAL_MODE only as
 // mock/live — no credentials, paths, or error details are ever echoed.
-import { withDb } from "../../../lib/db/client";
+import { withDb } from "../../../lib/db/store";
 import { isMockMode } from "../../../lib/mock/ids";
-
 // Never prerender or cache: every probe must actually touch the DB.
 export const dynamic = "force-dynamic";
-
 export async function GET() {
   const mode = isMockMode() ? "mock" : "live";
   try {
-    withDb((db) => db.prepare("SELECT 1 AS ok").get());
+    await withDb(async (db) => {
+      await db.prepare("SELECT 1 AS ok").get();
+      await db.exec("SELECT 1 FROM accounts LIMIT 0");
+      await db.exec("SELECT 1 FROM provider_connections LIMIT 0");
+    });
   } catch (err) {
     // Log server-side for the operator; the response stays generic.
     console.error("health check: db error:", err);

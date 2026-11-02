@@ -3,6 +3,10 @@
 Target: a tight walkthrough under 3 minutes for the demo video. Beats marked
 (optional) can be cut to hold that target.
 
+The public `/demo` walkthrough uses a separate temporary database for each
+browser session. It does not reset authenticated account data. Normal workspace
+APIs require login; `/insights` shows only the signed-in account’s activity.
+
 ## 0. Setup (before recording)
 
 - `npm install && npm run seed && npm run dev:mock`. The whole arc runs with

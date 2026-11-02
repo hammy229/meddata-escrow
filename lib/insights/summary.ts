@@ -284,3 +284,43 @@ export function loadInsights(
     opts,
   );
 }
+
+/** Async application loader; scope private financial figures to the account. */
+export async function loadAppInsights(
+  db: import("../db/connection").AppDatabase,
+  account?: import("../auth/store").Account,
+): Promise<Insights> {
+  const all = async <T>(sql: string) => (await db.prepare(sql).all()) as T[];
+  let orders = await all<InsightOrder & { account_id?: string | null }>(
+    "SELECT id, dataset_id, status, amount_cents, account_id FROM orders",
+  );
+  let datasets = await all<InsightDataset>(
+    "SELECT id, vendor_id, title FROM datasets",
+  );
+  let vendors = await all<InsightVendor>("SELECT id, name FROM vendors");
+  if (account) {
+    if (account.role === "vendor")
+      datasets = datasets.filter((d) => d.vendor_id === account.vendor_id);
+    const datasetIds = new Set(datasets.map((d) => d.id));
+    orders = orders.filter((o) =>
+      account.role === "researcher"
+        ? o.account_id === account.id
+        : datasetIds.has(o.dataset_id),
+    );
+    const purchased = new Set(orders.map((o) => o.dataset_id));
+    if (account.role === "researcher")
+      datasets = datasets.filter((d) => purchased.has(d.id));
+    const vendorIds = new Set(datasets.map((d) => d.vendor_id));
+    vendors = vendors.filter((v) => vendorIds.has(v.id));
+  }
+  const orderIds = new Set(orders.map((o) => o.id));
+  const events = (
+    await all<InsightEvent>(
+      "SELECT order_id, event, created_at FROM order_events",
+    )
+  ).filter((e) => orderIds.has(e.order_id));
+  const usage = (
+    await all<InsightUsage>("SELECT order_id, charge_cents FROM query_usage")
+  ).filter((u) => orderIds.has(u.order_id));
+  return summarizeInsights({ orders, datasets, vendors, events, usage });
+}

@@ -39,6 +39,7 @@ export interface AgentRunInput {
   study: string;
   budgetCents: number;
   buyerEmail?: string;
+  accountId?: string;
   /** A VERIFIED spending mandate (see ./mandate); the buy tool enforces it. */
   mandate?: Mandate;
 }
@@ -304,6 +305,7 @@ export async function runProcurementAgent(
 ): Promise<AgentRunResult> {
   const runId = `run_${randomUUID()}`;
   const ctx = createAgentContext({
+    accountId: input.accountId,
     study: input.study,
     budgetCents: input.budgetCents,
     buyerEmail: input.buyerEmail,

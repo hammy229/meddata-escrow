@@ -9,7 +9,7 @@ import { rmSync } from "node:fs";
 import { openDb } from "../../../lib/db/client";
 import { seedDemoStory } from "../../../lib/db/demo-story";
 import { seedDatabase } from "../../../lib/db/seed";
-import { GET } from "./route";
+import { GET } from "./handlers";
 
 async function withDb(story: boolean, fn: () => Promise<void>): Promise<void> {
   const path = join(tmpdir(), `meddata-insights-${randomUUID()}.sqlite`);

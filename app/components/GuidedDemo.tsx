@@ -26,7 +26,13 @@ interface Done {
   link?: StepOutcome["link"];
 }
 
-const apiFetch = (url: string, init?: RequestInit) => fetch(url, init);
+const apiFetch = (url: string, init?: RequestInit) =>
+  fetch(
+    url
+      .replace("/api/demo/reset", "/api/demo/session/reset")
+      .replace(/^\/api\/(match|orders|query)/, "/api/demo/session/$1"),
+    init,
+  );
 
 function toneClass(t: Fact["tone"]): string {
   return t === "held"
@@ -304,7 +310,8 @@ export default function GuidedDemo() {
               <Link href="/insights" className="underline">
                 Open Insights
               </Link>{" "}
-              to see it in the marketplace totals.
+              to see your account’s activity. This walkthrough uses isolated
+              mock data and does not change your account totals.
             </p>
           )}
           {message && (mode === "halted" || mode === "error") && (

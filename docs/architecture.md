@@ -114,10 +114,11 @@ See [`../lib/db/schema.sql`](../lib/db/schema.sql): `vendors`, `datasets`,
 
 ## Deployment (Render)
 
-Defined in [`../render.yaml`](../render.yaml): a Node 24 web service that seeds
-a SQLite demo database at boot and health-checks `/api/health`. It runs in
+Defined in [`../render.yaml`](../render.yaml): a Node 24 web service that migrates and seeds
+a PostgreSQL app database and health-checks `/api/health`. It runs in
 `PAYPAL_MODE=mock` until PayPal sandbox secrets are added. Secrets are set in the
-Render dashboard, never committed.
+Render dashboard, never committed. Provider sources use encrypted PostgreSQL
+connections and aggregate-only execution; see [live database setup](live-databases.md).
 
 Planned, not used: DynamoDB, AWS Lambda and API Gateway. No code calls them
 today. Amazon S3 is planned for delivery, and `lib/delivery/mock-s3` stands in

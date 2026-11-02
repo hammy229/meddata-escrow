@@ -183,9 +183,11 @@ export default function VendorCatalog() {
   useEffect(() => {
     const first = setTimeout(load, 0);
     const poll = setInterval(load, POLL_MS);
+    window.addEventListener("meddata:catalog-updated", load);
     return () => {
       clearTimeout(first);
       clearInterval(poll);
+      window.removeEventListener("meddata:catalog-updated", load);
     };
   }, [load]);
 
@@ -287,6 +289,18 @@ export default function VendorCatalog() {
           >
             {editError}
           </p>
+        )}
+        {state.status === "ready" && rows.length === 0 && (
+          <div className="mb-6 border border-rule p-6">
+            <h3 className="font-serif text-xl">
+              Your provider workspace is ready
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted">
+              No datasets have been published for your organization yet. Connect
+              a PostgreSQL research view above, then publish a dataset to make
+              it available to researchers.
+            </p>
+          </div>
         )}
         <DataGrid<GridRow>
           rowData={gridRows}

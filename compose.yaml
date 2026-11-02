@@ -1,0 +1,37 @@
+# Optional local PostgreSQL servers for app persistence and synthetic provider data.
+# Development credentials only. Never reuse these passwords in a deployment.
+services:
+  app-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: meddata_escrow
+      POSTGRES_USER: meddata_app
+      POSTGRES_PASSWORD: local-app-only
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - app-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meddata_app -d meddata_escrow"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  provider-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: research
+      POSTGRES_USER: research_admin
+      POSTGRES_PASSWORD: local-admin-only
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - provider-postgres:/var/lib/postgresql/data
+      - ./scripts/db/provider-fixture.sql:/docker-entrypoint-initdb.d/01-research.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U research_admin -d research"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  app-postgres:
+  provider-postgres:

@@ -1,3 +1,5 @@
+import LiveConnections from "../components/LiveConnections";
+import { requireAccount } from "../../lib/auth/page";
 // Vendor workspace (server component shell). The listings load client-side
 // from GET /api/datasets so a repriced listing shows its stored price; the
 // grids and live panels below are client components.
@@ -7,10 +9,10 @@ import VendorCatalog from "../components/VendorCatalog";
 import IncomingOrders from "../components/IncomingOrders";
 import EarningsSummary from "../components/EarningsSummary";
 import OrdersLedger from "../components/OrdersLedger";
-import WebhookSimulator from "../components/WebhookSimulator";
 import { ArrowLeft } from "../components/icons";
 
-export default function VendorPage() {
+export default async function VendorPage() {
+  await requireAccount("vendor");
   return (
     <>
       <SiteNav current="/vendor" />
@@ -32,6 +34,7 @@ export default function VendorPage() {
           </p>
         </div>
 
+        <LiveConnections />
         <VendorCatalog />
 
         <section className="border-t border-rule pt-8 pb-10">
@@ -70,8 +73,6 @@ export default function VendorPage() {
           </p>
           <OrdersLedger />
         </section>
-
-        <WebhookSimulator />
       </main>
     </>
   );

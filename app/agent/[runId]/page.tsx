@@ -1,3 +1,5 @@
+import { requireAccount } from "../../../lib/auth/page";
+import { ownsRun } from "../../../lib/auth/store";
 // Shareable replay of one procurement agent run (server component). Reads the
 // stored run from the audit table and shows what the agent did, which
 // guardrails held, the shortlist and the recommendation. Read-only: nothing
@@ -9,34 +11,32 @@ import { SourceBadge } from "../../components/MatchesGrid";
 import { ArrowLeft, Check, AlertTriangle } from "../../components/icons";
 import { buildReplay } from "../../../lib/agent/replay";
 import { getAgentRun } from "../../../lib/agent/store";
-
 // Runs are created at request time, so this page can never be prerendered.
 export const dynamic = "force-dynamic";
-
 const section = "border-t border-rule pt-8 pb-10";
 const eyebrow =
   "font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase";
-
 function usd(cents: number | null): string {
   return cents === null ? "n/a" : `$${(cents / 100).toFixed(2)}`;
 }
-
 const SAMPLE_LABELS = {
   passed: "Passed",
   failed: "Failed",
   not_run: "Not run",
 };
-
 export default async function AgentReplayPage({
   params,
 }: {
-  params: Promise<{ runId: string }>;
+  params: Promise<{
+    runId: string;
+  }>;
 }) {
   const { runId } = await params;
-  const stored = getAgentRun(runId);
+  const account = await requireAccount("researcher");
+  if (!(await ownsRun(account, runId))) notFound();
+  const stored = await getAgentRun(runId);
   if (!stored) notFound();
   const replay = buildReplay(stored);
-
   return (
     <>
       <SiteNav current="/researcher" />

@@ -91,6 +91,13 @@ test("swallows network errors, non-2xx responses, and timeouts", async () => {
       init.signal?.addEventListener("abort", () => reject(init.signal?.reason)),
     )) as typeof fetch;
   const started = Date.now();
-  await emitEscrowTransition(T, { url, fetch: hang, timeoutMs: 20 });
+  // AbortSignal.timeout uses an unref'ed timer; keep the fake socket alive
+  // just as a real in-flight fetch would, until the abort has been observed.
+  const pendingSocket = setInterval(() => {}, 1000);
+  try {
+    await emitEscrowTransition(T, { url, fetch: hang, timeoutMs: 20 });
+  } finally {
+    clearInterval(pendingSocket);
+  }
   assert.ok(Date.now() - started < 2000);
 });

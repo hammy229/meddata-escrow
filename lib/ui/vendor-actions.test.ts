@@ -13,7 +13,9 @@ test("only legal actions are offered in each state", () => {
         ? ["release", "refund"]
         : state === "AUTHORIZED"
           ? ["deliver"]
-          : [],
+          : state === "CAPTURED"
+            ? ["payout"]
+            : [],
       state,
     );
   }
@@ -25,9 +27,11 @@ test("every offered action is legal in the state machine", () => {
       const event =
         a.id === "deliver"
           ? "DELIVER"
-          : a.resolution === "capture"
-            ? "RESOLVE_CAPTURE"
-            : "RESOLVE_VOID";
+          : a.id === "payout"
+            ? "PAYOUT"
+            : a.resolution === "capture"
+              ? "RESOLVE_CAPTURE"
+              : "RESOLVE_VOID";
       assert.ok(can(state, event), `${a.id} from ${state}`);
     }
   }

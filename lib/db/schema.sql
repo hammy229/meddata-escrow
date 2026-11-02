@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS orders (
   id               TEXT PRIMARY KEY,
   dataset_id       TEXT NOT NULL REFERENCES datasets(id),
   buyer_email      TEXT NOT NULL,
+  account_id       TEXT REFERENCES accounts(id),
   paypal_order_id  TEXT,
   authorization_id TEXT,
   -- PayPal Payouts batch id from paying the vendor (set on PAYOUT). Added to
@@ -90,3 +91,43 @@ CREATE TABLE IF NOT EXISTS paypal_webhook_events (
 -- Read an order's timeline oldest-first (by seq).
 CREATE INDEX IF NOT EXISTS idx_order_events_order
   ON order_events (order_id, seq);
+
+-- Application identity. Passwords use salted scrypt; only session token hashes persist.
+CREATE TABLE IF NOT EXISTS accounts (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  name TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('researcher', 'vendor')),
+  organization TEXT NOT NULL DEFAULT '',
+  purpose TEXT NOT NULL DEFAULT '',
+  payout_email TEXT NOT NULL DEFAULT '',
+  vendor_id TEXT REFERENCES vendors(id),
+  setup_complete INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  expires_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at);
+CREATE TABLE IF NOT EXISTS account_agent_runs (
+  run_id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE
+);
+
+-- Provider credentials are encrypted with an application-held AES-256-GCM key.
+CREATE TABLE IF NOT EXISTS provider_connections (
+  id TEXT PRIMARY KEY,
+  vendor_id TEXT NOT NULL REFERENCES vendors(id),
+  label TEXT NOT NULL,
+  host TEXT NOT NULL,
+  database_name TEXT NOT NULL,
+  schema_name TEXT NOT NULL,
+  table_name TEXT NOT NULL,
+  encrypted_config TEXT NOT NULL,
+  fields_json TEXT NOT NULL,
+  tested_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

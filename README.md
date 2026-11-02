@@ -9,7 +9,7 @@
 
 MedData Escrow is an AI procurement and escrow marketplace for medical research data. Buyers describe the data they need, Amazon Bedrock (Claude) matches relevant dataset listings, PayPal authorizes and holds payment before access is granted, and the vendor delivers through an expiring download link before payment is captured and settled with the seller. That download link is mocked for now; S3 presigned URLs are the planned version.
 
-**Tech stack:** Next.js and React (AG Grid for tables), Amazon Bedrock (Claude, opt-in), PayPal sandbox APIs, and SQLite through Node's `node:sqlite`, deployed on Render. Planned, not used yet: Amazon S3 presigned delivery, DynamoDB, and AWS Lambda with API Gateway.
+**Tech stack:** Next.js and React (AG Grid for tables), Amazon Bedrock (Claude, opt-in), PayPal sandbox APIs, and PostgreSQL for hosted persistence (SQLite through Node's `node:sqlite` for local development), deployed on Render. Planned, not used yet: Amazon S3 presigned delivery, DynamoDB, and AWS Lambda with API Gateway.
 
 **Status:** Actively building for the PayPal AI Hackathon (Devpost deadline: November 12, 2026).
 
@@ -26,6 +26,20 @@ Medical-school researchers waste weeks sourcing data: they can't inspect quality
 - Everything is metered, so researchers pay for exactly what they use.
 
 > ⚕️ **All data is synthetic**, generated with [Synthea](https://github.com/synthetichealth/synthea). **No real patient data** is used anywhere.
+
+## Accounts and setup
+
+Open `/signup` to create a researcher or data-provider account, then complete
+`/setup`. Researchers save their institution and research focus; providers save
+organization and PayPal payout details. Sessions persist in SQLite, and each
+account sees only its own orders and research runs. Provider listings and
+pricing are scoped to their organization. New providers start with an empty
+catalog; connect a PostgreSQL research view and publish synthetic cohorts in the provider workspace.
+
+See [account setup and deployment notes](docs/accounts.md). Email verification,
+password recovery, and MFA remain launch prerequisites. The global demo reset
+endpoint is disabled. Existing CLI/Postman demo sequences require authenticated
+sessions and the appropriate researcher/provider identity for each action.
 
 ## Screens
 
@@ -95,7 +109,7 @@ Added Nov 2 for the PayPal AI Hackathon. All of it runs in mock mode with no key
 | **OpenAPI 3.1**                           | Contract for every route (`openapi/openapi.yaml`, served at `/api/openapi`) with drift tests; Postman collection generated from it                                                 |
 | **Zapier** (outbound webhooks)            | Every escrow transition POSTs a signed event to `OUTBOUND_WEBHOOK_URL` (`lib/events/outbound.ts`)                                                                                  |
 | **AG Grid**                               | Dataset catalog, vendor order queue, ledger and query-result tables in the researcher and vendor workspaces                                                                        |
-| **Render**                                | One-click Blueprint deploy via [`render.yaml`](./render.yaml): seeded SQLite demo, `/api/health` check                                                                             |
+| **Render**                                | One-click Blueprint deploy via [`render.yaml`](./render.yaml): Render PostgreSQL app database, `/api/health` check                                                                 |
 | **Postman**                               | API collection to exercise and demo every endpoint ([`postman/`](./postman))                                                                                                       |
 
 ## Prize map
@@ -301,22 +315,32 @@ npm run dev                       # http://localhost:3000
 
 Production build: `npm run build && npm start`.
 
+For hosted app persistence and live provider sources, see
+[Live databases](docs/live-databases.md). The Render blueprint creates the app
+PostgreSQL database and supplies its URL automatically. Optional local servers
+for both paths are in `compose.yaml`. Run `npm run db:configure` once to generate
+the provider credential encryption key, then `npm run db:migrate` and
+`npm run db:check` after setting `APP_DATABASE_URL`.
+
 ### Environment variables
 
-| Variable                  | Required | Description                                                                            |
-| ------------------------- | :------: | -------------------------------------------------------------------------------------- |
-| `PAYPAL_MODE`             |    no    | `mock` runs the whole escrow arc with no PayPal keys; unset = real sandbox calls       |
-| `PAYPAL_CLIENT_ID`        | sandbox  | PayPal **sandbox** app client ID                                                       |
-| `PAYPAL_CLIENT_SECRET`    | sandbox  | PayPal **sandbox** app secret                                                          |
-| `PAYPAL_API_BASE`         |    no    | PayPal API base (default `https://api-m.sandbox.paypal.com`)                           |
-| `PAYPAL_WEBHOOK_ID`       | webhooks | Webhook id used to verify inbound PayPal webhooks                                      |
-| `LLM_PROVIDER`            |    no    | `bedrock` enables Claude on Amazon Bedrock; unset = deterministic fallbacks            |
-| `AWS_REGION`              | Bedrock  | Bedrock region (default `us-east-1`); credentials from the AWS chain                   |
-| `LLM_MODEL`               |    no    | Bedrock model id override (default `anthropic.claude-opus-5-5`)                        |
-| `DATABASE_URL`            |    ✅    | `file:./data/dev.sqlite` locally; `file:./data/demo.sqlite` on Render (seeded at boot) |
-| `OUTBOUND_WEBHOOK_URL`    |    no    | Receives signed escrow events (e.g. a Zapier Catch Hook)                               |
-| `OUTBOUND_WEBHOOK_SECRET` |    no    | HMAC secret for `X-MedData-Signature` on outbound events                               |
-| `NEXT_PUBLIC_SITE_URL`    |    no    | Absolute site URL for share metadata                                                   |
+| Variable                    | Required | Description                                                                                 |
+| --------------------------- | :------: | ------------------------------------------------------------------------------------------- |
+| `PAYPAL_MODE`               |    no    | `mock` runs the whole escrow arc with no PayPal keys; unset = real sandbox calls            |
+| `PAYPAL_CLIENT_ID`          | sandbox  | PayPal **sandbox** app client ID                                                            |
+| `PAYPAL_CLIENT_SECRET`      | sandbox  | PayPal **sandbox** app secret                                                               |
+| `PAYPAL_API_BASE`           |    no    | PayPal API base (default `https://api-m.sandbox.paypal.com`)                                |
+| `PAYPAL_WEBHOOK_ID`         | webhooks | Webhook id used to verify inbound PayPal webhooks                                           |
+| `LLM_PROVIDER`              |    no    | `bedrock` enables Claude on Amazon Bedrock; unset = deterministic fallbacks                 |
+| `AWS_REGION`                | Bedrock  | Bedrock region (default `us-east-1`); credentials from the AWS chain                        |
+| `LLM_MODEL`                 |    no    | Bedrock model id override (default `anthropic.claude-opus-5-5`)                             |
+| `APP_DATABASE_URL`          |  hosted  | PostgreSQL URL; supplied automatically by the Render blueprint                              |
+| `CONNECTION_ENCRYPTION_KEY` | sources  | 32-byte base64 key; `npm run db:configure` locally, generated on Render                     |
+| `PROVIDER_DATABASE_HOSTS`   | sources  | Exact comma-separated approved source hostnames                                             |
+| `DATABASE_URL`              |    ✅    | SQLite local fallback (`file:./data/dev.sqlite`); hosted PostgreSQL uses `APP_DATABASE_URL` |
+| `OUTBOUND_WEBHOOK_URL`      |    no    | Receives signed escrow events (e.g. a Zapier Catch Hook)                                    |
+| `OUTBOUND_WEBHOOK_SECRET`   |    no    | HMAC secret for `X-MedData-Signature` on outbound events                                    |
+| `NEXT_PUBLIC_SITE_URL`      |    no    | Absolute site URL for share metadata                                                        |
 
 > 🔒 Never commit secrets. Only `.env.example` (with empty placeholders) is tracked.
 

@@ -1,3 +1,4 @@
+import { handleDemoRequest, discardDemoSession } from "../../lib/demo/session";
 // Guided demo spec. The story runs against the REAL route handlers (an
 // in-process fetch that dispatches to them) over an isolated temp database in
 // mock mode, so these tests prove the walkthrough uses no fake data.
@@ -10,10 +11,6 @@ import { rmSync } from "node:fs";
 
 import { openDb } from "../../lib/db/client";
 import { seedDatabase } from "../../lib/db/seed";
-import * as reset from "../api/demo/reset/route";
-import * as match from "../api/match/route";
-import * as orders from "../api/orders/route";
-import * as query from "../api/query/route";
 import {
   STEPS,
   StoryError,
@@ -22,25 +19,30 @@ import {
   type StoryCtx,
 } from "./story";
 
-type Handlers = Record<string, (req: Request) => Promise<Response>>;
-const routes: Record<string, Handlers> = {
-  "/api/demo/reset": reset as unknown as Handlers,
-  "/api/match": match as unknown as Handlers,
-  "/api/orders": orders as unknown as Handlers,
-  "/api/query": query as unknown as Handlers,
-};
-
+let demoCookie = "";
+let demoIp = "";
 const inProcessFetch: Fetcher = async (url, init) => {
   const u = new URL(url, "http://localhost");
-  const handler = routes[u.pathname]?.[(init?.method ?? "GET").toUpperCase()];
-  if (!handler) return new Response("no route", { status: 404 });
-  return handler(new Request(u, init));
+  const path =
+    u.pathname === "/api/demo/reset" ? "reset" : u.pathname.split("/").at(-1)!;
+  const headers = new Headers(init?.headers);
+  headers.set("x-forwarded-for", demoIp);
+  if (demoCookie) headers.set("cookie", demoCookie);
+  const response = await handleDemoRequest(
+    new Request(u, { ...init, headers }),
+    [path],
+  );
+  const setCookie = response.headers.get("set-cookie");
+  if (setCookie) demoCookie = setCookie.split(";")[0];
+  return response;
 };
 
 async function withMockDb(
   mode: string | undefined,
   fn: () => Promise<void>,
 ): Promise<void> {
+  demoCookie = "";
+  demoIp = randomUUID();
   const path = join(tmpdir(), `meddata-story-${randomUUID()}.sqlite`);
   const keys = ["DATABASE_URL", "PAYPAL_MODE", "LLM_PROVIDER"] as const;
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
@@ -54,6 +56,7 @@ async function withMockDb(
   try {
     await fn();
   } finally {
+    discardDemoSession(demoCookie.split("=")[1] ?? "");
     for (const k of keys) {
       if (saved[k] === undefined) delete process.env[k];
       else process.env[k] = saved[k];
@@ -93,6 +96,29 @@ test("the full story plays through the real APIs to a paid-out order", async () 
     const res = await inProcessFetch(`/api/orders?id=${ctx.orderId}`);
     const { order } = await res.json();
     assert.equal(order.status, "PAID_OUT");
+    const applicationDb = openDb();
+    try {
+      assert.equal(
+        (
+          applicationDb.prepare("SELECT COUNT(*) AS n FROM orders").get() as {
+            n: number;
+          }
+        ).n,
+        0,
+        "walkthrough must not change the real application database",
+      );
+    } finally {
+      applicationDb.close();
+    }
+    assert.equal(
+      (
+        await handleDemoRequest(
+          new Request("http://localhost/api/demo/session/orders"),
+          ["orders"],
+        )
+      ).status,
+      401,
+    );
 
     // The hold step reported the held state, the release step the split.
     assert.ok(seen.hold.some((f) => f === "State=AUTHORIZED"));
@@ -147,6 +173,7 @@ test("a failing sample check halts the story and moves no money", async () => {
         });
       return inProcessFetch(url, init);
     };
+    await inProcessFetch("/api/demo/reset", { method: "POST" });
     let ctx = (await runStep("match", ctx0, failing)).ctx;
     const out = await runStep("sample", ctx, failing);
     assert.ok(out.halt, "halts");

@@ -20,7 +20,7 @@ export const STEPS: StepDef[] = [
     id: "reset",
     title: "Start clean",
     caption:
-      "Reset the mock database and load six sample orders, so the marketplace already has history.",
+      "Reset this walkthrough’s isolated mock database and load six sample orders. Your account data stays unchanged.",
   },
   {
     id: "match",
@@ -267,8 +267,8 @@ export async function runStep(
             : []),
         ],
         link: {
-          href: `/researcher?orderId=${orderId}`,
-          label: "Open this order",
+          href: "/researcher",
+          label: "Open your researcher workspace",
         },
       };
     }
@@ -361,7 +361,7 @@ export async function runStep(
           { label: "Query charges", value: usd(r.queryChargesCents) },
           { label: "Total charged", value: usd(r.totalCents) },
         ],
-        link: { href: "/insights", label: "See it in Insights" },
+        link: { href: "/insights", label: "Open your account insights" },
       };
     }
   }

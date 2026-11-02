@@ -1,3 +1,5 @@
+import { sqliteConnection, transaction } from "../db/connection";
+import type { DatabaseSync as SqliteDatabase } from "node:sqlite";
 // Apply a VERIFIED PayPal webhook event to escrow state (framework-free).
 //
 // PayPal is the source of truth for money movement; webhooks tell us about
@@ -14,8 +16,7 @@
 //
 // Signature verification is the caller's job (see verifyPayPalWebhook in
 // lib/paypal/client); never pass an unverified event here.
-import type { DatabaseSync } from "node:sqlite";
-
+import type { AppDatabase as DatabaseSync } from "../db/connection";
 import {
   withDb,
   advanceOrder,
@@ -23,22 +24,33 @@ import {
   recordWebhookEvent,
   type OrderPatch,
   type OrderRow,
-} from "../db/client";
+} from "../db/store";
 import { can, type EscrowEvent, type EscrowState } from "./state-machine";
 import { announce, type EscrowDeps } from "./service";
-
 /** The subset of a PayPal webhook payload we read. */
 interface PayPalWebhookEvent {
   id?: unknown;
   event_type?: unknown;
   resource?: Record<string, unknown>;
 }
-
 /** What processing an event did. */
 export type WebhookOutcome =
-  | { kind: "duplicate"; eventId: string }
-  | { kind: "ignored"; reason: string; eventId?: string; orderId?: string }
-  | { kind: "recorded"; eventId: string; orderId: string; state: EscrowState }
+  | {
+      kind: "duplicate";
+      eventId: string;
+    }
+  | {
+      kind: "ignored";
+      reason: string;
+      eventId?: string;
+      orderId?: string;
+    }
+  | {
+      kind: "recorded";
+      eventId: string;
+      orderId: string;
+      state: EscrowState;
+    }
   | {
       kind: "applied";
       eventId: string;
@@ -47,7 +59,6 @@ export type WebhookOutcome =
       from: EscrowState;
       to: EscrowState;
     };
-
 /** How one PayPal event type maps onto an order. */
 interface EventMapping {
   /** PayPal ids in the resource that may identify our order. */
@@ -59,18 +70,18 @@ interface EventMapping {
   decide?(
     state: EscrowState,
     resource: Record<string, unknown>,
-  ): { event: EscrowEvent; patch?: OrderPatch } | null;
+  ): {
+    event: EscrowEvent;
+    patch?: OrderPatch;
+  } | null;
 }
-
 function str(v: unknown): string | undefined {
   return typeof v === "string" && v !== "" ? v : undefined;
 }
-
 function relatedIds(r: Record<string, unknown>): Record<string, unknown> {
   const supp = r.supplementary_data as Record<string, unknown> | undefined;
   return (supp?.related_ids as Record<string, unknown> | undefined) ?? {};
 }
-
 /** Authorization / capture resources: resource.id + related ids. */
 const paymentRefs = (r: Record<string, unknown>) => [
   str(r.id),
@@ -79,7 +90,6 @@ const paymentRefs = (r: Record<string, unknown>) => [
   // Our own order id, set as purchase_unit.custom_id at creation.
   str(r.custom_id),
 ];
-
 /** Dispute resources: the disputed transactions' ids. */
 const disputeRefs = (r: Record<string, unknown>) => {
   const txs = Array.isArray(r.disputed_transactions)
@@ -93,12 +103,10 @@ const disputeRefs = (r: Record<string, unknown>) => {
     ]),
   ];
 };
-
 const payoutRefs = (r: Record<string, unknown>) => {
   const header = r.batch_header as Record<string, unknown> | undefined;
   return [str(header?.payout_batch_id), str(r.payout_batch_id)];
 };
-
 const MAPPINGS: Record<string, EventMapping> = {
   "PAYMENT.AUTHORIZATION.CREATED": {
     refs: paymentRefs,
@@ -132,32 +140,25 @@ const MAPPINGS: Record<string, EventMapping> = {
   "PAYMENT.PAYOUTSBATCH.SUCCESS": { refs: payoutRefs },
   "PAYMENT.PAYOUTSBATCH.DENIED": { refs: payoutRefs },
 };
-
 /** Event types that need a human to look at them even though no state moves. */
 const ALERT_TYPES = new Set([
   "PAYMENT.CAPTURE.DENIED",
   "PAYMENT.CAPTURE.REFUNDED",
   "PAYMENT.PAYOUTSBATCH.DENIED",
 ]);
-
 /** Run `fn` inside a write transaction (rolls back on throw). */
-function inTransaction<T>(db: DatabaseSync, fn: () => T): T {
-  db.exec("BEGIN IMMEDIATE");
-  try {
-    const out = fn();
-    db.exec("COMMIT");
-    return out;
-  } catch (err) {
-    db.exec("ROLLBACK");
-    throw err;
-  }
-}
-
-/** Apply one verified event using an open DB (exported for tests/reuse). */
-export function applyPayPalWebhookEvent(
+async function inTransaction<T>(
   db: DatabaseSync,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return transaction(db, fn);
+}
+/** Apply one verified event using an open DB (exported for tests/reuse). */
+export async function applyPayPalWebhookEvent(
+  inputDb: DatabaseSync | SqliteDatabase,
   payload: unknown,
-): WebhookOutcome {
+): Promise<WebhookOutcome> {
+  const db = "dialect" in inputDb ? inputDb : sqliteConnection(inputDb);
   const evt = (payload ?? {}) as PayPalWebhookEvent;
   const eventId = str(evt.id);
   const eventType = str(evt.event_type);
@@ -169,19 +170,17 @@ export function applyPayPalWebhookEvent(
     evt.resource && typeof evt.resource === "object" ? evt.resource : {};
   const resourceId = str(resource.id) ?? null;
   const mapping = MAPPINGS[eventType];
-
-  return inTransaction(db, () => {
+  return await inTransaction(db, async () => {
     const order = mapping
-      ? findOrderByPayPalRef(db, mapping.refs(resource))
+      ? await findOrderByPayPalRef(db, mapping.refs(resource))
       : undefined;
-    const isNew = recordWebhookEvent(db, {
+    const isNew = await recordWebhookEvent(db, {
       id: eventId,
       eventType,
       resourceId,
       orderId: order?.id ?? null,
     });
     if (!isNew) return { kind: "duplicate", eventId } as const;
-
     if (!mapping)
       return {
         kind: "ignored",
@@ -198,7 +197,6 @@ export function applyPayPalWebhookEvent(
       console.warn(
         `paypal webhook ${eventId}: ${eventType} for order ${order.id} (state ${order.status}) needs review`,
       );
-
     const decision = mapping.decide?.(order.status, resource) ?? null;
     if (!decision)
       return {
@@ -220,7 +218,7 @@ export function applyPayPalWebhookEvent(
         reason: `${decision.event} not applicable from ${order.status}`,
       } as const;
     }
-    const updated = advanceOrder(
+    const updated = await advanceOrder(
       db,
       order.id,
       decision.event,
@@ -237,16 +235,17 @@ export function applyPayPalWebhookEvent(
     } as const;
   });
 }
-
 /**
  * Apply one verified event against the default DB (DATABASE_URL); an applied
  * transition is announced (outbound webhook) after it commits.
  */
-export function processPayPalWebhookEvent(
+export async function processPayPalWebhookEvent(
   payload: unknown,
   deps: EscrowDeps = {},
-): WebhookOutcome {
-  const outcome = withDb((db) => applyPayPalWebhookEvent(db, payload));
+): Promise<WebhookOutcome> {
+  const outcome = await withDb(
+    async (db) => await applyPayPalWebhookEvent(db, payload),
+  );
   if (outcome.kind === "applied")
     announce(deps, outcome.order, outcome.event, outcome.from);
   return outcome;

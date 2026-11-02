@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { POST } from "./route";
+import { POST } from "./handlers";
 import { verifyMandate } from "../../../lib/agent/mandate";
 import { checkBodySize } from "../../../lib/http/body-limit";
 

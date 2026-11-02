@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
-import { GET } from "./route";
+import { GET } from "./handlers";
 import { openDb } from "../../../lib/db/client";
 
 let url: string;

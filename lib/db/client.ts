@@ -30,6 +30,7 @@ export interface OrderRow {
   id: string;
   dataset_id: string;
   buyer_email: string;
+  account_id: string | null;
   paypal_order_id: string | null;
   authorization_id: string | null;
   /** PayPal Payouts batch id, set when the vendor is paid (PAYOUT). */
@@ -65,6 +66,7 @@ export interface OrderEventRow {
 export interface NewOrder {
   datasetId: string;
   buyerEmail: string;
+  accountId?: string;
   amountCents: number;
   /** Defaults to a generated `ord_<uuid>`. */
   id?: string;
@@ -97,6 +99,16 @@ export function migrate(db: DatabaseSync): void {
   // writes set it explicitly (createOrder/advanceOrder) and fresh DBs get the
   // CURRENT_TIMESTAMP default from schema.sql.
   ensureColumn(db, "orders", "updated_at", "TEXT");
+  ensureColumn(
+    db,
+    "datasets",
+    "source_connection_id",
+    "TEXT REFERENCES provider_connections(id)",
+  );
+  ensureColumn(db, "datasets", "source_dataset_key", "TEXT");
+  ensureColumn(db, "datasets", "record_count", "INTEGER");
+  ensureColumn(db, "datasets", "tags_json", "TEXT");
+  ensureColumn(db, "orders", "account_id", "TEXT REFERENCES accounts(id)");
   // order_events.seq was added after the table shipped; back-fill for dev DBs.
   ensureColumn(db, "order_events", "seq", "INTEGER");
   // order_events.note (dispute reason / resolution note) likewise back-filled.
@@ -147,8 +159,8 @@ export function createOrder(db: DatabaseSync, input: NewOrder): OrderRow {
   const status: EscrowState = input.status ?? "MATCHED";
   db.prepare(
     `INSERT INTO orders
-       (id, dataset_id, buyer_email, paypal_order_id, authorization_id, status, amount_cents, query_cap_cents, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+       (id, dataset_id, buyer_email, paypal_order_id, authorization_id, status, amount_cents, query_cap_cents, updated_at, account_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)`,
   ).run(
     id,
     input.datasetId,
@@ -158,6 +170,7 @@ export function createOrder(db: DatabaseSync, input: NewOrder): OrderRow {
     status,
     input.amountCents,
     input.queryCapCents ?? DEFAULT_QUERY_CAP_CENTS,
+    input.accountId ?? null,
   );
   // Genesis audit row: from_state null, event CREATE, to_state the initial state.
   insertOrderEvent(db, id, "CREATE", null, status);

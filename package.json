@@ -17,8 +17,13 @@
     "seed": "tsx lib/db/seed.ts",
     "test": "node --import tsx --test \"lib/**/*.test.ts\" \"app/**/*.test.ts\" \"scripts/**/*.test.ts\"",
     "postman:gen": "tsx scripts/openapi/to-postman.ts && prettier --write postman/*.json",
-    "mcp": "node --import tsx --env-file-if-exists=.env.local scripts/mcp-server.ts",
-    "demo": "node --import tsx --env-file-if-exists=.env.local scripts/happy-path.ts"
+    "demo": "node --import tsx --env-file-if-exists=.env.local scripts/happy-path.ts",
+    "db:migrate": "node --import tsx --env-file-if-exists=.env.local scripts/db/migrate.ts",
+    "db:check": "node --import tsx --env-file-if-exists=.env.local scripts/db/check.ts",
+    "db:seed": "node --import tsx --env-file-if-exists=.env.local scripts/db/seed.ts",
+    "db:configure": "node --import tsx --env-file-if-exists=.env.local scripts/db/configure.ts",
+    "db:import-sqlite": "node --import tsx --env-file-if-exists=.env.local scripts/db/import-sqlite.ts",
+    "mcp": "node --import tsx --env-file-if-exists=.env.local scripts/mcp-server.ts"
   },
   "dependencies": {
     "@anthropic-ai/bedrock-sdk": "^1.0.0",
@@ -26,13 +31,16 @@
     "ag-grid-community": "^36.2.0",
     "ag-grid-react": "^36.2.0",
     "next": "16.4.2",
+    "pg": "^8.23.1",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.14",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

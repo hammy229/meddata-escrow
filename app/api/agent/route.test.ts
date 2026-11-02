@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { GET, POST } from "./route";
+import { GET, POST } from "./handlers";
 import { withAgentDb } from "../../../lib/agent/test-db";
 import { getOrder, withDb } from "../../../lib/db/client";
 

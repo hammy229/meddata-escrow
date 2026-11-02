@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
-import { GET, PATCH } from "./route";
+import { GET, PATCH } from "./handlers";
 import { openDb } from "../../../lib/db/client";
 import { seedDatabase } from "../../../lib/db/seed";
 

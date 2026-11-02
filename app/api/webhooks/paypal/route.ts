@@ -19,15 +19,21 @@
 // header `x-mock-webhook: 1` (no PayPal account needed).
 import { verifyPayPalWebhook } from "../../../../lib/paypal/client";
 import { processPayPalWebhookEvent } from "../../../../lib/escrow/paypal-webhooks";
-
 export async function POST(request: Request) {
+  if (
+    process.env.PAYPAL_MODE === "mock" &&
+    process.env.NODE_ENV === "production"
+  )
+    return Response.json(
+      { error: "Mock webhooks are disabled on deployed instances" },
+      { status: 403 },
+    );
   const rawBody = await request.text();
   if (!(await verifyPayPalWebhook(request.headers, rawBody)))
     return Response.json(
       { error: "webhook signature not verified" },
       { status: 401 },
     );
-
   let payload: unknown;
   try {
     payload = JSON.parse(rawBody);
@@ -36,9 +42,8 @@ export async function POST(request: Request) {
     console.warn("paypal webhook: verified body is not JSON");
     return Response.json({ ignored: true, reason: "body is not JSON" });
   }
-
   try {
-    const outcome = processPayPalWebhookEvent(payload);
+    const outcome = await processPayPalWebhookEvent(payload);
     switch (outcome.kind) {
       case "duplicate":
         return Response.json({ duplicate: true });

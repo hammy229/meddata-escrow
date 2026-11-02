@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { rmSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
-import { POST } from "./route";
+import { POST } from "./handlers";
 import { openDb, createOrder } from "../../../lib/db/client";
 import { listUsage } from "../../../lib/db/usage";
 import type { EscrowState } from "../../../lib/escrow/state-machine";

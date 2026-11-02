@@ -2,13 +2,13 @@
 // the UI can never offer a move the server would refuse (409).
 import { can, isEscrowState } from "../escrow/state-machine";
 
-export type VendorActionId = "deliver" | "release" | "refund";
+export type VendorActionId = "deliver" | "release" | "refund" | "payout";
 
 export interface VendorAction {
   id: VendorActionId;
   label: string;
   /** PATCH /api/orders body fields for this action. */
-  action: "deliver" | "resolve";
+  action: "deliver" | "resolve" | "payout";
   resolution?: "capture" | "void";
 }
 
@@ -18,6 +18,9 @@ export function vendorActionsFor(status: unknown): VendorAction[] {
   const out: VendorAction[] = [];
   if (can(status, "DELIVER")) {
     out.push({ id: "deliver", label: "Deliver data", action: "deliver" });
+  }
+  if (can(status, "PAYOUT")) {
+    out.push({ id: "payout", label: "Collect payout", action: "payout" });
   }
   if (can(status, "RESOLVE_CAPTURE")) {
     out.push({

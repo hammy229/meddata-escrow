@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { rmSync } from "node:fs";
 import { randomUUID, createHash } from "node:crypto";
 
-import { GET, POST, PATCH } from "./route";
+import { GET, POST, PATCH } from "./handlers";
 import { recordUsage, PER_QUERY_FEE_CENTS } from "../../../lib/db/usage";
 import {
   openDb,

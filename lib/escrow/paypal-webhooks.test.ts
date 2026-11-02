@@ -4,7 +4,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { DatabaseSync } from "node:sqlite";
-
 import {
   openDb,
   createOrder,
@@ -14,7 +13,6 @@ import {
 } from "../db/client";
 import type { EscrowState } from "./state-machine";
 import { applyPayPalWebhookEvent } from "./paypal-webhooks";
-
 function freshDb() {
   const db = openDb(":memory:");
   db.prepare(`INSERT INTO vendors (id, name) VALUES (?, ?)`).run(
@@ -26,7 +24,6 @@ function freshDb() {
   ).run("ds_x", "vnd_demo_health", "Test Dataset", 100);
   return db;
 }
-
 /** An order linked to PayPal order PP-1 / authorization AUTH-1, at `state`. */
 function orderAt(db: DatabaseSync, state: EscrowState) {
   const order = createOrder(db, {
@@ -45,25 +42,22 @@ function orderAt(db: DatabaseSync, state: EscrowState) {
   for (const event of path[state]) advanceOrder(db, order.id, event);
   return getOrder(db, order.id)!;
 }
-
 let seq = 0;
 const evt = (event_type: string, resource: Record<string, unknown>) => ({
   id: `WH-${++seq}`,
   event_type,
   resource,
 });
-
-test("AUTHORIZATION.CREATED authorizes a MATCHED order and stores the auth id", () => {
+test("AUTHORIZATION.CREATED authorizes a MATCHED order and stores the auth id", async () => {
   const db = freshDb();
   const order = orderAt(db, "MATCHED");
-  const out = applyPayPalWebhookEvent(
+  const out = await applyPayPalWebhookEvent(
     db,
     evt("PAYMENT.AUTHORIZATION.CREATED", {
       id: "AUTH-NEW",
       supplementary_data: { related_ids: { order_id: "PP-1" } },
     }),
   );
-
   assert.equal(out.kind, "applied");
   const stored = getOrder(db, order.id)!;
   assert.equal(stored.status, "AUTHORIZED");
@@ -74,11 +68,10 @@ test("AUTHORIZATION.CREATED authorizes a MATCHED order and stores the auth id", 
   );
   db.close();
 });
-
-test("AUTHORIZATION.CREATED on an already-authorized order is record-only", () => {
+test("AUTHORIZATION.CREATED on an already-authorized order is record-only", async () => {
   const db = freshDb();
   const order = orderAt(db, "AUTHORIZED");
-  const out = applyPayPalWebhookEvent(
+  const out = await applyPayPalWebhookEvent(
     db,
     evt("PAYMENT.AUTHORIZATION.CREATED", { id: "AUTH-1" }),
   );
@@ -88,11 +81,10 @@ test("AUTHORIZATION.CREATED on an already-authorized order is record-only", () =
   );
   db.close();
 });
-
-test("a capture carrying only our custom_id still finds and applies to the order", () => {
+test("a capture carrying only our custom_id still finds and applies to the order", async () => {
   const db = freshDb();
   const order = orderAt(db, "DELIVERED");
-  const out = applyPayPalWebhookEvent(
+  const out = await applyPayPalWebhookEvent(
     db,
     evt("PAYMENT.CAPTURE.COMPLETED", { id: "CAP-X", custom_id: order.id }),
   );
@@ -100,11 +92,10 @@ test("a capture carrying only our custom_id still finds and applies to the order
   assert.equal(getOrder(db, order.id)!.status, "CAPTURED");
   db.close();
 });
-
-test("a void during a dispute resolves the dispute as RESOLVE_VOID", () => {
+test("a void during a dispute resolves the dispute as RESOLVE_VOID", async () => {
   const db = freshDb();
   const order = orderAt(db, "DISPUTED");
-  const out = applyPayPalWebhookEvent(
+  const out = await applyPayPalWebhookEvent(
     db,
     evt("PAYMENT.AUTHORIZATION.VOIDED", { id: "AUTH-1" }),
   );
@@ -113,11 +104,10 @@ test("a void during a dispute resolves the dispute as RESOLVE_VOID", () => {
   assert.equal(getOrder(db, order.id)!.status, "VOIDED");
   db.close();
 });
-
-test("a capture during a dispute resolves the dispute as RESOLVE_CAPTURE", () => {
+test("a capture during a dispute resolves the dispute as RESOLVE_CAPTURE", async () => {
   const db = freshDb();
   const order = orderAt(db, "DISPUTED");
-  const out = applyPayPalWebhookEvent(
+  const out = await applyPayPalWebhookEvent(
     db,
     evt("PAYMENT.CAPTURE.COMPLETED", {
       id: "CAP-1",
@@ -128,11 +118,10 @@ test("a capture during a dispute resolves the dispute as RESOLVE_CAPTURE", () =>
   assert.equal(getOrder(db, order.id)!.status, "CAPTURED");
   db.close();
 });
-
-test("DISPUTE.CREATED finds the order through disputed_transactions", () => {
+test("DISPUTE.CREATED finds the order through disputed_transactions", async () => {
   const db = freshDb();
   const order = orderAt(db, "DELIVERED");
-  const out = applyPayPalWebhookEvent(
+  const out = await applyPayPalWebhookEvent(
     db,
     evt("CUSTOMER.DISPUTE.CREATED", {
       id: "PP-D-1",
@@ -143,11 +132,10 @@ test("DISPUTE.CREATED finds the order through disputed_transactions", () => {
   assert.equal(getOrder(db, order.id)!.status, "DISPUTED");
   db.close();
 });
-
-test("alert types (e.g. CAPTURE.REFUNDED) are recorded, never applied", () => {
+test("alert types (e.g. CAPTURE.REFUNDED) are recorded, never applied", async () => {
   const db = freshDb();
   const order = orderAt(db, "DELIVERED");
-  const out = applyPayPalWebhookEvent(
+  const out = await applyPayPalWebhookEvent(
     db,
     evt("PAYMENT.CAPTURE.REFUNDED", { id: "AUTH-1" }),
   );
@@ -155,8 +143,7 @@ test("alert types (e.g. CAPTURE.REFUNDED) are recorded, never applied", () => {
   assert.equal(getOrder(db, order.id)!.status, "DELIVERED");
   db.close();
 });
-
-test("an event without id or event_type is ignored and not stored", () => {
+test("an event without id or event_type is ignored and not stored", async () => {
   const db = freshDb();
   for (const payload of [
     null,
@@ -164,24 +151,24 @@ test("an event without id or event_type is ignored and not stored", () => {
     { id: "WH-x" },
     { event_type: "PAYMENT.CAPTURE.COMPLETED" },
   ]) {
-    const out = applyPayPalWebhookEvent(db, payload);
+    const out = await applyPayPalWebhookEvent(db, payload);
     assert.equal(out.kind, "ignored");
   }
   const n = db
     .prepare(`SELECT COUNT(*) AS n FROM paypal_webhook_events`)
-    .get() as { n: number };
+    .get() as {
+    n: number;
+  };
   assert.equal(n.n, 0);
   db.close();
 });
-
-test("a replay of an applied event is a duplicate and moves nothing", () => {
+test("a replay of an applied event is a duplicate and moves nothing", async () => {
   const db = freshDb();
   const order = orderAt(db, "AUTHORIZED");
   const payload = evt("PAYMENT.AUTHORIZATION.VOIDED", { id: "AUTH-1" });
-  assert.equal(applyPayPalWebhookEvent(db, payload).kind, "applied");
+  assert.equal((await applyPayPalWebhookEvent(db, payload)).kind, "applied");
   const events = listOrderEvents(db, order.id).length;
-
-  assert.equal(applyPayPalWebhookEvent(db, payload).kind, "duplicate");
+  assert.equal((await applyPayPalWebhookEvent(db, payload)).kind, "duplicate");
   assert.equal(listOrderEvents(db, order.id).length, events);
   db.close();
 });

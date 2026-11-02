@@ -1,3 +1,4 @@
+import { requireAccount } from "../../lib/auth/page";
 // Marketplace insights (server component shell). The figures load client-side
 // from GET /api/insights so they stay live while orders move.
 import type { Metadata } from "next";
@@ -12,7 +13,8 @@ export const metadata: Metadata = {
     "Money held in escrow versus released, platform fees, dispute rate and the top vendors and datasets.",
 };
 
-export default function InsightsPage() {
+export default async function InsightsPage() {
+  await requireAccount();
   return (
     <>
       <SiteNav current="/insights" />

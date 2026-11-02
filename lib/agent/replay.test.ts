@@ -1,11 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-
 import { buildReplay, summarize } from "./replay";
 import type { StoredAgentRun } from "./store";
-
 const at = "2026-10-29T00:00:00.000Z";
-
 const run: StoredAgentRun = {
   runId: "run_abc",
   study: "Cardiology outcomes",
@@ -54,7 +51,6 @@ const run: StoredAgentRun = {
     },
   ],
 };
-
 test("steps are numbered, labelled and mark refusals", () => {
   const r = buildReplay(run);
   assert.deepEqual(
@@ -69,7 +65,6 @@ test("steps are numbered, labelled and mark refusals", () => {
   assert.match(r.steps[0].detail, /matches: 1/);
   assert.match(r.steps[1].detail, /^Refused: no passing sample check/);
 });
-
 test("guardrails show which ones fired", () => {
   const g = Object.fromEntries(
     buildReplay(run).guardrails.map((x) => [x.label, x]),
@@ -85,7 +80,6 @@ test("guardrails show which ones fired", () => {
   assert.equal(g["No duplicate purchase"].status, "enforced");
   assert.equal(g["No money movement"].status, "enforced");
 });
-
 test("the sample check limit guardrail fires on a refused fourth check", () => {
   const limited: StoredAgentRun = {
     ...run,
@@ -114,7 +108,6 @@ test("the sample check limit guardrail fires on a refused fourth check", () => {
     "enforced",
   );
 });
-
 test("the duplicate purchase guardrail fires when the buyer already owns it", () => {
   const dup: StoredAgentRun = {
     ...run,
@@ -134,7 +127,6 @@ test("the duplicate purchase guardrail fires when the buyer already owns it", ()
   );
   assert.equal(g["No duplicate purchase"].status, "triggered");
 });
-
 test("recommendation, shortlist, order and timestamp come through", () => {
   const r = buildReplay(run);
   assert.equal(r.createdAt, "2026-10-29 14:03:00 UTC");
@@ -147,7 +139,6 @@ test("recommendation, shortlist, order and timestamp come through", () => {
   assert.equal(r.shortlist[0].datasetId, "ds_a");
   assert.equal(r.shortlist[0].chosen, true);
 });
-
 test("a run with no recommendation or steps still builds", () => {
   const r = buildReplay({
     ...run,
@@ -165,7 +156,6 @@ test("a run with no recommendation or steps still builds", () => {
   });
   assert.equal(r.createdAt, "odd");
 });
-
 test("summarize skips prose, nulls and nested objects", () => {
   assert.equal(
     summarize({ a: 1, description: "long", b: null, c: { d: 1 }, e: [1, 2] }),
