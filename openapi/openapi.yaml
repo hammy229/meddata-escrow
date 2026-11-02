@@ -1121,6 +1121,54 @@ paths:
         "500":
           $ref: "#/components/responses/InternalError"
 
+  /api/trust:
+    get:
+      tags: [Catalog]
+      operationId: getTrust
+      summary: Explainable trust scores for vendors and datasets
+      description: |
+        A 0-100 score with a letter grade and five weighted factors (sample
+        check pass rate, dispute rate, dispute outcomes, delivery speed, order
+        volume), each with a plain-English reason. Rates are shrunk toward a
+        neutral prior so tiny histories never look perfect. Pass `vendorId` or
+        `datasetId` for one subject; pass neither to list all.
+      parameters:
+        - { name: vendorId, in: query, required: false, schema: { type: string } }
+        - { name: datasetId, in: query, required: false, schema: { type: string } }
+      responses:
+        "200":
+          description: One subject's trust (`vendorId` or `datasetId` mode) or the full list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vendorId: { type: string }
+                  datasetId: { type: string }
+                  name: { type: string }
+                  title: { type: string }
+                  trust: { $ref: "#/components/schemas/TrustScore" }
+                  vendors:
+                    type: array
+                    items: { type: object }
+                  datasets:
+                    type: array
+                    items: { type: object }
+        "404":
+          description: Unknown vendor or dataset id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Both `vendorId` and `datasetId` were given.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
   /api/demo/reset:
     post:
       tags: [System]
@@ -1291,6 +1339,33 @@ components:
           VOIDED,
           CANCELLED,
         ]
+    TrustScore:
+      type: object
+      required: [score, grade, factors]
+      properties:
+        score: { type: integer, minimum: 0, maximum: 100 }
+        grade: { type: string, enum: [A, B, C, D, F] }
+        factors:
+          type: array
+          items:
+            type: object
+            required: [key, label, weight, value, points, reason]
+            properties:
+              key:
+                type: string
+                enum:
+                  [
+                    sampleChecks,
+                    disputeRate,
+                    disputeOutcomes,
+                    deliverySpeed,
+                    volume,
+                  ]
+              label: { type: string }
+              weight: { type: number }
+              value: { type: number, minimum: 0, maximum: 1 }
+              points: { type: number }
+              reason: { type: string }
     Error:
       type: object
       required: [error]

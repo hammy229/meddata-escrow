@@ -542,6 +542,32 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "Explainable trust scores for vendors and datasets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/trust",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "trust"],
+              "query": [
+                {
+                  "key": "vendorId",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "datasetId",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "A 0-100 score with a letter grade and five weighted factors (sample\ncheck pass rate, dispute rate, dispute outcomes, delivery speed, order\nvolume), each with a plain-English reason. Rates are shrunk toward a\nneutral prior so tiny histories never look perfect. Pass `vendorId` or\n`datasetId` for one subject; pass neither to list all.\n"
+          },
+          "response": []
         }
       ]
     },
