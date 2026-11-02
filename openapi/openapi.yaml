@@ -1684,6 +1684,8 @@ paths:
           description: Start the walkthrough first.
         "404":
           description: Unknown step or mock mode disabled.
+        "422":
+          description: Reset body is not empty, `{}` or `{"seed":"story"}`.
         "429":
           description: Too many walkthrough requests.
     patch:

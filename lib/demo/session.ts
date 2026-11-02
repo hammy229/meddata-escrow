@@ -21,6 +21,27 @@ const routes: Record<
   string,
   Partial<Record<string, (req: Request) => Promise<Response>>>
 > = { match, orders, query };
+/** An empty body or `{}` is a plain reset; `{"seed":"story"}` seeds the story
+ * orders. Anything else is a typo we should report, not silently reset. */
+async function readSeed(
+  request: Request,
+): Promise<{ story: boolean } | { error: string }> {
+  const text = (await request.text()).trim();
+  if (!text) return { story: false };
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return { error: "Body must be JSON" };
+  }
+  if (body === null || typeof body !== "object" || Array.isArray(body))
+    return { error: 'Body must be an object like {"seed":"story"}' };
+  const seed = (body as { seed?: unknown }).seed;
+  if (seed === undefined) return { story: false };
+  if (seed === "story") return { story: true };
+  return { error: 'Unknown seed; the only one is "story"' };
+}
+
 export async function handleDemoRequest(request: Request, path: string[]) {
   if (process.env.PAYPAL_MODE !== "mock")
     return NextResponse.json(
@@ -53,6 +74,10 @@ export async function handleDemoRequest(request: Request, path: string[]) {
     ?.slice(cookie.length + 1);
   let id = supplied && /^[a-f0-9]{64}$/.test(supplied) ? supplied : undefined;
   if (reset) {
+    // Check the body before touching any file, so a bad request changes nothing.
+    const seed = await readSeed(request);
+    if ("error" in seed)
+      return NextResponse.json({ error: seed.error }, { status: 422 });
     mkdirSync(root, { recursive: true, mode: 0o700 });
     const files = readdirSync(root).filter((f) =>
       /^[a-f0-9]{64}\.sqlite$/.test(f),
@@ -72,9 +97,8 @@ export async function handleDemoRequest(request: Request, path: string[]) {
       );
     id ??= randomBytes(32).toString("hex");
     const db = openDb(join(root, `${id}.sqlite`));
-    const body = await request.json().catch(() => null);
     try {
-      resetDemoData(db, { story: body?.seed === "story" });
+      resetDemoData(db, { story: seed.story });
     } finally {
       db.close();
     }
