@@ -53,7 +53,7 @@ type GridRow = OrderGridRow | DetailRow;
 
 const POLL_MS = 5000;
 const ROW_HEIGHT = 56;
-// Disputed rows stack the resolution note above the two resolve buttons.
+// Disputed rows stack the resolution note above the refund button.
 const DISPUTE_ROW_HEIGHT = 96;
 const DETAIL_HEIGHT = 300;
 
@@ -325,8 +325,8 @@ export default function IncomingOrders() {
     setNotes((prev) => ({ ...prev, [orderId]: text }));
   }, []);
 
-  // Deliver an authorized order, or resolve a disputed one: capture releases
-  // the held funds to the vendor, void refunds the buyer. A resolution note is
+  // Deliver an authorized order, or settle a disputed one by refunding the
+  // buyer (only the buyer can release disputed funds). A resolution note is
   // sent as PATCH `note`. On success we refetch so the row reflects the DB.
   const act = useCallback(
     async (orderId: string, a: VendorAction) => {
@@ -347,8 +347,8 @@ export default function IncomingOrders() {
           setMessage(
             a.id === "deliver"
               ? `Data delivered (${data.escrowState ?? "DELIVERED"}).`
-              : a.id === "release"
-                ? `Dispute resolved — funds released to vendor (${data.escrowState ?? "CAPTURED"}).`
+              : a.id === "payout"
+                ? `Payout sent (${data.escrowState ?? "PAID_OUT"}).`
                 : `Dispute resolved — buyer refunded (${data.escrowState ?? "VOIDED"}).`,
           );
           setNotes((prev) => {

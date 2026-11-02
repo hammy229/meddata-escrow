@@ -292,6 +292,34 @@ test("persistent account lifecycle and API isolation", async (t) => {
         assert.equal(untouched.order.status, "MATCHED");
       },
     );
+    await t.test("only the side giving in can settle a dispute", async () => {
+      const created = await ordersPost(
+        req("/api/orders", otherToken, "POST", { datasetId: "ds_owned" }),
+      );
+      const { orderId } = await created.json();
+      for (const [action, actor] of [
+        ["authorize", otherToken],
+        ["deliver", vendorToken],
+        ["dispute", otherToken],
+      ]) {
+        const step = await ordersPatch(
+          req("/api/orders", actor, "PATCH", { orderId, action }),
+        );
+        assert.equal(step.status, 200, `${action}: ${await step.text()}`);
+      }
+      const settle = (actor: string, resolution: string) =>
+        ordersPatch(
+          req("/api/orders", actor, "PATCH", {
+            orderId,
+            action: "resolve",
+            resolution,
+          }),
+        );
+      assert.equal((await settle(vendorToken, "capture")).status, 403);
+      assert.equal((await settle(otherToken, "void")).status, 403);
+      const released = await (await settle(otherToken, "capture")).json();
+      assert.equal(released.escrowState, "CAPTURED");
+    });
     await t.test(
       "researcher and provider can complete the authenticated escrow lifecycle",
       async () => {

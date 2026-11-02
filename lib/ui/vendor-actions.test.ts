@@ -10,7 +10,7 @@ test("only legal actions are offered in each state", () => {
     assert.deepEqual(
       ids,
       state === "DISPUTED"
-        ? ["release", "refund"]
+        ? ["refund"]
         : state === "AUTHORIZED"
           ? ["deliver"]
           : state === "CAPTURED"
@@ -29,21 +29,20 @@ test("every offered action is legal in the state machine", () => {
           ? "DELIVER"
           : a.id === "payout"
             ? "PAYOUT"
-            : a.resolution === "capture"
-              ? "RESOLVE_CAPTURE"
-              : "RESOLVE_VOID";
+            : "RESOLVE_VOID";
       assert.ok(can(state, event), `${a.id} from ${state}`);
     }
   }
 });
 
-test("release captures and refund voids", () => {
-  const [release, refund] = vendorActionsFor("DISPUTED");
-  assert.equal(release.resolution, "capture");
+test("a vendor can only settle a dispute by refunding the buyer", () => {
+  const actions = vendorActionsFor("DISPUTED");
+  assert.deepEqual(
+    actions.map((a) => [a.action, a.resolution]),
+    [["resolve", "void"]],
+  );
   assert.equal(vendorActionsFor("AUTHORIZED")[0].action, "deliver");
   assert.equal(vendorActionsFor("AUTHORIZED")[0].resolution, undefined);
-  assert.equal(refund.resolution, "void");
-  assert.equal(release.action, "resolve");
 });
 
 test("unknown or missing status offers nothing", () => {

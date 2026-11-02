@@ -553,7 +553,10 @@ paths:
         `dispute` (AUTHORIZED/DELIVERED → DISPUTED), `cancel` (MATCHED →
         CANCELLED, the buyer backing out before approving; no PayPal call, since
         nothing was held), and `resolve` with `resolution: capture | void`
-        (DISPUTED → CAPTURED | VOIDED).
+        (DISPUTED → CAPTURED | VOIDED). Only the side giving in can settle a
+        dispute: the buyer resolves with `capture` (drops it and pays), the
+        vendor resolves with `void` (refunds the buyer). Any other pairing is
+        a 403.
 
         In live mode, `payout` sends the vendor's share (the price minus the
         platform fee) through the PayPal Payouts API to the vendor's payout

@@ -6,13 +6,13 @@ Three features that make escrow decisions explainable. None of them can move mon
 
 A 0-100 score and letter grade (A 85+, B 70+, C 55+, D 40+, F) for a vendor or a dataset, built in `lib/trust/score.ts` as a pure function over DB rows.
 
-| Factor                 | Weight | Signal                                                                    |
-| ---------------------- | ------ | ------------------------------------------------------------------------- |
-| Sample check pass rate | 30     | Rules verdict over the catalog's vendor sample profile                    |
-| Dispute rate           | 25     | Orders with a DISPUTE event / all orders                                  |
-| Dispute outcomes       | 20     | Resolved disputes the vendor won (RESOLVE_CAPTURE) vs lost (RESOLVE_VOID) |
-| Delivery speed         | 15     | Median time from AUTHORIZE to DELIVER, full credit at 1 hour, none at 72  |
-| Order volume           | 10     | Saturating, half credit at 8 orders                                       |
+| Factor                 | Weight | Signal                                                                           |
+| ---------------------- | ------ | -------------------------------------------------------------------------------- |
+| Sample check pass rate | 30     | Rules verdict over the catalog's vendor sample profile                           |
+| Dispute rate           | 25     | Orders with a DISPUTE event / all orders                                         |
+| Dispute outcomes       | 20     | Disputes the buyer dropped and paid (RESOLVE_CAPTURE) vs refunded (RESOLVE_VOID) |
+| Delivery speed         | 15     | Median time from AUTHORIZE to DELIVER, full credit at 1 hour, none at 72         |
+| Order volume           | 10     | Saturating, half credit at 8 orders                                              |
 
 Every rate is shrunk toward a neutral 0.5 using 4 pseudo-observations, so one clean order cannot look perfect and one bad order is not ruinous. Each factor returns a plain-English `reason`.
 
