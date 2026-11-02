@@ -553,8 +553,8 @@ export default function ResearcherWorkspace({
     }
   }
 
-  // Raise a dispute (sample looks wrong) -> DISPUTED. The vendor then resolves it
-  // from their workspace: capture (release to vendor) or void (refund buyer).
+  // Raise a dispute (sample looks wrong) -> DISPUTED. It settles when the vendor
+  // refunds the buyer, or when the buyer drops it and releases the payment.
   async function disputeEscrow() {
     setBusyAction("dispute");
     setEscrowError(null);
@@ -574,9 +574,41 @@ export default function ResearcherWorkspace({
       setDisputed(true);
       setEscrowNote(
         out.kind === "ok"
-          ? "Dispute raised — awaiting resolution in the vendor workspace."
+          ? "Dispute raised. The vendor can refund you, or you can drop it and pay."
           : "Dispute raised for demo (service offline).",
       );
+    } finally {
+      setBusyAction(null);
+      setTimelineKey((k) => k + 1);
+    }
+  }
+
+  // Drop our own dispute and release the held payment (DISPUTED -> CAPTURED).
+  // Only the buyer can do this; the vendor's only move is a refund.
+  async function dropDispute() {
+    setBusyAction("resolve");
+    setEscrowError(null);
+    try {
+      const out = await escrowRequest("/api/orders", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "resolve",
+          resolution: "capture",
+          orderId,
+        }),
+      });
+      if (out.kind !== "ok") {
+        setEscrowError(
+          out.kind === "error"
+            ? `Could not drop the dispute: ${out.message}`
+            : "Could not drop the dispute: the service is offline.",
+        );
+        return;
+      }
+      setDisputed(false);
+      setEscrow(out.data.escrowState ?? "CAPTURED");
+      setEscrowNote("Dispute dropped. The payment was released to the vendor.");
     } finally {
       setBusyAction(null);
       setTimelineKey((k) => k + 1);
@@ -876,8 +908,19 @@ export default function ResearcherWorkspace({
                 {disputed && (
                   <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
                     <AlertTriangle className="h-4 w-4" />
-                    Dispute pending vendor resolution
+                    Dispute open: the vendor can refund you
                   </span>
+                )}
+                {disputed && !voided && (
+                  <button
+                    onClick={dropDispute}
+                    disabled={busyAction !== null}
+                    className={primaryBtn}
+                  >
+                    {busyAction === "resolve"
+                      ? "Releasing…"
+                      : "Drop dispute & release payment"}
+                  </button>
                 )}
                 {escrow === "CAPTURED" && !disputed && (
                   <p className="text-sm text-muted">
