@@ -43,6 +43,39 @@ out), incoming orders with dispute buttons, and the full ledger.
 
 ![Vendor workspace: listing stats, earnings, incoming orders and the order ledger](docs/screenshots/vendor-workspace.png)
 
+## Agentic commerce, trust and insights
+
+Added Nov 2 for the PayPal AI Hackathon. All of it runs in mock mode with no keys.
+
+- **Spending mandates** (`lib/agent/mandate.ts`, `POST /api/mandates`). A buyer signs
+  a policy (total budget, per-order cap, allowed vendors and tags, expiry) with
+  HMAC-SHA256. The agent can only open an escrow order the mandate allows, and the
+  check is in code, not in the prompt. A tampered or expired token is a `401`. The
+  spend ledger is in memory, so it resets when the server restarts.
+- **MCP server** (`npm run mcp`, [`docs/mcp.md`](docs/mcp.md)). A dependency-free
+  stdio MCP server lets any outside agent (Claude Desktop, for example) search the
+  catalog, run a sample check and place a PayPal escrow order. `place_escrow_order`
+  needs a valid mandate and a passing sample check from the same session.
+- **Trust score** (`lib/trust`, `GET /api/trust`). Each vendor and dataset gets a
+  0 to 100 score from sample-check pass rate, dispute rate, dispute outcomes,
+  delivery speed and volume, with a plain-English reason per factor. Small samples
+  are shrunk toward neutral so a single order never looks perfect.
+- **Dispute arbiter** (`lib/ai/arbiter.ts`, `GET /api/orders?id=&arbitrate=1`). On a
+  disputed order, Claude (or a rules fallback in mock mode) recommends refund,
+  release, split or needs-human from the audit trail and sample evidence. It is
+  advisory only: it cannot import the escrow service, and low confidence is forced
+  to needs-human in code.
+- **Data use agreement** (`lib/escrow/dua.ts`). Every receipt carries a plain-text
+  agreement (aggregate-only, no re-identification) with a SHA-256 fingerprint.
+- **Insights** (`/insights`, `GET /api/insights`). Money held vs released, platform
+  fee, dispute rate, time to deliver, and AG Grid tables for vendors and datasets.
+- **Guided demo** (`/demo`). A seven-step narrated run through the real APIs in mock
+  mode: ask, match, sample check, hold, deliver, query, release.
+
+| Insights                                        | Guided demo                                                |
+| ----------------------------------------------- | ---------------------------------------------------------- |
+| ![Insights page](docs/screenshots/insights.png) | ![Guided demo, funds held](docs/screenshots/demo-hold.png) |
+
 ## How it works (6-step flow)
 
 1. **Describe**: A researcher describes their study in plain English.
@@ -219,6 +252,10 @@ each guardrail marked as enforced or triggered.
 | `POST /api/billing` `{ orderId, question }`                              | Record one query charge (fee is server-set; `409` without data access; `402` at the cap)                                                                                                 |
 | `POST /api/agent` `{ study, budgetCents }`                               | Run the procurement agent; returns `runId`, steps, recommendation, `shortlist`, order                                                                                                    |
 | `GET /api/agent?runId=<id>`                                              | Replay a stored agent run (audit), with its `shortlist`                                                                                                                                  |
+| `POST /api/mandates` `{ maxTotalCents, maxPerOrderCents?, ... }`         | Issue a signed spending mandate; pass the `token` to `POST /api/agent` as `mandate` (`401` if bad or expired)                                                                            |
+| `GET /api/trust` `?vendorId= or ?datasetId=`                             | Trust score, grade and per-factor reasons (no query lists everything)                                                                                                                    |
+| `GET /api/orders?id=<id>&arbitrate=1`                                    | Advisory dispute recommendation (`409` unless the order is `DISPUTED`)                                                                                                                   |
+| `GET /api/insights`                                                      | Marketplace figures: held vs released money, fees, dispute rate, vendors, datasets                                                                                                       |
 | `POST /api/webhooks/paypal`                                              | Signature-verified, deduped PayPal events applied to escrow state, matched by PayPal ids or our order id                                                                                 |
 | `POST /api/demo/reset`                                                   | Mock mode only: clears orders, events, usage and agent runs, then reseeds the catalog. Body `{ "seed": "story" }` also adds six sample orders (`404` otherwise, `422` for other bodies)  |
 | `GET /api/openapi`                                                       | The OpenAPI 3.1 spec (`openapi/openapi.yaml`)                                                                                                                                            |
