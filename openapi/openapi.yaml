@@ -269,8 +269,8 @@ paths:
           the buyer may have the data (DELIVERED, CAPTURED or PAID_OUT); it is
           minted fresh on every read with a 900 second lifetime, and null
           otherwise. 404 if unknown.
-        - `?id=ord_..&receipt=1` → `{ order, receipt }`, the fee breakdown and the
-          order's query cap.
+        - `?id=ord_..&receipt=1` → `{ order, receipt, dua }`, the fee breakdown,
+          the order's query cap and its data use agreement.
         - `?summary=1[&datasetId=..]` → `{ summary: OrderSummary }`, the vendor
           earnings roll-up. `paidOutCents` is gross; for PAID_OUT orders,
           `vendorPaidOutCents` is what the vendor received after the platform fee,
@@ -2317,7 +2317,8 @@ components:
         question: { type: string, minLength: 1, maxLength: 500 }
     QueryResponse:
       type: object
-      required: [datasetId, question, compiled, result, summary, usage]
+      required:
+        [datasetId, question, compiled, result, execution, summary, usage]
       properties:
         datasetId: { type: string }
         question: { type: string }
@@ -2338,6 +2339,12 @@ components:
             below the small-cell threshold. Claude may reword it; a number guard
             falls back to the rule-based wording if the model adds a figure the
             rows do not contain.
+        execution:
+          type: string
+          enum: [postgres, mock]
+          description:
+            Where the aggregate ran. `postgres` is the vendor's live connected
+            database; `mock` is the bundled synthetic data.
         usage:
           type: object
           required: [usageId, chargeCents]
