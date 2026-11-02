@@ -135,3 +135,37 @@ test("app repository executes migrations and escrow/billing transactions on Post
     await pg.close();
   }
 });
+
+test("migrating an older database adds the dataset columns it lacks", async () => {
+  const pg = await PGlite.create();
+  const db = postgresConnection({
+    query: async (sql, params) => {
+      const result =
+        params === undefined
+          ? (await pg.exec(sql)).at(-1)!
+          : await pg.query(sql, params);
+      return { rows: result.rows, rowCount: result.affectedRows ?? 0 };
+    },
+  });
+  const columns = async () =>
+    (
+      (await db
+        .prepare(
+          "SELECT column_name FROM information_schema.columns WHERE table_name = 'datasets'",
+        )
+        .all()) as { column_name: string }[]
+    ).map((c) => c.column_name);
+  try {
+    await migratePostgres(db);
+    await db.exec(
+      "ALTER TABLE datasets DROP COLUMN tags_json, DROP COLUMN source_connection_id",
+    );
+    assert.ok(!(await columns()).includes("tags_json"));
+    await migratePostgres(db);
+    const after = await columns();
+    assert.ok(after.includes("tags_json"));
+    assert.ok(after.includes("source_connection_id"));
+  } finally {
+    await pg.close();
+  }
+});

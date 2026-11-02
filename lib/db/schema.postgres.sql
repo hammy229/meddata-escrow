@@ -143,7 +143,30 @@ CREATE TABLE IF NOT EXISTS provider_connections (
   tested_at TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP::text)
 );
-ALTER TABLE datasets ADD COLUMN IF NOT EXISTS source_connection_id TEXT REFERENCES provider_connections(id);
-ALTER TABLE datasets ADD COLUMN IF NOT EXISTS source_dataset_key TEXT;
-ALTER TABLE datasets ADD COLUMN IF NOT EXISTS record_count INTEGER;
-ALTER TABLE datasets ADD COLUMN IF NOT EXISTS tags_json TEXT;
+-- ALTER TABLE takes an exclusive lock even when the column is already there,
+-- which can stall a deploy while the old instance is still serving. Only
+-- alter when a column is actually missing.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'datasets'
+        AND column_name = 'source_connection_id') THEN
+    ALTER TABLE datasets ADD COLUMN source_connection_id TEXT
+      REFERENCES provider_connections(id);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'datasets'
+        AND column_name = 'source_dataset_key') THEN
+    ALTER TABLE datasets ADD COLUMN source_dataset_key TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'datasets'
+        AND column_name = 'record_count') THEN
+    ALTER TABLE datasets ADD COLUMN record_count INTEGER;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'datasets'
+        AND column_name = 'tags_json') THEN
+    ALTER TABLE datasets ADD COLUMN tags_json TEXT;
+  END IF;
+END $$;
