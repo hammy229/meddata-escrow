@@ -14,6 +14,8 @@ import {
 import { sameOrigin } from "../../../../lib/auth/access";
 import { createRateLimiter, clientIp } from "../../../../lib/http/rate-limit";
 const limiter = createRateLimiter();
+const LOGIN_ATTEMPTS_PER_EMAIL = 10;
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const credentials = z.object({
   email: z.email().trim().max(254),
   password: z
@@ -85,6 +87,17 @@ export async function POST(
     }
     const parsed = (action === "signup" ? signup : credentials).safeParse(body);
     if (!parsed.success) return bad(parsed.error.issues[0].message);
+    // The per-IP limit trusts X-Forwarded-For, which a client can fake, so
+    // also cap login attempts per email. Guessing one account's password from
+    // many fake IPs still stops after LOGIN_ATTEMPTS_PER_EMAIL tries.
+    if (
+      action === "login" &&
+      !limiter.check(`login-email:${parsed.data.email.toLowerCase()}`, {
+        limit: LOGIN_ATTEMPTS_PER_EMAIL,
+        windowMs: LOGIN_WINDOW_MS,
+      }).allowed
+    )
+      return bad("Too many attempts for this account. Try again later.", 429);
     const account =
       action === "signup"
         ? await register(signup.parse(body))
