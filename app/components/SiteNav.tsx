@@ -9,6 +9,7 @@ export const NAV: Array<{ href: string; label: string }> = [
   { href: "/", label: "Home" },
   { href: "/researcher", label: "Researchers" },
   { href: "/vendor", label: "Vendors" },
+  { href: "/insights", label: "Insights" },
   { href: "/#how", label: "How it works" },
 ];
 
