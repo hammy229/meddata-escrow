@@ -77,6 +77,19 @@ PAID_OUT`, plus dispute/void) with an append-only audit trail of every
   pinned total row in the ledger, cell renderers for match scores, query bars and
   status, and a flash when a live poll changes an order's status.
 
+- **Spending mandates and an MCP server.** A buyer signs a mandate (budget,
+  per-order cap, allowed vendors and tags, expiry), and the agent can only open
+  orders it allows. The same tools are exposed over a stdio MCP server, so an
+  outside agent such as Claude Desktop can buy through PayPal escrow under the
+  same limits.
+- **Trust scores, an advisory dispute arbiter and a data use agreement.**
+  Vendors and datasets get a 0 to 100 score with plain-English reasons. On a
+  disputed order, Claude suggests refund, release or split from the audit trail,
+  but cannot move money. Every receipt carries a fingerprinted agreement.
+- **Insights and a guided demo.** An `/insights` page shows money held versus
+  released, fees and dispute rate. `/demo` plays the whole story through the real
+  APIs in one click.
+
 ## Challenges
 
 - Letting an AI agent spend money safely. The guardrails live in code, not the
@@ -94,7 +107,7 @@ PAID_OUT`, plus dispute/void) with an append-only audit trail of every
 - The whole escrow lifecycle runs end to end, keyless, in one command.
 - The server, not the client, sets every price and gates every query on a
   paid, delivered order, and caps what each order can be metered for.
-- A `node:test` suite of 511 tests covering the state machine, PayPal client,
+- A `node:test` suite of 626 tests covering the state machine, PayPal client,
   webhooks, privacy screens, agent guardrails and every route.
 
 ## What we learned
