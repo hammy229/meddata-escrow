@@ -130,7 +130,13 @@ export async function POST(request: Request) {
       executedSql = live.sql;
       execution = "postgres";
     } else rows = mockExecute(compiled);
-  } catch {
+  } catch (err) {
+    // The client gets a generic 503; keep the cause in the server log so a
+    // provider outage is visible to whoever runs the app.
+    console.error(
+      `query: provider execution failed for ${datasetId}:`,
+      err instanceof Error ? err.message : err,
+    );
     return bad(
       "The provider database could not answer this query. No query charge was recorded.",
       503,
@@ -161,7 +167,8 @@ export async function POST(request: Request) {
           chargeCents: PER_QUERY_FEE_CENTS,
         }),
     );
-  } catch {
+  } catch (err) {
+    console.error(`query: could not record usage for ${orderId}:`, err);
     return bad("could not record query usage", 500);
   }
   const summary = await summarizeAnswer(question, compiled, rows);
