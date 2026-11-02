@@ -23,6 +23,8 @@ import {
   type LlmClient,
 } from "../llm/client";
 import type { EscrowDeps } from "../escrow/service";
+import type { Mandate } from "./mandate";
+import { spentUnderMandate } from "./mandate-ledger";
 import { buildShortlist, type ShortlistItem } from "./shortlist";
 import {
   AGENT_TOOLS,
@@ -37,6 +39,17 @@ export interface AgentRunInput {
   study: string;
   budgetCents: number;
   buyerEmail?: string;
+  /** A VERIFIED spending mandate (see ./mandate); the buy tool enforces it. */
+  mandate?: Mandate;
+}
+
+/** What a run spent under its mandate and what the mandate refused. */
+export interface MandateUsage {
+  id: string;
+  maxTotalCents: number;
+  spentCents: number;
+  remainingCents: number;
+  denied: string[];
 }
 
 export interface AgentRunOptions {
@@ -56,6 +69,7 @@ export interface AgentRunResult {
   /** Candidates the run considered, best first (see ./shortlist). */
   shortlist: ShortlistItem[];
   order?: AgentOrder;
+  mandate?: MandateUsage;
   source: "llm" | "scripted";
 }
 
@@ -77,6 +91,17 @@ function dollars(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+function mandateUsage(m: Mandate, ctx: AgentContext): MandateUsage {
+  const spentCents = spentUnderMandate(m.id);
+  return {
+    id: m.id,
+    maxTotalCents: m.maxTotalCents,
+    spentCents,
+    remainingCents: Math.max(m.maxTotalCents - spentCents, 0),
+    denied: [...ctx.mandateDenials],
+  };
+}
+
 function result(
   runId: string,
   ctx: AgentContext,
@@ -90,6 +115,7 @@ function result(
     recommendation: { datasetId, reasoning },
     shortlist: buildShortlist(ctx.steps, { datasetId }, ctx.budgetCents),
     ...(ctx.order ? { order: ctx.order } : {}),
+    ...(ctx.mandate ? { mandate: mandateUsage(ctx.mandate, ctx) } : {}),
     source,
   };
 }
@@ -105,7 +131,10 @@ async function runLlm(
       role: "user",
       content:
         `Study: ${ctx.study}\n` +
-        `Budget: ${ctx.budgetCents} cents (${dollars(ctx.budgetCents)}).`,
+        `Budget: ${ctx.budgetCents} cents (${dollars(ctx.budgetCents)}).` +
+        (ctx.mandate
+          ? `\nA spending mandate limits you to ${ctx.mandate.maxPerOrderCents} cents per order; an order outside it is refused.`
+          : ""),
     },
   ];
 
@@ -241,8 +270,14 @@ async function runScripted(
       datasetId: pick.datasetId,
       justification: pick.rationale,
     });
-    if (!order.ok)
+    if (!order.ok) {
+      // A mandate refusal is per candidate: try the next one it may allow.
+      if (order.error.startsWith("mandate denied")) {
+        failures.push(`${pick.datasetId} was refused (${order.error})`);
+        continue;
+      }
       return done(`Escrow order for ${pick.datasetId} failed: ${order.error}`);
+    }
     const skipped = failures.length
       ? ` Skipped earlier candidates: ${failures.join("; ")}.`
       : "";
@@ -273,6 +308,7 @@ export async function runProcurementAgent(
     budgetCents: input.budgetCents,
     buyerEmail: input.buyerEmail,
     escrowDeps: opts.escrowDeps,
+    mandate: input.mandate,
   });
 
   if (opts.useLlm ?? llmEnabled()) {

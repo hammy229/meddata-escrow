@@ -19,7 +19,11 @@
 //     (and check_sample itself is capped at MAX_SAMPLE_CHECKS per run),
 //   - the buyer does not already own the dataset (an AUTHORIZED, DELIVERED,
 //     CAPTURED, PAID_OUT or DISPUTED order for it),
-//   - no order has been created yet in this run (at most one per run).
+//   - no order has been created yet in this run (at most one per run),
+//   - when the run carries a spending mandate (./mandate): the order fits its
+//     per-order / remaining-total limits and vendor / tag allow-lists. A
+//     denial is recorded in ctx.mandateDenials; spend is committed to the
+//     mandate ledger when the order is opened.
 // A refused call becomes an error tool result the model can read and react to;
 // it never throws out of the loop.
 //
@@ -38,6 +42,8 @@ import {
   type EscrowDeps,
 } from "../escrow/service";
 import type { EscrowState } from "../escrow/state-machine";
+import { checkSpend, type Mandate } from "./mandate";
+import { recordMandateSpend, spentUnderMandate } from "./mandate-ledger";
 
 /** One recorded tool call (exactly one of output / error is set). */
 export interface AgentStep {
@@ -71,6 +77,10 @@ export interface AgentContext {
   /** Sample checks run so far in this run (capped at MAX_SAMPLE_CHECKS). */
   sampleChecks: number;
   order?: AgentOrder;
+  /** Verified spending mandate bounding this run's purchases, if any. */
+  readonly mandate?: Mandate;
+  /** Reasons the mandate refused an order in this run. */
+  readonly mandateDenials: string[];
 }
 
 /** Sample checks allowed per run, so a run cannot shop around forever. */
@@ -82,6 +92,7 @@ export function createAgentContext(init: {
   buyerEmail?: string;
   ai?: AiOptions;
   escrowDeps?: EscrowDeps;
+  mandate?: Mandate;
 }): AgentContext {
   return {
     study: init.study,
@@ -92,6 +103,8 @@ export function createAgentContext(init: {
     steps: [],
     passedSamples: new Set(),
     sampleChecks: 0,
+    mandate: init.mandate,
+    mandateDenials: [],
   };
 }
 
@@ -295,12 +308,31 @@ async function placeOrder(ctx: AgentContext, input: unknown) {
     throw new ToolError(
       `no passing sample check for ${datasetId} in this run; run check_sample first`,
     );
+  if (ctx.mandate) {
+    const decision = checkSpend(
+      ctx.mandate,
+      spentUnderMandate(ctx.mandate.id),
+      dataset.price_cents,
+      {
+        id: datasetId,
+        vendorId: dataset.vendor_id,
+        tags: catalogEntry(datasetId)?.tags ?? [],
+      },
+    );
+    if (!decision.allow) {
+      ctx.mandateDenials.push(decision.reason);
+      throw new ToolError(`mandate denied: ${decision.reason}`);
+    }
+  }
 
   try {
     const created = await createEscrowOrder(
       { datasetId, buyerEmail: ctx.buyerEmail },
       ctx.escrowDeps,
     );
+    // A reused open order was already counted when it was first opened.
+    if (ctx.mandate && !created.reused)
+      recordMandateSpend(ctx.mandate.id, dataset.price_cents);
     ctx.order = {
       orderId: created.orderId,
       datasetId,

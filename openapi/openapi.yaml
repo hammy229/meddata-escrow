@@ -54,6 +54,8 @@ tags:
     description: Per-query usage and spend.
   - name: Agent
     description: AI procurement agent that plans a purchase end to end.
+  - name: Mandates
+    description: Signed spending mandates that bound what an agent may buy.
   - name: Webhooks
     description: Inbound PayPal webhook events.
 paths:
@@ -950,12 +952,58 @@ paths:
                     source: scripted
         "422":
           $ref: "#/components/responses/ValidationError"
+        "401":
+          description: The `mandate` token is invalid, tampered with or expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "429":
           description: Rate limited (5 agent runs per minute per client).
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+
+  /api/mandates:
+    post:
+      tags: [Mandates]
+      operationId: issueMandate
+      summary: Issue a signed spending mandate
+      description: |
+        Agentic commerce guardrail. A mandate is a buyer policy (total cap,
+        per-order cap, optional vendor and tag allow-lists, expiry) signed with
+        HMAC-SHA256 under a server secret. Pass the returned `token` as
+        `mandate` to `POST /api/agent`, or to the MCP `place_escrow_order`
+        tool: the buy path refuses any order outside it, in code. Tampering
+        with the token invalidates its signature. Spend is counted when an
+        order is opened and tracked in a per-process ledger.
+
+        Demo scope: issuance is unauthenticated; production would gate it
+        behind buyer login.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MandateRequest"
+            examples:
+              cardiologyOnly:
+                value:
+                  maxTotalCents: 10000
+                  maxPerOrderCents: 6000
+                  allowedTags: [cardiology]
+      responses:
+        "200":
+          description: The signed token and the mandate it encodes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MandateIssued"
+        "422":
+          $ref: "#/components/responses/ValidationError"
         "500":
           $ref: "#/components/responses/InternalError"
 
@@ -1792,6 +1840,10 @@ components:
         buyerEmail:
           type: string
           format: email
+        mandate:
+          type: string
+          maxLength: 4096
+          description: Signed spending mandate token from `POST /api/mandates`. Orders outside it are refused in code.
     AgentStep:
       type: object
       required: [tool, input, at]
@@ -1839,7 +1891,67 @@ components:
               description: Absolute PayPal link, or a relative `/checkout/mock` link in mock mode.
             escrowState: { $ref: "#/components/schemas/EscrowState" }
             amountCents: { type: integer }
+        mandate:
+          type: object
+          description: Present when the request carried a mandate. Spend is per mandate across runs (per server process).
+          required: [id, maxTotalCents, spentCents, remainingCents, denied]
+          properties:
+            id: { type: string }
+            maxTotalCents: { type: integer }
+            spentCents: { type: integer }
+            remainingCents: { type: integer }
+            denied:
+              type: array
+              description: Why the mandate refused orders in this run.
+              items: { type: string }
         source: { type: string, enum: [llm, scripted] }
+    MandateRequest:
+      type: object
+      additionalProperties: false
+      required: [maxTotalCents]
+      properties:
+        maxTotalCents: { type: integer, minimum: 1 }
+        maxPerOrderCents:
+          type: integer
+          minimum: 1
+          description: Defaults to maxTotalCents; may not exceed it.
+        allowedVendors:
+          type: array
+          minItems: 1
+          items: { type: string }
+        allowedTags:
+          type: array
+          minItems: 1
+          description: A dataset needs at least one of these tags.
+          items: { type: string }
+        buyerId:
+          type: string
+          description: Defaults to the demo buyer.
+        expiresAt:
+          type: string
+          format: date-time
+          description: Must be in the future. Defaults to one hour from now.
+    Mandate:
+      type: object
+      required:
+        [id, buyerId, maxTotalCents, maxPerOrderCents, issuedAt, expiresAt]
+      properties:
+        id: { type: string }
+        buyerId: { type: string }
+        maxTotalCents: { type: integer }
+        maxPerOrderCents: { type: integer }
+        allowedVendors: { type: array, items: { type: string } }
+        allowedTags: { type: array, items: { type: string } }
+        issuedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+    MandateIssued:
+      type: object
+      required: [token, mandate]
+      properties:
+        token:
+          type: string
+          description: "`base64url(mandate json).base64url(hmac-sha256)`."
+        mandate: { $ref: "#/components/schemas/Mandate" }
     ShortlistItem:
       type: object
       description: One candidate in an agent run's shortlist. Derived from the run's recorded steps, so older runs get one too.
