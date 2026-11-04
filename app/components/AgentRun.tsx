@@ -8,6 +8,7 @@
 import { useState } from "react";
 import type { ColDef } from "ag-grid-community";
 import DataGrid from "./DataGrid";
+import MandatesPanel from "./MandatesPanel";
 import { SourceBadge } from "./MatchesGrid";
 import { AlertTriangle, Check } from "./icons";
 import { workspaceUrl } from "../../lib/ui/order-sync";
@@ -48,6 +49,7 @@ interface AgentRunResult {
   recommendation: { datasetId: string | null; reasoning: string };
   shortlist?: ShortlistItem[];
   order?: AgentOrder;
+  mandate?: { spentCents: number; remainingCents: number; denied: string[] };
   source: "llm" | "scripted";
 }
 
@@ -147,6 +149,8 @@ export default function AgentRun({
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [run, setRun] = useState<AgentRunResult | null>(null);
+  const [mandateToken, setMandateToken] = useState<string | null>(null);
+  const [runCount, setRunCount] = useState(0);
 
   const budgetCents = Math.round(Number(budget) * 100);
   const validBudget = Number.isFinite(budgetCents) && budgetCents > 0;
@@ -160,7 +164,11 @@ export default function AgentRun({
       const res = await fetch("/api/agent", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ study, budgetCents }),
+        body: JSON.stringify({
+          study,
+          budgetCents,
+          ...(mandateToken ? { mandate: mandateToken } : {}),
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !Array.isArray(data.steps)) {
@@ -172,12 +180,19 @@ export default function AgentRun({
       setError("Could not reach the agent.");
     } finally {
       setRunning(false);
+      setRunCount((n) => n + 1);
     }
   }
 
   return (
     <div>
-      <div className="flex flex-wrap items-end gap-3">
+      <MandatesPanel
+        inputBase={inputBase}
+        primaryBtn={primaryBtn}
+        refreshKey={runCount}
+        onActiveToken={setMandateToken}
+      />
+      <div className="mt-6 flex flex-wrap items-end gap-3 border-t border-rule pt-6">
         <label className="text-sm">
           <span className="text-muted">Budget (USD)</span>
           <input
@@ -257,6 +272,23 @@ export default function AgentRun({
               </li>
             ))}
           </ol>
+
+          {run.mandate && (
+            <div className="text-sm">
+              <p className="font-medium">
+                Mandate: {usd(run.mandate.spentCents)} spent,{" "}
+                {usd(run.mandate.remainingCents)} left
+              </p>
+              {run.mandate.denied.map((reason) => (
+                <p
+                  key={reason}
+                  className="mt-1 text-amber-700 dark:text-amber-400"
+                >
+                  Refused by the mandate: {reason}
+                </p>
+              ))}
+            </div>
+          )}
 
           {run.shortlist && run.shortlist.length > 0 && (
             <div>

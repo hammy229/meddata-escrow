@@ -761,7 +761,8 @@ export default function ResearcherWorkspace({
           <p className="mt-2 max-w-2xl text-sm text-muted">
             The agent searches, sample-checks and opens an escrow order within
             your budget. Guardrails are enforced in code: it can&apos;t exceed
-            the budget, skip the sample check, or release any money.
+            the budget or your mandate, skip the sample check, or release any
+            money.
           </p>
           <div className="mt-4">
             <AgentRun

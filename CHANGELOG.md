@@ -6,6 +6,9 @@ All notable changes to MedData Escrow. Newest first.
 
 ### Added
 
+- **Agent spending panel.** The researcher page can sign a mandate, show each
+  mandate's spend in an AG Grid, revoke it, and run the agent under it. A run
+  reports what it spent and every order the mandate refused.
 - **Revoke a mandate.** `DELETE /api/mandates?mandateId=` stops the agent and the
   MCP server from opening more orders under it right away, even with a valid
   token. `GET /api/mandates` lists a buyer's mandates with spent and remaining.
