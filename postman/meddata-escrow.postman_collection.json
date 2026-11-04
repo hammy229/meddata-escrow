@@ -1094,7 +1094,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "mandates"]
             },
-            "description": "Agentic commerce guardrail. A mandate is a buyer policy (total cap,\nper-order cap, optional vendor and tag allow-lists, expiry) signed with\nHMAC-SHA256 under a server secret. Pass the returned `token` as\n`mandate` to `POST /api/agent`, or to the MCP `place_escrow_order`\ntool: the buy path refuses any order outside it, in code. Tampering\nwith the token invalidates its signature. Spend is counted when an\norder is opened and tracked in a per-process ledger.\n\nDemo scope: issuance is unauthenticated; production would gate it\nbehind buyer login.\n",
+            "description": "Agentic commerce guardrail. A mandate is a buyer policy (total cap,\nper-order cap, optional vendor and tag allow-lists, expiry) signed with\nHMAC-SHA256 under a server secret. Pass the returned `token` as\n`mandate` to `POST /api/agent`, or to the MCP `place_escrow_order`\ntool: the buy path refuses any order outside it, in code. Tampering\nwith the token invalidates its signature. Spend is reserved in the\ndatabase before PayPal is called, so it survives a restart and holds\nacross concurrent runs. A voided or cancelled order gives its budget\nback.\n\nDemo scope: issuance is unauthenticated; production would gate it\nbehind buyer login.\n",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"maxTotalCents\": 10000,\n  \"maxPerOrderCents\": 6000,\n  \"allowedTags\": [\n    \"cardiology\"\n  ]\n}",

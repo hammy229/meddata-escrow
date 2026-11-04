@@ -23,8 +23,8 @@ import { availableCatalog } from "../catalog/live";
 //   - no order has been created yet in this run (at most one per run),
 //   - when the run carries a spending mandate (./mandate): the order fits its
 //     per-order / remaining-total limits and vendor / tag allow-lists. A
-//     denial is recorded in ctx.mandateDenials; spend is committed to the
-//     mandate ledger when the order is opened.
+//     denial is recorded in ctx.mandateDenials; spend is reserved in the
+//     mandate ledger before PayPal is called.
 // A refused call becomes an error tool result the model can read and react to;
 // it never throws out of the loop.
 //
@@ -42,8 +42,12 @@ import {
   type EscrowDeps,
 } from "../escrow/service";
 import type { EscrowState } from "../escrow/state-machine";
-import { checkSpend, type Mandate } from "./mandate";
-import { recordMandateSpend, spentUnderMandate } from "./mandate-ledger";
+import type { Mandate } from "./mandate";
+import {
+  linkMandateSpend,
+  releaseMandateSpend,
+  reserveMandateSpend,
+} from "./mandate-ledger";
 
 /** One recorded tool call (exactly one of output / error is set). */
 export interface AgentStep {
@@ -317,10 +321,10 @@ async function placeOrder(ctx: AgentContext, input: unknown) {
     throw new ToolError(
       `no passing sample check for ${datasetId} in this run; run check_sample first`,
     );
+  let reservationId: string | undefined;
   if (ctx.mandate) {
-    const decision = checkSpend(
+    const reservation = await reserveMandateSpend(
       ctx.mandate,
-      spentUnderMandate(ctx.mandate.id),
       dataset.price_cents,
       {
         id: datasetId,
@@ -328,35 +332,51 @@ async function placeOrder(ctx: AgentContext, input: unknown) {
         tags: (await catalogEntry(datasetId))?.tags ?? [],
       },
     );
-    if (!decision.allow) {
-      ctx.mandateDenials.push(decision.reason);
-      throw new ToolError(`mandate denied: ${decision.reason}`);
+    if (!reservation.ok) {
+      ctx.mandateDenials.push(reservation.reason);
+      throw new ToolError(`mandate denied: ${reservation.reason}`);
     }
+    reservationId = reservation.reservationId;
   }
 
+  let created: Awaited<ReturnType<typeof createEscrowOrder>>;
   try {
-    const created = await createEscrowOrder(
+    created = await createEscrowOrder(
       { datasetId, buyerEmail: ctx.buyerEmail, accountId: ctx.accountId },
       ctx.escrowDeps,
     );
-    // A reused open order was already counted when it was first opened.
-    if (ctx.mandate && !created.reused)
-      recordMandateSpend(ctx.mandate.id, dataset.price_cents);
-    ctx.order = {
-      orderId: created.orderId,
-      datasetId,
-      approveUrl: created.approveUrl ?? null,
-      escrowState: created.escrowState,
-      amountCents: dataset.price_cents,
-    };
-    return {
-      ...ctx.order,
-      note: "Funds are held only after the buyer approves at approveUrl.",
-    };
   } catch (err) {
+    // Nothing was opened, so the budget goes back. A failed release leaves the
+    // hold in place, which errs toward spending less.
+    if (reservationId)
+      await releaseMandateSpend(reservationId).catch((releaseErr) =>
+        console.error("mandate reservation release failed:", releaseErr),
+      );
     if (err instanceof EscrowError) throw new ToolError(err.message);
     throw err;
   }
+  // The order exists from here on, so a ledger failure must not lose it. The
+  // reservation stays and keeps counting against the mandate.
+  if (reservationId) {
+    // A reused open order was already counted when it was first opened.
+    const settle = created.reused
+      ? releaseMandateSpend(reservationId)
+      : linkMandateSpend(reservationId, created.orderId);
+    await settle.catch((ledgerErr) =>
+      console.error("mandate ledger update failed:", ledgerErr),
+    );
+  }
+  ctx.order = {
+    orderId: created.orderId,
+    datasetId,
+    approveUrl: created.approveUrl ?? null,
+    escrowState: created.escrowState,
+    amountCents: dataset.price_cents,
+  };
+  return {
+    ...ctx.order,
+    note: "Funds are held only after the buyer approves at approveUrl.",
+  };
 }
 const EXECUTORS: Record<
   string,

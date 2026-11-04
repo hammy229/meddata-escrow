@@ -41,8 +41,9 @@ curl -s localhost:3000/api/mandates -H 'content-type: application/json' \
 Give the `token` to the agent and have it pass it as the `mandate` argument of
 `place_escrow_order`. A missing, tampered or expired token, or an order outside
 the policy, comes back as a tool error (`isError: true`) naming the reason.
-Spend is counted when an order is opened, in a per-process ledger that resets
-on restart. The same token works for `POST /api/agent` (`mandate` field).
+Spend is reserved in the database before PayPal is called, so the web app and
+this server share one total, and it survives a restart. A voided or cancelled
+order gives its budget back. The same token works for `POST /api/agent` (`mandate` field).
 
 ## Run it
 

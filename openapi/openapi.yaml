@@ -1083,8 +1083,10 @@ paths:
         HMAC-SHA256 under a server secret. Pass the returned `token` as
         `mandate` to `POST /api/agent`, or to the MCP `place_escrow_order`
         tool: the buy path refuses any order outside it, in code. Tampering
-        with the token invalidates its signature. Spend is counted when an
-        order is opened and tracked in a per-process ledger.
+        with the token invalidates its signature. Spend is reserved in the
+        database before PayPal is called, so it survives a restart and holds
+        across concurrent runs. A voided or cancelled order gives its budget
+        back.
 
         Demo scope: issuance is unauthenticated; production would gate it
         behind buyer login.

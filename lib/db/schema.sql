@@ -135,3 +135,15 @@ CREATE TABLE IF NOT EXISTS provider_connections (
   tested_at TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- What each spending mandate has committed. Written before PayPal is called, so
+-- concurrent agent runs cannot overspend; order_id is NULL until the order opens.
+CREATE TABLE IF NOT EXISTS mandate_spend (
+  id         TEXT PRIMARY KEY,
+  mandate_id TEXT NOT NULL,
+  order_id   TEXT REFERENCES orders(id),
+  cents      INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_mandate_spend_mandate
+  ON mandate_spend (mandate_id);

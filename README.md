@@ -65,7 +65,8 @@ Added Nov 2 for the PayPal AI Hackathon. All of it runs in mock mode with no key
   a policy (total budget, per-order cap, allowed vendors and tags, expiry) with
   HMAC-SHA256. The agent can only open an escrow order the mandate allows, and the
   check is in code, not in the prompt. A tampered or expired token is a `401`. The
-  spend ledger is in memory, so it resets when the server restarts.
+  spend ledger is in the database, so it survives a restart and holds across
+  concurrent runs and the MCP server.
 - **MCP server** (`npm run mcp`, [`docs/mcp.md`](docs/mcp.md)). A dependency-free
   stdio MCP server lets any outside agent (Claude Desktop, for example) search the
   catalog, run a sample check and place a PayPal escrow order. `place_escrow_order`

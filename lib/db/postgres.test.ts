@@ -18,6 +18,8 @@ import {
 } from "./store";
 import { applyPayPalWebhookEvent } from "../escrow/paypal-webhooks";
 import { postgresConfig, postgresSql } from "../postgres/config";
+import { issueMandate } from "../agent/mandate";
+import { reserveOn, spentOn } from "../agent/mandate-ledger";
 
 test("PostgreSQL parameters and TLS configuration", () => {
   assert.equal(
@@ -42,6 +44,33 @@ test("PostgreSQL parameters and TLS configuration", () => {
     }).ssl,
     false,
   );
+});
+
+test("the mandate ledger reserves and enforces limits on PostgreSQL", async () => {
+  const pg = await PGlite.create();
+  const db = postgresConnection({
+    query: async (sql, params) => {
+      const result =
+        params === undefined
+          ? (await pg.exec(sql)).at(-1)!
+          : await pg.query(sql, params);
+      return { rows: result.rows, rowCount: result.affectedRows ?? 0 };
+    },
+  });
+  try {
+    await migratePostgres(db);
+    const { mandate } = issueMandate({
+      buyerId: "user@example.test",
+      maxTotalCents: 6000,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+    const dataset = { id: "dataset", vendorId: "vendor", tags: [] };
+    assert.equal((await reserveOn(db, mandate, 4000, dataset)).ok, true);
+    assert.equal(await spentOn(db, mandate.id), 4000);
+    assert.equal((await reserveOn(db, mandate, 4000, dataset)).ok, false);
+  } finally {
+    await pg.close();
+  }
 });
 
 test("app repository executes migrations and escrow/billing transactions on PostgreSQL", async () => {

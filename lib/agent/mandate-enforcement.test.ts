@@ -3,10 +3,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { listOrders, withDb } from "../db/client";
+import { listOrders, openDb, withDb } from "../db/client";
 import { withAgentDb } from "./test-db";
 import { issueMandate } from "./mandate";
-import { resetMandateLedger, spentUnderMandate } from "./mandate-ledger";
+import { spentUnderMandate } from "./mandate-ledger";
 import { createAgentContext, executeTool } from "./tools";
 import { runProcurementAgent } from "./run";
 
@@ -24,7 +24,6 @@ function mandate(extra: Record<string, unknown> = {}) {
 }
 
 function ctx(m = mandate(), budgetCents = 10_000) {
-  resetMandateLedger();
   return createAgentContext({
     study: STUDY,
     budgetCents,
@@ -48,7 +47,7 @@ test(
     const c = ctx(m);
     const r = await buy(c);
     assert.ok(r.ok, JSON.stringify(r));
-    assert.equal(spentUnderMandate(m.id), 4900);
+    assert.equal(await spentUnderMandate(m.id), 4900);
     assert.deepEqual(c.mandateDenials, []);
   }),
 );
@@ -99,14 +98,13 @@ test(
     const r = await buy(second, DIABETES);
     assert.equal(r.ok, false);
     assert.match((r as { error: string }).error, /remaining 1100/);
-    assert.equal(spentUnderMandate(m.id), 4900);
+    assert.equal(await spentUnderMandate(m.id), 4900);
   }),
 );
 
 test(
   "without a mandate nothing changes and no ledger is touched",
   withAgentDb(async () => {
-    resetMandateLedger();
     const c = createAgentContext({
       study: STUDY,
       budgetCents: 10_000,
@@ -120,7 +118,6 @@ test(
 test(
   "the run result reports mandate usage",
   withAgentDb(async () => {
-    resetMandateLedger();
     const m = mandate({ maxTotalCents: 8000 });
     const run = await runProcurementAgent(
       { study: STUDY, budgetCents: 10_000, mandate: m },
@@ -140,7 +137,6 @@ test(
 test(
   "the scripted planner falls through to a candidate the mandate allows",
   withAgentDb(async () => {
-    resetMandateLedger();
     // Cardio (4900) is best but over the 4000 per-order cap; the planner
     // moves on to the hypertension registry (3900), which fits.
     const m = mandate({ maxPerOrderCents: 4000 });
@@ -153,5 +149,35 @@ test(
     assert.ok(run.mandate!.denied.length >= 1);
     for (const d of run.mandate!.denied) assert.match(d, /per-order/);
     assert.equal(withDb((db) => listOrders(db)).length, 1);
+  }),
+);
+
+test(
+  "an order keeps counting against the mandate if the ledger link fails",
+  withAgentDb(async ({ url }) => {
+    const db = openDb(url);
+    db.exec(`CREATE TRIGGER fail_link BEFORE UPDATE ON mandate_spend
+      BEGIN SELECT RAISE(ABORT, 'ledger down'); END`);
+    db.close();
+    const m = mandate();
+    const ctx = createAgentContext({
+      study: STUDY,
+      budgetCents: 9000,
+      mandate: m,
+    });
+    ctx.passedSamples.add(CARDIO);
+    const logged = console.error;
+    console.error = () => {};
+    try {
+      const out = await executeTool(ctx, "create_escrow_order", {
+        datasetId: CARDIO,
+        justification: "fits",
+      });
+      assert.equal(out.ok, true);
+    } finally {
+      console.error = logged;
+    }
+    assert.equal(ctx.order?.datasetId, CARDIO);
+    assert.equal(await spentUnderMandate(m.id), 4900);
   }),
 );

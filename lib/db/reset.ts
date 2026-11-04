@@ -15,6 +15,7 @@ const CLEARED_TABLES = [
   "paypal_webhook_events",
   "order_events",
   "query_usage",
+  "mandate_spend",
   "orders",
   "agent_runs",
 ] as const;

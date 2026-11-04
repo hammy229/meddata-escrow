@@ -2,6 +2,16 @@
 
 All notable changes to MedData Escrow. Newest first.
 
+## 2026-11-03: Agent spending controls and fairer disputes
+
+### Changed
+
+- **Mandate spending now lives in the database.** A restart used to reset what a
+  mandate had spent, and the web app and the MCP server each kept their own
+  total. Spend is now reserved in one transaction with the limit check, before
+  PayPal is called, so concurrent runs cannot overspend. A voided or cancelled
+  order gives its budget back.
+
 ## 2026-11-02: Mandates, MCP, trust scores, insights, guided demo
 
 ### Added

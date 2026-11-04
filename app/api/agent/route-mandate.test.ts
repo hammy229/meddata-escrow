@@ -5,7 +5,6 @@ import assert from "node:assert/strict";
 import { POST } from "./handlers";
 import { withAgentDb } from "../../../lib/agent/test-db";
 import { issueMandate } from "../../../lib/agent/mandate";
-import { resetMandateLedger } from "../../../lib/agent/mandate-ledger";
 import { listOrders, withDb } from "../../../lib/db/client";
 
 const STUDY = "Cardiology outcomes in a synthetic cohort";
@@ -32,7 +31,6 @@ function token(extra: Record<string, unknown> = {}) {
 test(
   "a run within the mandate buys and reports usage",
   withAgentDb(async () => {
-    resetMandateLedger();
     const res = await post({
       study: STUDY,
       budgetCents: 9000,
@@ -50,7 +48,6 @@ test(
 test(
   "a run outside the mandate is refused in code and explains why",
   withAgentDb(async () => {
-    resetMandateLedger();
     const res = await post({
       study: STUDY,
       budgetCents: 9000,

@@ -264,7 +264,7 @@ async function placeEscrowOrder(
     justification: a.value.justification ?? "Requested via MCP",
   });
   if (!r.ok) return r;
-  const spentCents = spentUnderMandate(mandate.id);
+  const spentCents = await spentUnderMandate(mandate.id);
   return {
     ok: true,
     data: {

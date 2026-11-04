@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 
 import { withAgentDb } from "../agent/test-db";
 import { issueMandate } from "../agent/mandate";
-import { resetMandateLedger } from "../agent/mandate-ledger";
 import { listOrders, withDb } from "../db/client";
 import {
   createSession,
@@ -164,7 +163,6 @@ test(
 test(
   "place_escrow_order buys inside the mandate and get_order reads it back",
   withAgentDb(async () => {
-    resetMandateLedger();
     const s = createSession();
     await call(s, "sample_check", { datasetId: CARDIO, study: STUDY });
     const bought = await call(s, "place_escrow_order", {
@@ -195,7 +193,6 @@ test(
 test(
   "place_escrow_order refuses without a passing sample check in the session",
   withAgentDb(async () => {
-    resetMandateLedger();
     const r = await call(createSession(), "place_escrow_order", {
       datasetId: CARDIO,
       mandate: token(),
@@ -208,7 +205,6 @@ test(
 test(
   "place_escrow_order refuses anything outside the mandate",
   withAgentDb(async () => {
-    resetMandateLedger();
     const s = createSession();
     await call(s, "sample_check", { datasetId: CARDIO, study: STUDY });
     const r = await call(s, "place_escrow_order", {
@@ -224,7 +220,6 @@ test(
 test(
   "the mandate total holds across several MCP orders",
   withAgentDb(async () => {
-    resetMandateLedger();
     const s = createSession();
     const t = token({ maxTotalCents: 6000 });
     await call(s, "sample_check", { datasetId: CARDIO, study: STUDY });

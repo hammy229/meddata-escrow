@@ -92,8 +92,11 @@ function dollars(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-function mandateUsage(m: Mandate, ctx: AgentContext): MandateUsage {
-  const spentCents = spentUnderMandate(m.id);
+async function mandateUsage(
+  m: Mandate,
+  ctx: AgentContext,
+): Promise<MandateUsage> {
+  const spentCents = await spentUnderMandate(m.id);
   return {
     id: m.id,
     maxTotalCents: m.maxTotalCents,
@@ -103,20 +106,20 @@ function mandateUsage(m: Mandate, ctx: AgentContext): MandateUsage {
   };
 }
 
-function result(
+async function result(
   runId: string,
   ctx: AgentContext,
   source: AgentRunResult["source"],
   reasoning: string,
   datasetId: string | null = ctx.order?.datasetId ?? null,
-): AgentRunResult {
+): Promise<AgentRunResult> {
   return {
     runId,
     steps: ctx.steps,
     recommendation: { datasetId, reasoning },
     shortlist: buildShortlist(ctx.steps, { datasetId }, ctx.budgetCents),
     ...(ctx.order ? { order: ctx.order } : {}),
-    ...(ctx.mandate ? { mandate: mandateUsage(ctx.mandate, ctx) } : {}),
+    ...(ctx.mandate ? { mandate: await mandateUsage(ctx.mandate, ctx) } : {}),
     source,
   };
 }
