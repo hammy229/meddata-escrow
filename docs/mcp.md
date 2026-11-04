@@ -45,6 +45,10 @@ Spend is reserved in the database before PayPal is called, so the web app and
 this server share one total, and it survives a restart. A voided or cancelled
 order gives its budget back. The same token works for `POST /api/agent` (`mandate` field).
 
+A buyer can switch a mandate off with `DELETE /api/mandates?mandateId=`, and
+`place_escrow_order` refuses it from then on, even though the token is still
+valid.
+
 ## Run it
 
 ```bash

@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { POST } from "./handlers";
 import { withAgentDb } from "../../../lib/agent/test-db";
 import { issueMandate } from "../../../lib/agent/mandate";
+import { revokeMandate, saveMandate } from "../../../lib/agent/mandate-store";
 import { listOrders, withDb } from "../../../lib/db/client";
 
 const STUDY = "Cardiology outcomes in a synthetic cohort";
@@ -82,5 +83,22 @@ test(
   withAgentDb(async () => {
     const res = await post({ study: STUDY, budgetCents: 9000 });
     assert.equal((await res.json()).mandate, undefined);
+  }),
+);
+
+test(
+  "a revoked mandate is refused even though its token is still valid",
+  withAgentDb(async () => {
+    const { token: t, mandate } = issueMandate({
+      buyerId: "researcher@example.com",
+      maxTotalCents: 10_000,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+    await saveMandate(mandate);
+    await revokeMandate(mandate.id, mandate.buyerId);
+    const res = await post({ study: STUDY, budgetCents: 9000, mandate: t });
+    assert.equal(res.status, 401);
+    assert.match((await res.json()).error, /revoked/);
+    assert.equal(withDb((db) => listOrders(db)).length, 0);
   }),
 );

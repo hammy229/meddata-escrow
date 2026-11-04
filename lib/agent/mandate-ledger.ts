@@ -30,6 +30,17 @@ export async function spentOn(
   return Number(row.total);
 }
 
+/** Whether the buyer has switched this mandate off. */
+export async function isRevokedOn(
+  db: AppDatabase,
+  mandateId: string,
+): Promise<boolean> {
+  const row = (await db
+    .prepare("SELECT revoked_at FROM mandates WHERE id = ?")
+    .get(mandateId)) as { revoked_at: string | null } | undefined;
+  return !!row?.revoked_at;
+}
+
 /** What a mandate has committed so far, in cents. */
 export async function spentUnderMandate(mandateId: string): Promise<number> {
   return await withDb(async (db) => await spentOn(db, mandateId));
@@ -62,6 +73,8 @@ export async function reserveOn(
       await db
         .prepare("SELECT pg_advisory_xact_lock(hashtext(?))")
         .get(mandate.id);
+    if (await isRevokedOn(db, mandate.id))
+      return { ok: false, reason: "mandate revoked" };
     const decision = checkSpend(
       mandate,
       await spentOn(db, mandate.id),

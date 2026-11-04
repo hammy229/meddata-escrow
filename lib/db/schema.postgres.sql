@@ -155,6 +155,22 @@ CREATE TABLE IF NOT EXISTS mandate_spend (
 CREATE INDEX IF NOT EXISTS idx_mandate_spend_mandate
   ON mandate_spend (mandate_id);
 
+-- Mandates a buyer has issued, so they can be listed and revoked. The signed
+-- token stays with the buyer and is never stored. Tokens signed before this table
+-- existed have no row and simply cannot be listed.
+CREATE TABLE IF NOT EXISTS mandates (
+  id                  TEXT PRIMARY KEY,
+  buyer_id            TEXT NOT NULL,
+  max_total_cents     INTEGER NOT NULL,
+  max_per_order_cents INTEGER NOT NULL,
+  allowed_vendors_json TEXT,
+  allowed_tags_json   TEXT,
+  expires_at          TEXT NOT NULL,
+  revoked_at          TEXT,
+  created_at          TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP::text)
+);
+CREATE INDEX IF NOT EXISTS idx_mandates_buyer ON mandates (buyer_id);
+
 -- ALTER TABLE takes an exclusive lock even when the column is already there,
 -- which can stall a deploy while the old instance is still serving. Only
 -- alter when a column is actually missing.

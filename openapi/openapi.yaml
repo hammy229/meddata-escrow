@@ -1073,6 +1073,68 @@ paths:
           $ref: "#/components/responses/InternalError"
 
   /api/mandates:
+    get:
+      tags: [Mandates]
+      operationId: listMandates
+      summary: List the caller's spending mandates
+      description: |
+        Newest first, each with what it has spent, what is left and whether it
+        is `active`, `expired` or `revoked`. The token itself is never stored,
+        so it is not returned here.
+      responses:
+        "200":
+          description: The caller's mandates.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mandates]
+                properties:
+                  mandates:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MandateSummary"
+        "500":
+          $ref: "#/components/responses/InternalError"
+      security:
+        - sessionCookie: []
+    delete:
+      tags: [Mandates]
+      operationId: revokeMandate
+      summary: Revoke a spending mandate
+      description: |
+        Kill switch. The agent and the MCP server stop opening orders under this
+        mandate right away, even with a valid token. Repeating the call changes
+        nothing. Orders it already opened stay, and only the buyer can approve
+        those.
+      parameters:
+        - name: mandateId
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The mandate, now revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mandate]
+                properties:
+                  mandate:
+                    $ref: "#/components/schemas/MandateSummary"
+        "404":
+          description: The mandate does not exist or belongs to someone else.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+        "500":
+          $ref: "#/components/responses/InternalError"
+      security:
+        - sessionCookie: []
     post:
       tags: [Mandates]
       operationId: issueMandate
@@ -2405,6 +2467,34 @@ components:
           description:
             Signed spending mandate token from `POST /api/mandates`. Orders
             outside it are refused in code.
+    MandateSummary:
+      type: object
+      required:
+        [
+          id,
+          buyerId,
+          maxTotalCents,
+          maxPerOrderCents,
+          spentCents,
+          remainingCents,
+          status,
+          expiresAt,
+          revokedAt,
+          createdAt,
+        ]
+      properties:
+        id: { type: string }
+        buyerId: { type: string }
+        maxTotalCents: { type: integer }
+        maxPerOrderCents: { type: integer }
+        allowedVendors: { type: array, items: { type: string } }
+        allowedTags: { type: array, items: { type: string } }
+        spentCents: { type: integer }
+        remainingCents: { type: integer }
+        status: { type: string, enum: [active, expired, revoked] }
+        expiresAt: { type: string, format: date-time }
+        revokedAt: { type: [string, "null"] }
+        createdAt: { type: string }
     AgentStep:
       type: object
       required: [tool, input, at]

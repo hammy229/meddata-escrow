@@ -4,6 +4,12 @@ All notable changes to MedData Escrow. Newest first.
 
 ## 2026-11-03: Agent spending controls and fairer disputes
 
+### Added
+
+- **Revoke a mandate.** `DELETE /api/mandates?mandateId=` stops the agent and the
+  MCP server from opening more orders under it right away, even with a valid
+  token. `GET /api/mandates` lists a buyer's mandates with spent and remaining.
+
 ### Changed
 
 - **Mandate spending now lives in the database.** A restart used to reset what a

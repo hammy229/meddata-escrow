@@ -1,4 +1,5 @@
 import { verifyMandate } from "../../../lib/agent/mandate";
+import { isMandateRevoked } from "../../../lib/agent/mandate-store";
 import type { Account } from "../../../lib/auth/store";
 // /api/agent — the AI procurement agent (lib/agent).
 //
@@ -60,6 +61,11 @@ export async function POST(request: Request, account?: Account) {
     mandate = verified.mandate;
   }
   try {
+    if (mandate && (await isMandateRevoked(mandate.id)))
+      return bad(
+        "This mandate was revoked. Sign a new one to let the agent buy.",
+        401,
+      );
     if (account) input.buyerEmail = account.email;
     const run = await runProcurementAgent({
       ...input,

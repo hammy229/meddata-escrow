@@ -1080,6 +1080,20 @@
       "description": "Signed spending mandates that bound what an agent may buy.",
       "item": [
         {
+          "name": "List the caller's spending mandates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mandates",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mandates"]
+            },
+            "description": "Newest first, each with what it has spent, what is left and whether it\nis `active`, `expired` or `revoked`. The token itself is never stored,\nso it is not returned here.\n"
+          },
+          "response": []
+        },
+        {
           "name": "Issue a signed spending mandate",
           "request": {
             "method": "POST",
@@ -1104,6 +1118,27 @@
                 }
               }
             }
+          },
+          "response": []
+        },
+        {
+          "name": "Revoke a spending mandate",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/mandates?mandateId=",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "mandates"],
+              "query": [
+                {
+                  "key": "mandateId",
+                  "value": "",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Kill switch. The agent and the MCP server stop opening orders under this\nmandate right away, even with a valid token. Repeating the call changes\nnothing. Orders it already opened stay, and only the buyer can approve\nthose.\n"
           },
           "response": []
         }

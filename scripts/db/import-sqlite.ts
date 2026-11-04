@@ -18,6 +18,7 @@ const tables = [
   "order_events",
   "query_usage",
   "mandate_spend",
+  "mandates",
   "paypal_webhook_events",
   "agent_runs",
   "account_agent_runs",

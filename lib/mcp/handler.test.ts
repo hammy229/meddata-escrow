@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { PassThrough } from "node:stream";
 import { tmpdir } from "node:os";
 
+import { revokeMandate, saveMandate } from "../agent/mandate-store";
 import { withAgentDb } from "../agent/test-db";
 import { issueMandate } from "../agent/mandate";
 import { listOrders, withDb } from "../db/client";
@@ -239,6 +240,28 @@ test(
     });
     assert.equal(second.isError, true);
     assert.match(second.text, /remaining/);
+  }),
+);
+
+test(
+  "place_escrow_order refuses a revoked mandate",
+  withAgentDb(async () => {
+    const issued = issueMandate({
+      buyerId: "researcher@example.com",
+      maxTotalCents: 10_000,
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    });
+    await saveMandate(issued.mandate);
+    await revokeMandate(issued.mandate.id, issued.mandate.buyerId);
+    const s = createSession();
+    await call(s, "sample_check", { datasetId: CARDIO, study: STUDY });
+    const r = await call(s, "place_escrow_order", {
+      datasetId: CARDIO,
+      mandate: issued.token,
+    });
+    assert.equal(r.isError, true);
+    assert.match(r.text, /revoked/);
+    assert.equal(withDb((db) => listOrders(db)).length, 0);
   }),
 );
 

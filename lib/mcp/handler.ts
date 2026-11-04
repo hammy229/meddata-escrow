@@ -20,6 +20,7 @@
 import * as z from "zod/v4";
 import { verifyMandate } from "../agent/mandate";
 import { spentUnderMandate } from "../agent/mandate-ledger";
+import { isMandateRevoked } from "../agent/mandate-store";
 import {
   createAgentContext,
   executeTool,
@@ -239,6 +240,8 @@ async function placeEscrowOrder(
   const v = verifyMandate(a.value.mandate);
   if (!v.ok) return { ok: false, error: `mandate rejected: ${v.reason}` };
   const mandate = v.mandate;
+  if (await isMandateRevoked(mandate.id))
+    return { ok: false, error: "mandate rejected: mandate revoked" };
   const account = (await withDb(
     async (db) =>
       await db
