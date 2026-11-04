@@ -987,3 +987,36 @@ test(
     assert.equal(res.status, 404);
   }),
 );
+
+test(
+  "GET promises no release while the delivery audit holds one back",
+  withEnv(async ({ url }) => {
+    const make = (audit?: { verdict: string; blocking: number }) => {
+      const order = seedOrder(url, { status: "AUTHORIZED" });
+      const db = openDb(url);
+      advanceOrder(db, order.id, "DELIVER");
+      if (audit)
+        db.prepare(
+          `INSERT INTO delivery_audits (order_id, dataset_id, verdict, blocking) VALUES (?, ?, ?, ?)`,
+        ).run(order.id, DATASET_ID, audit.verdict, audit.blocking);
+      db.close();
+      return order.id;
+    };
+    const deadlineOf = async (id: string) =>
+      (
+        (await (
+          await GET(new Request(`http://localhost/api/orders?id=${id}`))
+        ).json()) as { deadline: { action: string } | null }
+      ).deadline;
+    assert.equal((await deadlineOf(make()))?.action, "release");
+    assert.equal(
+      (await deadlineOf(make({ verdict: "pass", blocking: 0 })))?.action,
+      "release",
+    );
+    assert.equal(await deadlineOf(make({ verdict: "fail", blocking: 1 })), null);
+    assert.equal(
+      await deadlineOf(make({ verdict: "inconclusive", blocking: 0 })),
+      null,
+    );
+  }),
+);

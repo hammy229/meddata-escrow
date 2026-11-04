@@ -44,6 +44,7 @@ import {
   createOrder,
   getOrder,
   getDataset,
+  getDeliveryAudit,
   getVendor,
   listOrders,
   advanceOrder,
@@ -56,6 +57,7 @@ import { vendorPayoutCents } from "./fees";
 import {
   applyDelivery,
   auditDelivery,
+  captureBlockReason,
   auditSummary,
   type AuditSummary,
 } from "./delivery-audit";
@@ -90,6 +92,7 @@ export type EscrowErrorCode =
   | "VALIDATION" // bad input (422)
   | "NOT_FOUND" // unknown order (404)
   | "INVALID_TRANSITION" // illegal state-machine move (409)
+  | "AUDIT_BLOCKED" // delivery audit found a broken listing claim (409)
   | "PRECONDITION" // order lacks a PayPal id / vendor payout email (409)
   | "PAYPAL" // PayPal returned non-2xx (PayPal's status)
   | "NOT_CONFIGURED"; // PayPal credentials missing (503)
@@ -538,6 +541,16 @@ export async function advanceEscrowOrder(
     typeof input.note === "string" && input.note.trim() !== ""
       ? input.note.trim().slice(0, MAX_NOTE)
       : undefined;
+  // A delivery whose audit found a broken listing claim cannot be captured
+  // outright, by a person or by software. Checked before any PayPal call. The
+  // resolve paths stay open: a dispute is how the buyer accepts the data anyway.
+  if (event === "CAPTURE") {
+    const audit = await withDb(
+      async (db) => await getDeliveryAudit(db, orderId),
+    );
+    const reason = captureBlockReason(audit);
+    if (reason) throw new EscrowError(409, reason, "AUDIT_BLOCKED");
+  }
   // Both sides must agree on a split. The amount only ever comes from the stored
   // offer, and accepting must name it, so nobody accepts a figure that changed
   // after they read it.

@@ -2,6 +2,8 @@
 //
 //   DELIVERED   The buyer has INSPECTION_DAYS to confirm or dispute. After that
 //               the payment is released to the vendor.
+//               Not when the delivery audit blocked, could not decide, or is
+//               missing for an audited dataset: a person decides those.
 //   AUTHORIZED  The vendor has until the hold is about to expire to deliver.
 //               After that the hold is voided and the buyer keeps the money.
 //   DISPUTED    Never moved automatically. A dispute needs a decision, so one
@@ -11,9 +13,15 @@
 // because a capture on an expired authorization fails. Each move goes through
 // advanceEscrowOrder, so the state machine and PayPal idempotency keys still
 // apply, and a sweep can safely run twice or race with a person clicking.
-import { listOrderEvents, listOrders, withDb } from "../db/store";
+import {
+  getDeliveryAudit,
+  listOrderEvents,
+  listOrders,
+  withDb,
+} from "../db/store";
+import { releaseBlockReason } from "./delivery-audit";
 import { parseTimestamp, VALID_DAYS } from "./auth-window";
-import { advanceEscrowOrder, type EscrowDeps } from "./service";
+import { advanceEscrowOrder, EscrowError, type EscrowDeps } from "./service";
 
 /** How long a buyer has to inspect delivered data. */
 export const INSPECTION_DAYS = 7;
@@ -43,6 +51,7 @@ export function escrowDeadline(
   status: string,
   events: TimedEvent[],
   now: Date = new Date(),
+  opts: { releaseBlocked?: boolean } = {},
 ): EscrowDeadline | null {
   const authorized = eventTime(events, "AUTHORIZE");
   const holdEnds =
@@ -50,6 +59,8 @@ export function escrowDeadline(
   let action: EscrowDeadline["action"];
   let due: number | null;
   if (status === "DELIVERED") {
+    // The audit is holding the payment back, so no release is coming.
+    if (opts.releaseBlocked) return null;
     const delivered = eventTime(events, "DELIVER");
     if (delivered === null) return null;
     action = "release";
@@ -76,6 +87,8 @@ export interface SweepResult {
   refunded: string[];
   /** Disputes whose hold is about to expire. A person has to decide these. */
   needsReview: string[];
+  /** Releases the delivery audit stopped. They wait for a person. */
+  blocked: { orderId: string; reason: string }[];
   /** Moves that failed. They stay put and the next sweep tries again. */
   failed: { orderId: string; error: string }[];
 }
@@ -89,16 +102,21 @@ export async function sweepEscrow(
     released: [],
     refunded: [],
     needsReview: [],
+    blocked: [],
     failed: [],
   };
   const open = await withDb(async (db) => {
     const rows = [];
     for (const status of ["AUTHORIZED", "DELIVERED", "DISPUTED"] as const)
       for (const order of await listOrders(db, { status }))
-        rows.push({ order, events: await listOrderEvents(db, order.id) });
+        rows.push({
+          order,
+          events: await listOrderEvents(db, order.id),
+          audit: await getDeliveryAudit(db, order.id),
+        });
     return rows;
   });
-  for (const { order, events } of open) {
+  for (const { order, events, audit } of open) {
     if (order.status === "DISPUTED") {
       const authorized = eventTime(events, "AUTHORIZE");
       if (
@@ -117,6 +135,15 @@ export async function sweepEscrow(
       continue;
     }
     if (now.getTime() < Date.parse(deadline.dueAt)) continue;
+    // Checked before any capture, and reported apart from failures: a blocked
+    // order is not an error and should not look like one on every run.
+    if (deadline.action === "release") {
+      const reason = releaseBlockReason(order.dataset_id, audit);
+      if (reason) {
+        result.blocked.push({ orderId: order.id, reason });
+        continue;
+      }
+    }
     try {
       if (deadline.action === "release") {
         await advanceEscrowOrder(
@@ -140,6 +167,11 @@ export async function sweepEscrow(
         result.refunded.push(order.id);
       }
     } catch (err) {
+      // Someone else's audit landed between the read and the move.
+      if (err instanceof EscrowError && err.code === "AUDIT_BLOCKED") {
+        result.blocked.push({ orderId: order.id, reason: err.message });
+        continue;
+      }
       result.failed.push({ orderId: order.id, error: (err as Error).message });
     }
   }

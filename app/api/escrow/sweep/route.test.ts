@@ -49,6 +49,7 @@ test(
         released: [],
         refunded: [],
         needsReview: [],
+        blocked: [],
         failed: [],
       });
     });

@@ -21,6 +21,7 @@ import {
   withDb,
   advanceOrder,
   findOrderByPayPalRef,
+  getDeliveryAudit,
   recordWebhookEvent,
   type OrderPatch,
   type OrderRow,
@@ -234,6 +235,19 @@ export async function applyPayPalWebhookEvent(
         orderId: order.id,
         reason: `${decision.event} not applicable from ${order.status}`,
       } as const;
+    }
+    // PayPal says the money moved, so the state follows it. Say so loudly when
+    // that contradicts a delivery audit; the audit row stays as the record.
+    if (
+      decision.event === "CAPTURE" ||
+      decision.event === "RESOLVE_CAPTURE" ||
+      decision.event === "RESOLVE_SPLIT"
+    ) {
+      const audit = await getDeliveryAudit(db, order.id);
+      if (audit?.blocking)
+        console.warn(
+          `paypal webhook ${eventId}: ${eventType} captured order ${order.id} although its delivery audit blocks capture`,
+        );
     }
     const updated = await advanceOrder(
       db,

@@ -696,3 +696,78 @@ test(
     }
   }),
 );
+
+function putAudit(url: string, orderId: string, verdict: string, blocking: number) {
+  const db = openDb(url);
+  db.prepare(
+    `INSERT INTO delivery_audits (order_id, dataset_id, verdict, blocking) VALUES (?, ?, ?, ?)`,
+  ).run(orderId, DATASET_ID, verdict, blocking);
+  db.close();
+}
+
+test(
+  "capture is refused with AUDIT_BLOCKED before any PayPal call",
+  withDbEnv(async ({ url }) => {
+    const order = seedOrder(url, { status: "DELIVERED", authorization_id: "AUTH-1" });
+    putAudit(url, order.id, "fail", 1);
+    const { deps, calls } = fakePayPal();
+    await rejectsWith(
+      advanceEscrowOrder({ orderId: order.id, action: "capture" }, deps),
+      409,
+      "AUDIT_BLOCKED",
+    );
+    assert.equal(calls.length, 0);
+    assert.equal(getOrder(openDb(url), order.id)?.status, "DELIVERED");
+  }),
+);
+
+test(
+  "capture is refused in mock mode too",
+  withDbEnv(async ({ url }) => {
+    const order = seedOrder(url, { status: "DELIVERED", authorization_id: "AUTH-1" });
+    putAudit(url, order.id, "fail", 1);
+    await rejectsWith(
+      advanceEscrowOrder({ orderId: order.id, action: "capture" }, { emit: () => {} }),
+      409,
+      "AUDIT_BLOCKED",
+    );
+  }, { mock: true }),
+);
+
+test(
+  "a person can still capture an inconclusive or warning audit",
+  withDbEnv(async ({ url }) => {
+    for (const verdict of ["inconclusive", "warn"]) {
+      const order = seedOrder(url, { status: "DELIVERED", authorization_id: "AUTH-1" });
+      putAudit(url, order.id, verdict, 0);
+      const { deps, calls } = fakePayPal();
+      const res = await advanceEscrowOrder({ orderId: order.id, action: "capture" }, deps);
+      assert.equal(res.escrowState, "CAPTURED", verdict);
+      assert.equal(calls.length, 1);
+    }
+  }),
+);
+
+test(
+  "the buyer can accept blocked data by resolving the dispute, or refuse it",
+  withDbEnv(async ({ url }) => {
+    const accepted = seedOrder(url, { status: "DISPUTED", authorization_id: "AUTH-1" });
+    putAudit(url, accepted.id, "fail", 1);
+    const a = fakePayPal();
+    const res = await advanceEscrowOrder(
+      { orderId: accepted.id, action: "resolve", resolution: "capture" },
+      a.deps,
+    );
+    assert.equal(res.escrowState, "CAPTURED");
+    assert.equal(a.calls.length, 1);
+
+    const refused = seedOrder(url, { status: "DISPUTED", authorization_id: "AUTH-2" });
+    putAudit(url, refused.id, "fail", 1);
+    const b = fakePayPal();
+    const voided = await advanceEscrowOrder(
+      { orderId: refused.id, action: "resolve", resolution: "void" },
+      b.deps,
+    );
+    assert.equal(voided.escrowState, "VOIDED");
+  }),
+);

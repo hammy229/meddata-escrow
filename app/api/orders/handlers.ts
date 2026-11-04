@@ -63,7 +63,8 @@ import {
 import { authorizationWindow } from "../../../lib/escrow/auth-window";
 import { buildReceipt } from "../../../lib/escrow/receipt";
 import { escrowDeadline } from "../../../lib/escrow/sweep";
-import { listUsage } from "../../../lib/db/store";
+import { getDeliveryAudit, listUsage } from "../../../lib/db/store";
+import { releaseBlockReason } from "../../../lib/escrow/delivery-audit";
 import {
   createEscrowOrder,
   advanceEscrowOrder,
@@ -191,7 +192,13 @@ export async function GET(request: Request, account?: Account) {
         const delivery = grantsDataAccess(order.status)
           ? presignDelivery(order.dataset_id, { orderId: order.id })
           : null;
-        const deadline = escrowDeadline(order.status, events);
+        // No release is promised while the delivery audit holds one back.
+        const audit = await getDeliveryAudit(db, id);
+        const deadline = escrowDeadline(order.status, events, new Date(), {
+          releaseBlocked:
+            order.status === "DELIVERED" &&
+            releaseBlockReason(order.dataset_id, audit) !== null,
+        });
         return includeEvents
           ? { order, authorization, delivery, deadline, events }
           : { order, authorization, delivery, deadline };

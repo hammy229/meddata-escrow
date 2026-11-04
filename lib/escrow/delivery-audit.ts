@@ -20,7 +20,7 @@ import {
 } from "../db/store";
 import { runFitnessAudit } from "../fitness/audit";
 import { fingerprintRows } from "../fitness/fingerprint";
-import { fixtureCohort, listingClaims } from "../fitness/source";
+import { fixtureCohort, fixtureSpec, listingClaims } from "../fitness/source";
 import type { DeliveryAudit } from "../fitness/types";
 
 /** Start of the system note written on the DISPUTE an audit raises. */
@@ -74,6 +74,35 @@ export function auditSummary(audit: NewDeliveryAudit | null): AuditSummary {
   return audit
     ? { verdict: audit.verdict, blocking: audit.blocking }
     : { verdict: "not_applicable", blocking: false };
+}
+
+type StoredVerdict = Pick<DeliveryAudit, "verdict" | "blocking">;
+
+/**
+ * Why a person must look before a capture, or null. Only a breach of a listing
+ * claim stops a capture; an inconclusive audit does not stop a person.
+ */
+export function captureBlockReason(audit: StoredVerdict | undefined): string | null {
+  return audit?.blocking
+    ? "The delivery audit found data that breaks the listing, so the payment is held for a person to decide."
+    : null;
+}
+
+/**
+ * Why a payment must not be released automatically, or null. Software never
+ * releases money on an audit that failed, could not decide, or is missing for a
+ * dataset that is audited.
+ */
+export function releaseBlockReason(
+  datasetId: string,
+  audit: StoredVerdict | undefined,
+): string | null {
+  if (audit?.blocking) return captureBlockReason(audit);
+  if (audit?.verdict === "inconclusive")
+    return "The delivery audit could not reach a verdict, so a person has to decide.";
+  if (!audit && fixtureSpec(datasetId) !== null)
+    return "This dataset is audited and no delivery audit is on file, so a person has to decide.";
+  return null;
 }
 
 function disputeNote(audit: NewDeliveryAudit): string {

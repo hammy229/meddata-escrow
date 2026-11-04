@@ -3,7 +3,7 @@
 // instead of a session.
 //
 //   Authorization: Bearer $ESCROW_SWEEP_SECRET
-//   -> 200 { released, refunded, needsReview, failed }
+//   -> 200 { released, refunded, needsReview, blocked, failed }
 //   -> 401 wrong or missing secret; 503 when the secret isn't configured.
 import { createHash, timingSafeEqual } from "node:crypto";
 
