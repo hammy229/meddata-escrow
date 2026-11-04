@@ -347,7 +347,9 @@ export default function IncomingOrders() {
         if (res.ok) {
           setMessage(
             a.id === "deliver"
-              ? `Data delivered (${data.escrowState ?? "DELIVERED"}).`
+              ? data.audit?.blocking
+                ? "Data delivered, but it does not match the listing. The order is in dispute until the buyer decides."
+                : `Data delivered (${data.escrowState ?? "DELIVERED"}).`
               : a.id === "payout"
                 ? `Payout sent (${data.escrowState ?? "PAID_OUT"}).`
                 : `Dispute resolved — buyer refunded (${data.escrowState ?? "VOIDED"}).`,

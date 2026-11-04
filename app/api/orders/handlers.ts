@@ -2,6 +2,7 @@ import { getDataset } from "../../../lib/db/store";
 import { arbitrate } from "../../../lib/ai/arbiter";
 import { checkSample } from "../../../lib/ai/sample-check";
 import { generateDua } from "../../../lib/escrow/dua";
+import { listingClaims } from "../../../lib/fitness/source";
 import { getVendor } from "../../../lib/db/store";
 import { listDatasets } from "../../../lib/db/store";
 import { ESCROW_STATES } from "../../../lib/escrow/state-machine";
@@ -31,6 +32,10 @@ import type { Account } from "../../../lib/auth/store";
 //                 and releases the rest)
 //         note:   optional free-text context recorded on the audit event —
 //                 a dispute reason on dispute, a resolution note on resolve.
+//         deliver on a listing that makes claims also audits the delivered data
+//         against them. The response then carries audit: { verdict, blocking }.
+//         A blocking audit moves the order on to DISPUTED in the same step; a
+//         dispute always waits for a person.
 //         -> advance the escrow. The stored row is the source of truth: `from`
 //            state and the PayPal ids come from the DB, not the caller. The
 //            state-machine transition is validated BEFORE any PayPal call, so an
@@ -165,6 +170,7 @@ export async function GET(request: Request, account?: Account) {
           amountCents:
             found.order.amount_cents + (found.order.refunded_cents ?? 0),
           issuedAt: found.order.created_at,
+          claims: listingClaims(found.order.dataset_id),
         });
         return Response.json({
           order: found.order,
@@ -247,6 +253,7 @@ function advanceBody({
   captureId,
   payoutBatchId,
   status,
+  audit,
   mock,
 }: AdvanceEscrowOrderResult) {
   return {
@@ -255,6 +262,7 @@ function advanceBody({
     captureId,
     payoutBatchId,
     status,
+    audit,
     mock,
   };
 }

@@ -53,6 +53,12 @@ import {
 } from "../db/store";
 import { mockId, isMockMode } from "../mock/ids";
 import { vendorPayoutCents } from "./fees";
+import {
+  applyDelivery,
+  auditDelivery,
+  auditSummary,
+  type AuditSummary,
+} from "./delivery-audit";
 import { PER_QUERY_FEE_CENTS, MAX_QUERY_CAP_CENTS } from "../query/pricing";
 import {
   emitEscrowTransition,
@@ -188,6 +194,8 @@ export interface AdvanceEscrowOrderResult {
   payoutBatchId?: string;
   /** PayPal's status for the money move, when there was one. */
   status?: string;
+  /** On deliver: what the delivery audit found and whether it blocks money. */
+  audit?: AuditSummary;
   mock?: true;
 }
 const MAX_NOTE = 500;
@@ -561,9 +569,31 @@ export async function advanceEscrowOrder(
     escrowState: row.status,
     ...extra,
   });
-  // DELIVER, DISPUTE and CANCEL are internal state changes — no PayPal, in
+  // DELIVER checks the delivered data against the listing. The audit is worked
+  // out before any database is opened (a nested withDb deadlocks SQLite). One
+  // transaction then saves it, delivers and, if it blocks, disputes. Both moves
+  // are announced only after it commits. The dispute waits for a person.
+  if (event === "DELIVER") {
+    const audit = auditDelivery(order);
+    const moved = await withDb(
+      async (db) => await applyDelivery(db, orderId, audit, note),
+    ).catch((err) => {
+      if (err instanceof InvalidTransitionError)
+        throw new EscrowError(409, err.message, "INVALID_TRANSITION", {
+          cause: err,
+        });
+      throw err;
+    });
+    announce(deps, moved.delivered, "DELIVER", order.status);
+    if (moved.disputed) announce(deps, moved.disputed, "DISPUTE", "DELIVERED");
+    return done(moved.disputed ?? moved.delivered, {
+      audit: auditSummary(audit),
+      ...(isMockMode() ? { mock: true as const } : {}),
+    });
+  }
+  // DISPUTE and CANCEL are internal state changes — no PayPal, in
   // either mode (a MATCHED order was never authorized, so nothing is held).
-  if (event === "DELIVER" || event === "DISPUTE" || event === "CANCEL")
+  if (event === "DISPUTE" || event === "CANCEL")
     return done(await advance(), isMockMode() ? { mock: true } : {});
   // MOCK MODE: deterministic-shape ids, no PayPal client, no network.
   if (isMockMode()) {

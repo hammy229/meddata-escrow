@@ -5,6 +5,8 @@
 // for exactly that reason.
 import { createHash } from "node:crypto";
 
+import type { ListingClaims } from "../fitness/types";
+
 export interface DuaInput {
   orderId: string;
   datasetId: string;
@@ -14,6 +16,8 @@ export interface DuaInput {
   amountCents: number;
   /** Order creation time as stored (ISO or SQLite "YYYY-MM-DD HH:MM:SS"). */
   issuedAt: string;
+  /** What the listing promised about the data. Adds a section only when set. */
+  claims?: ListingClaims | null;
 }
 
 export interface Dua {
@@ -37,6 +41,27 @@ function dollars(cents: number): string {
     .toString()
     .replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   return `$${whole}.${String(Math.abs(cents % 100)).padStart(2, "0")}`;
+}
+
+function claimsSection(claims: ListingClaims): string[] {
+  const lines = [
+    "LISTING CLAIMS",
+    "The Vendor listed the following about the data. The delivered data is",
+    "checked against it. A clear mismatch holds the payment and a person decides",
+    "what happens next. The check is a screen, not proof.",
+    `Subjects: ${claims.subjects.toLocaleString("en-US")}`,
+    `Records: ${claims.records.toLocaleString("en-US")}`,
+    `Event rate: ${claims.eventRatePct}%`,
+    ...Object.keys(claims.coveragePct)
+      .sort()
+      .map(
+        (c) => `Coverage: ${oneLine(c)} ${claims.coveragePct[c]}%`,
+      ),
+  ];
+  if (claims.noPostIndexFeatures)
+    lines.push("No feature recorded after the index");
+  if (claims.uniqueSubjects) lines.push("One row per subject");
+  return [...lines, ""];
 }
 
 export function generateDua(input: DuaInput): Dua {
@@ -78,6 +103,7 @@ export function generateDua(input: DuaInput): Dua {
     "checks. Either party may dispute the order before capture; a dispute",
     "recommendation is advisory and does not move funds on its own.",
     "",
+    ...(input.claims ? claimsSection(input.claims) : []),
     "This text and its SHA-256 fingerprint are recorded on the order receipt.",
     "",
   ].join("\n");
