@@ -27,6 +27,9 @@ function dirtyDb() {
   db.prepare(
     `INSERT INTO paypal_webhook_events (id, event_type, order_id) VALUES (?, ?, ?)`,
   ).run("WH-1", "PAYMENT.CAPTURE.COMPLETED", order.id);
+  db.prepare(
+    `INSERT INTO delivery_audits (order_id, dataset_id, verdict, blocking) VALUES (?, ?, ?, ?)`,
+  ).run(order.id, dataset.id, "fail", 1);
   return db;
 }
 
@@ -45,6 +48,7 @@ test("reset clears orders, events, usage and webhook rows, keeps the catalog", (
     "order_events",
     "query_usage",
     "paypal_webhook_events",
+    "delivery_audits",
   ])
     assert.equal(count(db, t), 0, t);
   assert.deepEqual(seeded, catalog);

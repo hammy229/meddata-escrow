@@ -16,6 +16,8 @@ import {
   recordWebhookEvent,
   listDatasets,
   updateDatasetPrice,
+  saveDeliveryAudit,
+  getDeliveryAudit,
 } from "./store";
 import { applyPayPalWebhookEvent } from "../escrow/paypal-webhooks";
 import { postgresConfig, postgresSql } from "../postgres/config";
@@ -168,6 +170,19 @@ test("app repository executes migrations and escrow/billing transactions on Post
     await advanceOrder(db, order.id, "PAYOUT", { payoutBatchId: "BATCH-1" });
     assert.equal((await summarizeOrders(db)).paidOutCents, 4900);
     assert.equal((await listOrderEvents(db, order.id)).length, 5);
+    assert.equal(
+      await saveDeliveryAudit(db, {
+        orderId: order.id,
+        datasetId: "dataset",
+        verdict: "pass",
+        blocking: false,
+        fingerprint: "f",
+        claims: null,
+        report: null,
+      }),
+      true,
+    );
+    assert.equal((await getDeliveryAudit(db, order.id))?.blocking, false);
     assert.equal(
       (await listOrders(db, { buyerEmail: "user@example.test" })).length,
       1,

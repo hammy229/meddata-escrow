@@ -15,6 +15,7 @@ const tables = [
   "provider_connections",
   "datasets",
   "orders",
+  "delivery_audits",
   "order_events",
   "query_usage",
   "mandate_spend",

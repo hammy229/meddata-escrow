@@ -17,6 +17,7 @@ const CLEARED_TABLES = [
   "query_usage",
   "mandate_spend",
   "mandates",
+  "delivery_audits",
   "orders",
   "agent_runs",
 ] as const;

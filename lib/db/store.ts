@@ -15,7 +15,11 @@ import type {
   OrderSummary,
 } from "./client";
 import type { NewUsage, UsageRow } from "./usage";
-import type { ListingClaims } from "../fitness/types";
+import type {
+  DeliveryAudit,
+  FitnessReport,
+  ListingClaims,
+} from "../fitness/types";
 import type { Dataset } from "./datasets";
 import { UnknownOrderError } from "./usage";
 import {
@@ -323,6 +327,65 @@ export async function recordUsage(
       .prepare("SELECT * FROM query_usage WHERE id = ?")
       .get(id)) as UsageRow;
   });
+}
+export type NewDeliveryAudit = Omit<DeliveryAudit, "createdAt"> & {
+  datasetId: string;
+};
+/** Store the audit for an order. The first one wins: returns false when the
+ *  order already has one. */
+export async function saveDeliveryAudit(
+  db: AppDatabase,
+  audit: NewDeliveryAudit,
+): Promise<boolean> {
+  const { changes } = await db
+    .prepare(
+      "INSERT INTO delivery_audits (order_id, dataset_id, verdict, blocking, fingerprint, claims_json, report_json) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(order_id) DO NOTHING",
+    )
+    .run(
+      audit.orderId,
+      audit.datasetId,
+      audit.verdict,
+      // 0 or 1: Postgres will not take a JS boolean for an INTEGER column.
+      audit.blocking ? 1 : 0,
+      audit.fingerprint,
+      audit.claims ? JSON.stringify(audit.claims) : null,
+      audit.report ? JSON.stringify(audit.report) : null,
+    );
+  return changes > 0;
+}
+export async function getDeliveryAudit(
+  db: AppDatabase,
+  orderId: string,
+): Promise<(DeliveryAudit & { datasetId: string }) | undefined> {
+  const row = (await db
+    .prepare("SELECT * FROM delivery_audits WHERE order_id = ?")
+    .get(orderId)) as
+    | {
+        order_id: string;
+        dataset_id: string;
+        verdict: DeliveryAudit["verdict"];
+        blocking: number | string;
+        fingerprint: string | null;
+        claims_json: string | null;
+        report_json: string | null;
+        created_at: string;
+      }
+    | undefined;
+  if (!row) return undefined;
+  return {
+    orderId: row.order_id,
+    datasetId: row.dataset_id,
+    verdict: row.verdict,
+    blocking: Number(row.blocking) === 1,
+    fingerprint: row.fingerprint,
+    claims: row.claims_json
+      ? (JSON.parse(row.claims_json) as ListingClaims)
+      : null,
+    report: row.report_json
+      ? (JSON.parse(row.report_json) as FitnessReport)
+      : null,
+    createdAt: row.created_at,
+  };
 }
 function meta() {
   return new Map(

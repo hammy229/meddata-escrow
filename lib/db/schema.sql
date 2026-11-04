@@ -171,3 +171,16 @@ CREATE TABLE IF NOT EXISTS mandates (
   created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_mandates_buyer ON mandates (buyer_id);
+
+-- What the fitness audit found in the bytes a vendor delivered, one row per
+-- order. The fingerprint shows which bytes were audited, nothing more.
+CREATE TABLE IF NOT EXISTS delivery_audits (
+  order_id    TEXT PRIMARY KEY REFERENCES orders(id),
+  dataset_id  TEXT NOT NULL,
+  verdict     TEXT NOT NULL,
+  blocking    INTEGER NOT NULL DEFAULT 0,
+  fingerprint TEXT,
+  claims_json TEXT,
+  report_json TEXT,
+  created_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
