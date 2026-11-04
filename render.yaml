@@ -30,6 +30,9 @@ services:
         generateValue: true
       - key: MANDATE_SECRET
         generateValue: true
+      # Bearer secret for POST /api/escrow/sweep (escrow deadlines).
+      - key: ESCROW_SWEEP_SECRET
+        generateValue: true
       - key: PROVIDER_DATABASE_HOSTS
         sync: false
       # Runs the full escrow arc with no PayPal keys. Remove (and set the

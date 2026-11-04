@@ -29,6 +29,7 @@ export const RATE_LIMITS: Readonly<Record<string, RateLimitRule>> = {
   "/api/match": { limit: 20, windowMs: MINUTE },
   "/api/agent": { limit: 5, windowMs: MINUTE },
   "/api/mandates": { limit: 30, windowMs: MINUTE },
+  "/api/escrow/sweep": { limit: 10, windowMs: MINUTE },
   // One researcher purchase is ~5 order POSTs (create, authorize, capture...).
   "/api/orders": { limit: 60, windowMs: MINUTE },
 };

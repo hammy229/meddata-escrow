@@ -94,6 +94,25 @@ export function describeHold(auth: unknown): string | null {
   return `Funds held · ${days} · ${tail}`;
 }
 
+/**
+ * One line about what happens if nobody acts, from the `deadline` field of
+ * GET /api/orders?id=. Null when there is no deadline.
+ */
+export function describeDeadline(deadline: unknown): string | null {
+  if (!deadline || typeof deadline !== "object") return null;
+  const d = deadline as Record<string, unknown>;
+  if (typeof d.daysLeft !== "number") return null;
+  const when =
+    d.daysLeft === 0
+      ? "today"
+      : `in ${d.daysLeft} ${d.daysLeft === 1 ? "day" : "days"}`;
+  if (d.action === "release")
+    return `Payment releases to the vendor ${when} unless you dispute`;
+  if (d.action === "refund")
+    return `You get your money back ${when} if the vendor doesn't deliver`;
+  return null;
+}
+
 export interface Delivery {
   url: string;
   expiresAt: string;

@@ -33,6 +33,7 @@ import AgentRun from "../components/AgentRun";
 import EscrowStepper from "../components/EscrowStepper";
 import {
   describeHold,
+  describeDeadline,
   downloadLabel,
   type Delivery,
   orderToView,
@@ -214,7 +215,11 @@ export default function ResearcherWorkspace({
         const data = await res.json().catch(() => ({}));
         if (stale || !res.ok || typeof data?.order?.status !== "string") return;
         applyOrderStatus(data.order.status);
-        setHoldLine(describeHold(data.authorization));
+        setHoldLine(
+          [describeHold(data.authorization), describeDeadline(data.deadline)]
+            .filter(Boolean)
+            .join(" · ") || null,
+        );
         setDelivery(parseDelivery(data.delivery));
         const change = `${data.order.status}:${data.order.updated_at ?? ""}`;
         if (
@@ -305,7 +310,11 @@ export default function ResearcherWorkspace({
         }
         applyOrderStatus(status);
         if (status === data.order.status) {
-          setHoldLine(describeHold(data.authorization));
+          setHoldLine(
+            [describeHold(data.authorization), describeDeadline(data.deadline)]
+              .filter(Boolean)
+              .join(" · ") || null,
+          );
           setDelivery(parseDelivery(data.delivery));
         }
         if (status === "AUTHORIZED" && returnToken) {

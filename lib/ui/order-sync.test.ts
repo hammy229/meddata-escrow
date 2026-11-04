@@ -9,6 +9,7 @@ import {
   parseDelivery,
   shouldPoll,
   workspaceUrl,
+  describeDeadline,
 } from "./order-sync";
 
 test("shouldPoll stops on terminal states and unknowns", () => {
@@ -156,4 +157,21 @@ test("describeCap needs a real cap", () => {
 test("workspaceUrl encodes the order id", () => {
   assert.equal(workspaceUrl("ord_123"), "/researcher?orderId=ord_123");
   assert.equal(workspaceUrl("a b&c"), "/researcher?orderId=a%20b%26c");
+});
+
+test("describeDeadline says what happens if nobody acts", () => {
+  assert.equal(
+    describeDeadline({ action: "release", daysLeft: 7, dueAt: "x" }),
+    "Payment releases to the vendor in 7 days unless you dispute",
+  );
+  assert.equal(
+    describeDeadline({ action: "refund", daysLeft: 1, dueAt: "x" }),
+    "You get your money back in 1 day if the vendor doesn't deliver",
+  );
+  assert.match(
+    describeDeadline({ action: "release", daysLeft: 0 }) ?? "",
+    /today/,
+  );
+  for (const bad of [null, undefined, 3, {}, { action: "nope", daysLeft: 2 }])
+    assert.equal(describeDeadline(bad), null);
 });

@@ -731,6 +731,20 @@
       "description": "Escrow lifecycle (PayPal authorize-then-capture) and order reads.",
       "item": [
         {
+          "name": "Act on escrow deadlines",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/escrow/sweep",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "escrow", "sweep"]
+            },
+            "description": "For a scheduler, not a browser. Delivered orders the buyer has not\nanswered within 7 days release the payment to the vendor. Orders the\nvendor has not delivered by day 28 of the hold are voided, so the buyer\nkeeps the money. Disputes are never moved, only flagged for review once\ntheir hold is about to expire. Running it twice changes nothing.\n"
+          },
+          "response": []
+        },
+        {
           "name": "List orders, read one order, or summarize earnings",
           "event": [
             {

@@ -111,6 +111,59 @@ paths:
           description: Account could not be created with this email.
         "429":
           description: Too many attempts; try again in a minute.
+  /api/escrow/sweep:
+    post:
+      tags: [Orders]
+      operationId: sweepEscrow
+      summary: Act on escrow deadlines
+      description: |
+        For a scheduler, not a browser. Delivered orders the buyer has not
+        answered within 7 days release the payment to the vendor. Orders the
+        vendor has not delivered by day 28 of the hold are voided, so the buyer
+        keeps the money. Disputes are never moved, only flagged for review once
+        their hold is about to expire. Running it twice changes nothing.
+      responses:
+        "200":
+          description: What the sweep did. A failed move stays put and is retried next time.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [released, refunded, needsReview, failed]
+                properties:
+                  released: { type: array, items: { type: string } }
+                  refunded: { type: array, items: { type: string } }
+                  needsReview: { type: array, items: { type: string } }
+                  failed:
+                    type: array
+                    items:
+                      type: object
+                      required: [orderId, error]
+                      properties:
+                        orderId: { type: string }
+                        error: { type: string }
+        "401":
+          description: Wrong or missing secret.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Too many requests.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          $ref: "#/components/responses/InternalError"
+        "503":
+          description: "`ESCROW_SWEEP_SECRET` is not configured."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      security:
+        - sweepSecret: []
   /api/health:
     get:
       tags: [System]
@@ -1791,6 +1844,9 @@ paths:
 
 components:
   securitySchemes:
+    sweepSecret:
+      type: http
+      scheme: bearer
     sessionCookie:
       type: apiKey
       in: cookie
@@ -2095,6 +2151,18 @@ components:
       required: [order, authorization, delivery]
       properties:
         order: { $ref: "#/components/schemas/OrderRow" }
+        deadline:
+          description:
+            What happens if nobody acts. Delivered data releases the payment
+            and an undelivered hold is refunded. Null in every other state.
+          oneOf:
+            - type: object
+              required: [action, dueAt, daysLeft]
+              properties:
+                action: { type: string, enum: [release, refund] }
+                dueAt: { type: string, format: date-time }
+                daysLeft: { type: integer }
+            - type: "null"
         authorization:
           description:
             The PayPal hold window while funds are held (AUTHORIZED, DELIVERED,

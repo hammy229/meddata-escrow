@@ -6,6 +6,11 @@ All notable changes to MedData Escrow. Newest first.
 
 ### Added
 
+- **Escrow deadlines.** A buyer has 7 days after delivery to confirm or dispute,
+  then the payment releases to the vendor. A vendor who never delivers has the
+  hold refunded on day 28, a day before PayPal would expire it. Disputes are only
+  flagged, never moved. `POST /api/escrow/sweep` runs this for a scheduler, and
+  both workspaces show the deadline.
 - **Split a dispute.** Either side can offer to settle for part of the price and
   the other side accepts. PayPal then captures that part and releases the rest.
   Fees, payouts, receipts, mandate spend and insights all use the settled amount.

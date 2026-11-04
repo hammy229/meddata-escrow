@@ -50,6 +50,7 @@ export default function OrderDetail({
   onClose: () => void;
 }) {
   const [authorization, setAuthorization] = useState<AuthWindow | null>(null);
+  const [deadlineLine, setDeadlineLine] = useState<string | null>(null);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -61,6 +62,14 @@ export default function OrderDetail({
         );
         const data = await res.json().catch(() => ({}));
         const auth = data?.authorization;
+        const d = data?.deadline;
+        setDeadlineLine(
+          res.ok && d
+            ? d.action === "release"
+              ? `The payment reaches you automatically by ${fmt(d.dueAt)} unless the buyer disputes.`
+              : `Deliver by ${fmt(d.dueAt)}, or the hold is refunded to the buyer.`
+            : null,
+        );
         setAuthorization(
           res.ok && auth && typeof auth === "object" ? auth : null,
         );
@@ -155,6 +164,7 @@ export default function OrderDetail({
             {authorization.state !== "expired" &&
               ` · ${authorization.daysLeft} day${authorization.daysLeft === 1 ? "" : "s"} left`}
           </p>
+          {deadlineLine && <p className="mt-2 text-sm">{deadlineLine}</p>}
         </section>
       )}
 

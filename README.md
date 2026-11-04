@@ -122,6 +122,16 @@ part with `final_capture` and release the rest. The order's amount becomes what
 was captured, so the fee, payout and receipt all follow it. Nobody can accept
 their own offer, or an offer that changed after they read it.
 
+## Escrow deadlines
+
+Nobody can leave money stuck by going quiet. `POST /api/escrow/sweep` (bearer
+`ESCROW_SWEEP_SECRET`, meant for a scheduler such as a Render cron job) releases
+the payment 7 days after delivery if the buyer has not responded, and refunds the
+hold on day 28 if the vendor never delivered. Disputes are never moved, only
+flagged for a person. The render.yaml Blueprint sets the secret but not the
+schedule, so add a cron job when you deploy. `GET /api/orders?id=` returns the
+order's `deadline`, and both workspaces show it.
+
 ## Prize map
 
 Where each judging area and prize is addressed. "Mock" means it runs end to end
@@ -293,6 +303,7 @@ each guardrail marked as enforced or triggered.
 | `POST /api/agent` `{ study, budgetCents }`                               | Run the procurement agent; returns `runId`, steps, recommendation, `shortlist`, order                                                                                                    |
 | `GET /api/agent?runId=<id>`                                              | Replay a stored agent run (audit), with its `shortlist`                                                                                                                                  |
 | `GET /api/mandates`, `DELETE /api/mandates?mandateId=`                   | List your mandates with spent and remaining, or revoke one so the agent and MCP server stop buying under it right away                                                                   |
+| `POST /api/escrow/sweep`                                                 | For a scheduler, with a bearer secret: acts on escrow deadlines. Returns `released`, `refunded`, `needsReview` and `failed`                                                              |
 | `POST /api/mandates` `{ maxTotalCents, maxPerOrderCents?, ... }`         | Issue a signed spending mandate; pass the `token` to `POST /api/agent` as `mandate` (`401` if bad or expired)                                                                            |
 | `GET /api/trust` `?vendorId= or ?datasetId=`                             | Trust score, grade and per-factor reasons (no query lists everything)                                                                                                                    |
 | `GET /api/orders?id=<id>&arbitrate=1`                                    | Advisory dispute recommendation (`409` unless the order is `DISPUTED`)                                                                                                                   |

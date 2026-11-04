@@ -28,7 +28,7 @@ export interface AuthWindow {
  * Parse a Date, ISO string, or a SQLite `CURRENT_TIMESTAMP` value
  * (`YYYY-MM-DD HH:MM:SS`, UTC with no zone marker). Returns null if invalid.
  */
-function toDate(value: Date | string): Date | null {
+export function parseTimestamp(value: Date | string): Date | null {
   if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
   if (typeof value !== "string") return null;
   const bare = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value);
@@ -45,8 +45,8 @@ export function authorizationWindow(
   now: Date | string = new Date(),
 ): AuthWindow | null {
   if (authorizedAt == null) return null;
-  const start = toDate(authorizedAt);
-  const current = toDate(now);
+  const start = parseTimestamp(authorizedAt);
+  const current = parseTimestamp(now);
   if (!start || !current) return null;
 
   const honorUntil = new Date(start.getTime() + HONOR_DAYS * DAY_MS);

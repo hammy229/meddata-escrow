@@ -57,6 +57,7 @@ import {
 } from "../../../lib/db/store";
 import { authorizationWindow } from "../../../lib/escrow/auth-window";
 import { buildReceipt } from "../../../lib/escrow/receipt";
+import { escrowDeadline } from "../../../lib/escrow/sweep";
 import { listUsage } from "../../../lib/db/store";
 import {
   createEscrowOrder,
@@ -91,6 +92,9 @@ function errorResponse(err: unknown): Response {
 //       ({ authorizedAt, honorUntil, expiresAt, state, daysLeft }, see
 //       lib/escrow/auth-window) while funds are held (AUTHORIZED, DELIVERED,
 //       DISPUTED), measured from the AUTHORIZE event; otherwise null.
+//       `deadline` says what happens if nobody acts ({ action, dueAt, daysLeft },
+//       see lib/escrow/sweep): delivered data releases the payment, and an
+//       undelivered hold is refunded. Null for every other state.
 //   GET /api/orders?id=ord_..&receipt=1
 //       -> { order, receipt }  fee breakdown (lib/escrow/receipt): amount,
 //          platform fee, vendor payout, per-query charges and the total. All
@@ -181,9 +185,10 @@ export async function GET(request: Request, account?: Account) {
         const delivery = grantsDataAccess(order.status)
           ? presignDelivery(order.dataset_id, { orderId: order.id })
           : null;
+        const deadline = escrowDeadline(order.status, events);
         return includeEvents
-          ? { order, authorization, delivery, events }
-          : { order, authorization, delivery };
+          ? { order, authorization, delivery, deadline, events }
+          : { order, authorization, delivery, deadline };
       });
       if (!result) return bad(`unknown orderId: ${id}`, 404);
       return Response.json(result);
