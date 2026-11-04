@@ -17,6 +17,8 @@ export interface Receipt {
   amountCents: number;
   platformFeeCents: number;
   vendorPayoutCents: number;
+  /** What a split dispute sent back to the buyer. 0 otherwise. */
+  refundedCents: number;
   queryCount: number;
   /** Sum of the per-query charges recorded for the order. */
   queryChargesCents: number;
@@ -30,7 +32,7 @@ export function buildReceipt(
   order: Pick<
     OrderRow,
     "id" | "dataset_id" | "status" | "amount_cents" | "query_cap_cents"
-  >,
+  > & { refunded_cents?: number },
   usage: Pick<UsageRow, "charge_cents">[],
 ): Receipt {
   const uncharged = order.status === "VOIDED" || order.status === "CANCELLED";
@@ -45,6 +47,7 @@ export function buildReceipt(
     amountCents,
     platformFeeCents: platformFeeCents(amountCents),
     vendorPayoutCents: vendorPayoutCents(amountCents),
+    refundedCents: uncharged ? 0 : (order.refunded_cents ?? 0),
     queryCount: usage.length,
     queryChargesCents,
     queryCapCents: order.query_cap_cents,

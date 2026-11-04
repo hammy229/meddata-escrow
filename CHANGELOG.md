@@ -6,6 +6,10 @@ All notable changes to MedData Escrow. Newest first.
 
 ### Added
 
+- **Split a dispute.** Either side can offer to settle for part of the price and
+  the other side accepts. PayPal then captures that part and releases the rest.
+  Fees, payouts, receipts, mandate spend and insights all use the settled amount.
+  Both workspaces now show the arbiter's advice, which still cannot move money.
 - **Agent spending panel.** The researcher page can sign a mandate, show each
   mandate's spend in an AG Grid, revoke it, and run the agent under it. A run
   reports what it spent and every order the mandate refused.

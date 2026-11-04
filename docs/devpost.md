@@ -86,6 +86,9 @@ PAID_OUT`, plus dispute/void) with an append-only audit trail of every
   Vendors and datasets get a 0 to 100 score with plain-English reasons. On a
   disputed order, Claude suggests refund, release or split from the audit trail,
   but cannot move money. Every receipt carries a fingerprinted agreement.
+- **Disputes that can actually split.** One side offers a split and the other
+  accepts. PayPal captures that part of the hold and releases the rest, and the
+  fee, payout and receipt follow the settled amount.
 - **Insights and a guided demo.** An `/insights` page shows money held versus
   released, fees and dispute rate. `/demo` plays the whole story through the real
   APIs in one click.

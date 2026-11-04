@@ -107,10 +107,14 @@ export function trustScore(input: TrustInput): TrustScore {
     has(o, "RESOLVE_CAPTURE"),
   ).length;
   const buyerWon = input.orders.filter((o) => has(o, "RESOLVE_VOID")).length;
-  const resolved = vendorWon + buyerWon;
-  const outcomeValue = resolved ? shrunk(vendorWon, resolved) : 0.8;
+  const splits = input.orders.filter((o) => has(o, "RESOLVE_SPLIT")).length;
+  const resolved = vendorWon + buyerWon + splits;
+  // A split is a shared outcome, so it counts half for the vendor.
+  const outcomeValue = resolved
+    ? shrunk(vendorWon + splits / 2, resolved)
+    : 0.8;
   const outcomeReason = resolved
-    ? `Of ${plural(resolved, "resolved dispute")}, the vendor prevailed in ${vendorWon} and the buyer in ${buyerWon}.`
+    ? `Of ${plural(resolved, "resolved dispute")}, the vendor prevailed in ${vendorWon} and the buyer in ${buyerWon}${splits ? `, and ${splits} ended in a split` : ""}.`
     : "No resolved disputes yet, which counts mildly in the vendor's favor.";
 
   // Delivery speed: AUTHORIZE -> DELIVER, per delivered order.

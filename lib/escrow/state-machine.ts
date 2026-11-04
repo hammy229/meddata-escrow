@@ -4,6 +4,7 @@
 //   MATCHED ──CANCEL─────> CANCELLED
 //   AUTHORIZED ──VOID────> VOIDED
 //   AUTHORIZED/DELIVERED ──DISPUTE──> DISPUTED ──RESOLVE_CAPTURE──> CAPTURED
+//                                               ├─RESOLVE_SPLIT───> CAPTURED (part of the price)
 //                                               └─RESOLVE_VOID────> VOIDED
 //
 // VOIDED, CANCELLED, PAID_OUT are terminal. Pure data — no I/O, no PayPal
@@ -26,6 +27,7 @@ export type EscrowEvent =
   | "PAYOUT"
   | "DISPUTE"
   | "RESOLVE_CAPTURE"
+  | "RESOLVE_SPLIT"
   | "RESOLVE_VOID"
   | "VOID"
   | "CANCEL";
@@ -38,7 +40,11 @@ const TRANSITIONS: Record<
   AUTHORIZED: { DELIVER: "DELIVERED", VOID: "VOIDED", DISPUTE: "DISPUTED" },
   DELIVERED: { CAPTURE: "CAPTURED", DISPUTE: "DISPUTED" },
   CAPTURED: { PAYOUT: "PAID_OUT" },
-  DISPUTED: { RESOLVE_CAPTURE: "CAPTURED", RESOLVE_VOID: "VOIDED" },
+  DISPUTED: {
+    RESOLVE_CAPTURE: "CAPTURED",
+    RESOLVE_SPLIT: "CAPTURED",
+    RESOLVE_VOID: "VOIDED",
+  },
   PAID_OUT: {},
   VOIDED: {},
   CANCELLED: {},

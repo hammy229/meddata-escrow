@@ -47,6 +47,7 @@ import {
   getVendor,
   listOrders,
   advanceOrder,
+  recordSplitOffer,
   type OrderRow,
   type OrderPatch,
 } from "../db/store";
@@ -71,7 +72,9 @@ const ACTION_EVENT = {
   cancel: "CANCEL",
 } as const satisfies Record<string, EscrowEvent>;
 export type EscrowAction = keyof typeof ACTION_EVENT | "resolve";
-export type EscrowResolution = "capture" | "void";
+export type EscrowResolution = "capture" | "void" | "split";
+/** Which side of the order is acting, when a person is. */
+export type EscrowActor = "researcher" | "vendor";
 /** Every action `advanceEscrowOrder` accepts (for tool schemas / validation). */
 export const ESCROW_ACTIONS: readonly EscrowAction[] = [
   ...(Object.keys(ACTION_EVENT) as (keyof typeof ACTION_EVENT)[]),
@@ -167,6 +170,10 @@ export interface AdvanceEscrowOrderInput {
   action: EscrowAction;
   /** Required when action is "resolve". */
   resolution?: EscrowResolution;
+  /** With resolution "split": the offer being accepted, in cents. */
+  captureCents?: number;
+  /** Who is acting. A split offer can't be accepted by the side that made it. */
+  actor?: EscrowActor;
   /** Free-text context recorded on the audit event (trimmed, max 500 chars). */
   note?: string;
   /** PayPal idempotency key for the money move (PayPal-Request-Id). */
@@ -192,7 +199,8 @@ const MAX_NOTE = 500;
  */
 export function paypalRequestId(
   orderId: string,
-  operation: "create" | "authorize" | "capture" | "void" | "payout",
+  operation:
+    "create" | "authorize" | "capture" | "split-capture" | "void" | "payout",
 ): string {
   return `${orderId}:${operation}`;
 }
@@ -398,8 +406,11 @@ export async function createEscrowOrder(
 /** Resolve an action (+ resolution) to its state-machine event, or throw 422. */
 function eventFor(action: unknown, resolution: unknown): EscrowEvent {
   if (action === "resolve") {
+    if (resolution === "split") return "RESOLVE_SPLIT";
     if (resolution !== "capture" && resolution !== "void")
-      throw invalid('resolve requires resolution: "capture" or "void"');
+      throw invalid(
+        'resolve requires resolution: "capture", "void" or "split"',
+      );
     return resolution === "capture" ? "RESOLVE_CAPTURE" : "RESOLVE_VOID";
   }
   const event =
@@ -409,6 +420,88 @@ function eventFor(action: unknown, resolution: unknown): EscrowEvent {
   if (!event)
     throw invalid(`action must be one of: ${ESCROW_ACTIONS.join(", ")}`);
   return event;
+}
+function usd(cents: number): string {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+/** The settled amounts if this caller may accept the order's split offer. */
+function acceptedSplit(
+  order: OrderRow,
+  input: AdvanceEscrowOrderInput,
+): OrderPatch {
+  const offer = order.split_offer_cents;
+  if (offer === null || offer === undefined)
+    throw new EscrowError(409, "no split is on offer", "PRECONDITION");
+  if (input.captureCents !== offer)
+    throw new EscrowError(
+      409,
+      `the offer is now ${usd(offer)} to the vendor; read it again before accepting`,
+      "PRECONDITION",
+    );
+  if (input.actor && input.actor === order.split_offer_by)
+    throw new EscrowError(
+      409,
+      "the other side has to accept your offer",
+      "PRECONDITION",
+    );
+  return { amountCents: offer, refundedCents: order.amount_cents - offer };
+}
+export interface ProposeSplitInput {
+  orderId: string;
+  /** What the vendor keeps (before the platform fee), in integer cents. */
+  captureCents: number;
+  actor: EscrowActor;
+  note?: string;
+}
+/**
+ * Offer to settle a dispute for part of the price. Moves no money and leaves
+ * the order DISPUTED until the other side accepts. A new offer replaces the
+ * last one, which lets either side counter.
+ */
+export async function proposeSplit(
+  input: ProposeSplitInput,
+): Promise<OrderRow> {
+  const orderId: unknown = input.orderId;
+  if (typeof orderId !== "string" || orderId.trim() === "")
+    throw invalid("orderId is required");
+  const order = await withDb(async (db) => await getOrder(db, orderId));
+  if (!order)
+    throw new EscrowError(404, `unknown orderId: ${orderId}`, "NOT_FOUND");
+  const cents: unknown = input.captureCents;
+  if (
+    typeof cents !== "number" ||
+    !Number.isInteger(cents) ||
+    cents < 1 ||
+    cents >= order.amount_cents
+  )
+    throw invalid(
+      `captureCents must be a whole number from 1 to ${order.amount_cents - 1}`,
+    );
+  const who = input.actor === "vendor" ? "Vendor" : "Buyer";
+  const reason =
+    typeof input.note === "string" ? input.note.trim().slice(0, 300) : "";
+  const note =
+    `${who} offered: vendor keeps ${usd(cents)}, buyer gets ${usd(order.amount_cents - cents)} back.` +
+    (reason ? ` ${reason}` : "");
+  try {
+    return await withDb(
+      async (db) =>
+        await recordSplitOffer(db, orderId, {
+          captureCents: cents,
+          by: input.actor,
+          note,
+        }),
+    );
+  } catch (err) {
+    if (err instanceof InvalidTransitionError)
+      throw new EscrowError(
+        409,
+        `order is ${err.state}; only a disputed order can be split`,
+        "INVALID_TRANSITION",
+        { cause: err },
+      );
+    throw err;
+  }
 }
 /** Advance a stored escrow order by one action. */
 export async function advanceEscrowOrder(
@@ -437,6 +530,11 @@ export async function advanceEscrowOrder(
     typeof input.note === "string" && input.note.trim() !== ""
       ? input.note.trim().slice(0, MAX_NOTE)
       : undefined;
+  // Both sides must agree on a split. The amount only ever comes from the stored
+  // offer, and accepting must name it, so nobody accepts a figure that changed
+  // after they read it.
+  const splitPatch =
+    event === "RESOLVE_SPLIT" ? acceptedSplit(order, input) : undefined;
   // Persist the advance (optionally patching PayPal ids) once the money move
   // has succeeded, then announce it.
   const advance = async (patch?: OrderPatch) => {
@@ -483,6 +581,12 @@ export async function advanceEscrowOrder(
         status: "COMPLETED",
         mock: true,
       });
+    if (event === "RESOLVE_SPLIT")
+      return done(await advance(splitPatch), {
+        captureId: mockId("MOCK-CAP"),
+        status: "COMPLETED",
+        mock: true,
+      });
     if (event === "PAYOUT") {
       const payoutBatchId = mockId("MOCK-PAYOUT");
       return done(await advance({ payoutBatchId }), {
@@ -495,7 +599,9 @@ export async function advanceEscrowOrder(
     return done(await advance(), { mock: true });
   }
   // Caller-supplied idempotency key wins; otherwise derive one per operation.
-  const requestIdFor = (op: "authorize" | "capture" | "void" | "payout") =>
+  const requestIdFor = (
+    op: "authorize" | "capture" | "split-capture" | "void" | "payout",
+  ) =>
     typeof input.requestId === "string" && input.requestId.trim() !== ""
       ? input.requestId
       : paypalRequestId(orderId, op);
@@ -556,6 +662,24 @@ export async function advanceEscrowOrder(
         requestId: requestIdFor("capture"),
       });
       return done(await advance(), {
+        captureId: cap.captureId,
+        status: cap.status,
+      });
+    }
+    if (event === "RESOLVE_SPLIT") {
+      if (!order.authorization_id)
+        throw new EscrowError(
+          409,
+          "order has no authorization to capture",
+          "PRECONDITION",
+        );
+      // Its own idempotency key: if a full capture already went through, PayPal
+      // must refuse this one rather than replay that result as a partial.
+      const cap = await pp.captureAuthorization(order.authorization_id, {
+        requestId: requestIdFor("split-capture"),
+        amountCents: splitPatch?.amountCents,
+      });
+      return done(await advance(splitPatch), {
         captureId: cap.captureId,
         status: cap.status,
       });

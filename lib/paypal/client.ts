@@ -235,13 +235,25 @@ export function createPayPalClient(config: PayPalConfig) {
 
     async captureAuthorization(
       authorizationId: string,
-      opts: { requestId?: string } = {},
+      // amountCents captures part of the hold. final_capture still ends the
+      // authorization, so PayPal releases the rest back to the buyer.
+      opts: { requestId?: string; amountCents?: number } = {},
     ): Promise<CaptureResult> {
       const json = await call<{ id: string; status: string }>(
         "payments.capture",
         `/v2/payments/authorizations/${authorizationId}/capture`,
         {
-          body: { final_capture: true },
+          body: {
+            final_capture: true,
+            ...(opts.amountCents !== undefined
+              ? {
+                  amount: {
+                    currency_code: "USD",
+                    value: (opts.amountCents / 100).toFixed(2),
+                  },
+                }
+              : {}),
+          },
           requestId: opts.requestId ?? `${authorizationId}:capture`,
         },
       );

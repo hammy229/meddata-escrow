@@ -76,8 +76,16 @@ export function secure(
     if (resource === "orders" && request.method === "PATCH") {
       const allowed =
         account.role === "researcher"
-          ? ["authorize", "capture", "void", "dispute", "cancel", "resolve"]
-          : ["deliver", "payout", "resolve"];
+          ? [
+              "authorize",
+              "capture",
+              "void",
+              "dispute",
+              "cancel",
+              "resolve",
+              "propose_split",
+            ]
+          : ["deliver", "payout", "resolve", "propose_split"];
       if (!allowed.includes(body?.action))
         return Response.json(
           { error: "Your role cannot perform this order action" },
@@ -85,9 +93,11 @@ export function secure(
         );
       // A dispute can only be settled by the side giving in: the buyer drops
       // it and releases the money, or the vendor refunds the buyer. Neither
-      // side can rule in its own favor.
+      // side can rule in its own favor. A split needs both sides, so either may
+      // accept one; the escrow service refuses the side that proposed it.
       if (
         body?.action === "resolve" &&
+        body?.resolution !== "split" &&
         body?.resolution !==
           (account.role === "researcher" ? "capture" : "void")
       )

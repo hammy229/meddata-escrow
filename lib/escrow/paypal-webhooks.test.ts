@@ -118,6 +118,45 @@ test("a capture during a dispute resolves the dispute as RESOLVE_CAPTURE", async
   assert.equal(getOrder(db, order.id)!.status, "CAPTURED");
   db.close();
 });
+test("a capture for the offered split settles at that amount, not in full", async () => {
+  const db = freshDb();
+  const order = orderAt(db, "DISPUTED");
+  db.prepare(
+    "UPDATE orders SET split_offer_cents = 30, split_offer_by = 'vendor' WHERE id = ?",
+  ).run(order.id);
+  const out = await applyPayPalWebhookEvent(
+    db,
+    evt("PAYMENT.CAPTURE.COMPLETED", {
+      id: "CAP-S",
+      custom_id: order.id,
+      amount: { value: "0.30", currency_code: "USD" },
+    }),
+  );
+  assert.equal(out.kind === "applied" && out.event, "RESOLVE_SPLIT");
+  const row = getOrder(db, order.id)!;
+  assert.equal(row.status, "CAPTURED");
+  assert.equal(row.amount_cents, 30);
+  assert.equal(row.refunded_cents, 70);
+  db.close();
+});
+test("a full capture with a different offer open still settles in full", async () => {
+  const db = freshDb();
+  const order = orderAt(db, "DISPUTED");
+  db.prepare("UPDATE orders SET split_offer_cents = 30 WHERE id = ?").run(
+    order.id,
+  );
+  const out = await applyPayPalWebhookEvent(
+    db,
+    evt("PAYMENT.CAPTURE.COMPLETED", {
+      id: "CAP-F",
+      custom_id: order.id,
+      amount: { value: (order.amount_cents / 100).toFixed(2) },
+    }),
+  );
+  assert.equal(out.kind === "applied" && out.event, "RESOLVE_CAPTURE");
+  assert.equal(getOrder(db, order.id)!.amount_cents, order.amount_cents);
+  db.close();
+});
 test("DISPUTE.CREATED finds the order through disputed_transactions", async () => {
   const db = freshDb();
   const order = orderAt(db, "DELIVERED");

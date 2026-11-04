@@ -12,6 +12,7 @@ import {
   recordUsage,
   queryCapStatus,
   summarizeOrders,
+  recordSplitOffer,
   recordWebhookEvent,
   listDatasets,
   updateDatasetPrice,
@@ -59,6 +60,35 @@ test("the mandate ledger reserves and enforces limits on PostgreSQL", async () =
   });
   try {
     await migratePostgres(db);
+    await db
+      .prepare("INSERT INTO vendors (id, name) VALUES (?, ?)")
+      .run("vendor", "Test Provider");
+    await db
+      .prepare(
+        "INSERT INTO datasets (id, vendor_id, title, price_cents) VALUES (?, ?, ?, ?)",
+      )
+      .run("dataset", "vendor", "Test cohort", 4900);
+    const split = await createOrder(db, {
+      datasetId: "dataset",
+      buyerEmail: "user@example.test",
+      amountCents: 4900,
+    });
+    for (const e of ["AUTHORIZE", "DELIVER", "DISPUTE"] as const)
+      await advanceOrder(db, split.id, e);
+    const offered = await recordSplitOffer(db, split.id, {
+      captureCents: 3000,
+      by: "vendor",
+      note: "offer",
+    });
+    assert.equal(offered.split_offer_cents, 3000);
+    const settled = await advanceOrder(db, split.id, "RESOLVE_SPLIT", {
+      amountCents: 3000,
+      refundedCents: 1900,
+    });
+    assert.equal(settled.status, "CAPTURED");
+    assert.equal(settled.amount_cents, 3000);
+    assert.equal((await summarizeOrders(db)).releasedCents, 1900);
+
     const { mandate } = issueMandate({
       buyerId: "user@example.test",
       maxTotalCents: 6000,

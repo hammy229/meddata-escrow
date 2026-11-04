@@ -558,6 +558,14 @@ paths:
         vendor resolves with `void` (refunds the buyer). Any other pairing is
         a 403.
 
+        A dispute can also settle for part of the price, which takes both
+        sides. `propose_split` with `captureCents` (what the vendor keeps)
+        records an offer and moves no money; a new offer replaces the last one.
+        The other side accepts with `resolve`, `resolution: split` and the same
+        `captureCents`. PayPal captures that part and releases the rest, and the
+        order's `amount_cents` becomes the captured amount. Accepting your own
+        offer, or a figure that is no longer the offer, is a 409.
+
         In live mode, `payout` sends the vendor's share (the price minus the
         platform fee) through the PayPal Payouts API to the vendor's payout
         email, and a vendor without one gets a 409.
@@ -2186,6 +2194,9 @@ components:
               type: array
               items: { type: string }
             source: { type: string, enum: [llm, rules] }
+            suggestedCaptureCents:
+              type: integer
+              description: With outcome `split`, a starting figure for what the vendor keeps.
             advisoryOnly: { type: boolean, enum: [true] }
     Receipt:
       type: object
@@ -2219,6 +2230,11 @@ components:
           { type: integer, description: Platform share of amountCents (10%). }
         vendorPayoutCents:
           { type: integer, description: amountCents minus platformFeeCents. }
+        refundedCents:
+          {
+            type: integer,
+            description: What a split dispute sent back to the buyer.,
+          }
         queryCount:
           type: integer
           description: Queries run against the order, including any on a voided order.
@@ -2320,11 +2336,18 @@ components:
               dispute,
               cancel,
               resolve,
+              propose_split,
             ]
         resolution:
           type: string
-          enum: [capture, void]
+          enum: [capture, void, split]
           description: Required when `action` is `resolve`.
+        captureCents:
+          type: integer
+          description: >-
+            What the vendor keeps, in cents. Required for `propose_split` and
+            for `resolve` with `resolution: split`, where it must match the
+            current offer.
         requestId:
           {
             type: string,

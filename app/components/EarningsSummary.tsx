@@ -156,7 +156,7 @@ export default function EarningsSummary({
     {
       label: "Released to buyers",
       cents: s?.releasedCents,
-      hint: "Voided authorizations",
+      hint: "Voids and split refunds",
     },
   ];
 

@@ -21,6 +21,7 @@ import {
 import type { ColDef } from "ag-grid-community";
 import type { AgGridReact, CustomCellRendererProps } from "ag-grid-react";
 import DataGrid from "./DataGrid";
+import DisputePanel from "./DisputePanel";
 import OrderTimeline from "./OrderTimeline";
 import {
   needsAction,
@@ -471,6 +472,21 @@ export default function IncomingOrders() {
           />
         </ControlsContext.Provider>
       )}
+
+      {orders
+        .filter((o) => o.status === "DISPUTED")
+        .map((o) => (
+          <section key={o.id} aria-label={`Dispute on order ${o.id}`}>
+            <p className="mt-6 font-mono text-xs break-all text-muted">
+              Dispute on {o.id}
+            </p>
+            <DisputePanel
+              orderId={o.id}
+              role="vendor"
+              onSettled={() => void load()}
+            />
+          </section>
+        ))}
     </div>
   );
 }

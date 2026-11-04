@@ -113,21 +113,30 @@ Added Nov 2 for the PayPal AI Hackathon. All of it runs in mock mode with no key
 | **Render**                                | One-click Blueprint deploy via [`render.yaml`](./render.yaml): Render PostgreSQL app database, `/api/health` check                                                                 |
 | **Postman**                               | API collection to exercise and demo every endpoint ([`postman/`](./postman))                                                                                                       |
 
+## Settling a dispute
+
+The arbiter suggests refund, release or split, and it cannot move money. A split
+takes both sides: one offers (`propose_split`), the other accepts with the same
+figure (`resolve` + `resolution: split`), and only then does PayPal capture that
+part with `final_capture` and release the rest. The order's amount becomes what
+was captured, so the fee, payout and receipt all follow it. Nobody can accept
+their own offer, or an offer that changed after they read it.
+
 ## Prize map
 
 Where each judging area and prize is addressed. "Mock" means it runs end to end
 locally without credentials; see the status line above for what is not yet live.
 
-| Prize or criterion           | Where to look                                                                                                                                               |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Best Use of Agentic Commerce | Procurement agent with code-enforced spending mandates (`lib/agent`), and an MCP server so outside agents can buy through PayPal escrow (`docs/mcp.md`)     |
-| Best Use of PayPal + AI      | Authorize-then-capture escrow, Payouts, verified webhooks, with Claude for matching, sample checks and an advisory dispute arbiter (`lib/escrow`, `lib/ai`) |
-| Most Impactful               | Cuts weeks of data sourcing for medical researchers; buyers never pay for failed samples, vendors never hand over raw records                               |
-| Best Demo Delivery           | `/demo` runs the whole story through the real APIs in one click; script in `docs/demo-script.md`                                                            |
-| Most Creative                | Pay-per-query aggregates, trust scores and a signed data use agreement on every order                                                                       |
-| AG Grid                      | Catalog, compare, order queue, ledger, insights and trust tables (`app/components`, `/insights`)                                                            |
-| APIMatic                     | OpenAPI 3.1 spec with drift tests (`openapi/openapi.yaml`); SDK generation steps in `docs/api.md`. Not run through APIMatic yet                             |
-| Render                       | `render.yaml` Blueprint with a seeded SQLite demo and health check. A hosted deploy is still pending                                                        |
+| Prize or criterion           | Where to look                                                                                                                                                                                         |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Best Use of Agentic Commerce | Procurement agent with code-enforced spending mandates (`lib/agent`), and an MCP server so outside agents can buy through PayPal escrow (`docs/mcp.md`)                                               |
+| Best Use of PayPal + AI      | Authorize-then-capture escrow, Payouts, verified webhooks, partial capture to settle split disputes, with Claude for matching, sample checks and an advisory dispute arbiter (`lib/escrow`, `lib/ai`) |
+| Most Impactful               | Cuts weeks of data sourcing for medical researchers; buyers never pay for failed samples, vendors never hand over raw records                                                                         |
+| Best Demo Delivery           | `/demo` runs the whole story through the real APIs in one click; script in `docs/demo-script.md`                                                                                                      |
+| Most Creative                | Pay-per-query aggregates, trust scores and a signed data use agreement on every order                                                                                                                 |
+| AG Grid                      | Catalog, compare, order queue, ledger, insights and trust tables (`app/components`, `/insights`)                                                                                                      |
+| APIMatic                     | OpenAPI 3.1 spec with drift tests (`openapi/openapi.yaml`); SDK generation steps in `docs/api.md`. Not run through APIMatic yet                                                                       |
+| Render                       | `render.yaml` Blueprint with a seeded SQLite demo and health check. A hosted deploy is still pending                                                                                                  |
 
 ## Architecture
 

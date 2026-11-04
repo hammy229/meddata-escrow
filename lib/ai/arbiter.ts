@@ -51,6 +51,8 @@ export interface Recommendation {
   rationale: string;
   evidence: string[];
   source: "llm" | "rules";
+  /** With outcome "split": a starting figure for what the vendor keeps. */
+  suggestedCaptureCents?: number;
   /** Always true: the arbiter never moves money. */
   advisoryOnly: true;
 }
@@ -182,6 +184,19 @@ const SYSTEM =
 export async function arbitrate(
   input: ArbiterInput,
   opts: AiOptions = {},
+): Promise<Recommendation> {
+  const rec = await recommend(input, opts);
+  return rec.outcome === "split"
+    ? {
+        ...rec,
+        suggestedCaptureCents: Math.round(input.order.amount_cents / 2),
+      }
+    : rec;
+}
+
+async function recommend(
+  input: ArbiterInput,
+  opts: AiOptions,
 ): Promise<Recommendation> {
   if (!(opts.useLlm ?? llmEnabled())) return enforceAdvisory(rules(input));
   try {

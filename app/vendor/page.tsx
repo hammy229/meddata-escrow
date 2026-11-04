@@ -56,8 +56,8 @@ export default async function VendorPage() {
           </div>
           <p className="mb-6 text-sm font-light text-muted">
             Live escrow state for every order. Deliver an authorized order to
-            unlock the buyer&apos;s queries, and settle a dispute by releasing
-            the held funds to you (capture) or refunding the buyer (void).
+            unlock the buyer&apos;s queries, and settle a dispute by refunding
+            the buyer or agreeing a split with them.
           </p>
           <IncomingOrders />
         </section>

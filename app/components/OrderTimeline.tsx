@@ -30,6 +30,8 @@ const EVENT_META: Record<string, { label: string; tone: Tone }> = {
   PAYOUT: { label: "Vendor paid out", tone: "accent" },
   DISPUTE: { label: "Dispute opened", tone: "warn" },
   RESOLVE_CAPTURE: { label: "Resolved — vendor paid", tone: "accent" },
+  PROPOSE_SPLIT: { label: "Split offered", tone: "warn" },
+  RESOLVE_SPLIT: { label: "Resolved — split agreed", tone: "accent" },
   RESOLVE_VOID: { label: "Resolved — buyer refunded", tone: "danger" },
   VOID: { label: "Authorization voided", tone: "danger" },
   CANCEL: { label: "Order cancelled", tone: "danger" },

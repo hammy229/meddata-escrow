@@ -15,6 +15,7 @@ import MatchesGrid, {
   type MatchSource,
 } from "../components/MatchesGrid";
 import CompareMatches from "../components/CompareMatches";
+import DisputePanel from "../components/DisputePanel";
 import OrderReceipt from "../components/OrderReceipt";
 import OrderTimeline from "../components/OrderTimeline";
 import QueryResult, {
@@ -922,6 +923,9 @@ export default function ResearcherWorkspace({
                       ? "Releasing…"
                       : "Drop dispute & release payment"}
                   </button>
+                )}
+                {disputed && !voided && orderId && (
+                  <DisputePanel orderId={orderId} role="researcher" />
                 )}
                 {escrow === "CAPTURED" && !disputed && (
                   <p className="text-sm text-muted">

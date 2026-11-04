@@ -20,6 +20,7 @@ import { UnknownOrderError } from "./usage";
 import {
   transition,
   ESCROW_STATES,
+  InvalidTransitionError,
   type EscrowEvent,
   type EscrowState,
 } from "../escrow/state-machine";
@@ -144,7 +145,7 @@ export async function advanceOrder(
     if (!current) throw new Error(`Order not found: ${id}`);
     const next = transition(current.status, event);
     const sets = ["status = ?", "updated_at = CURRENT_TIMESTAMP"],
-      values: (string | null)[] = [next];
+      values: (string | number | null)[] = [next];
     for (const [field, column] of [
       ["paypalOrderId", "paypal_order_id"],
       ["authorizationId", "authorization_id"],
@@ -154,10 +155,49 @@ export async function advanceOrder(
         sets.push(`${column} = ?`);
         values.push(patch[field] ?? null);
       }
+    for (const [field, column] of [
+      ["amountCents", "amount_cents"],
+      ["refundedCents", "refunded_cents"],
+    ] as const)
+      if (patch?.[field] !== undefined) {
+        sets.push(`${column} = ?`);
+        values.push(patch[field]);
+      }
     await db
       .prepare(`UPDATE orders SET ${sets.join(", ")} WHERE id = ?`)
       .run(...values, id);
     await insertEvent(db, id, event, current.status, next, note);
+    return (await getOrder(db, id))!;
+  });
+}
+/** Store a split offer on a disputed order, with its own audit row. */
+export async function recordSplitOffer(
+  db: AppDatabase,
+  id: string,
+  offer: { captureCents: number; by: string; note: string },
+): Promise<OrderRow> {
+  return transaction(db, async () => {
+    const current = (await db
+      .prepare(
+        `SELECT * FROM orders WHERE id = ?${db.dialect === "postgres" ? " FOR UPDATE" : ""}`,
+      )
+      .get(id)) as OrderRow | undefined;
+    if (!current) throw new Error(`Order not found: ${id}`);
+    if (current.status !== "DISPUTED")
+      throw new InvalidTransitionError(current.status, "RESOLVE_SPLIT");
+    await db
+      .prepare(
+        "UPDATE orders SET split_offer_cents = ?, split_offer_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      )
+      .run(offer.captureCents, offer.by, id);
+    await insertEvent(
+      db,
+      id,
+      "PROPOSE_SPLIT",
+      current.status,
+      current.status,
+      offer.note,
+    );
     return (await getOrder(db, id))!;
   });
 }
@@ -228,7 +268,8 @@ export async function summarizeOrders(
       (n, o) => n + platformFeeCents(o.amount_cents),
       0,
     ),
-    releasedCents: sum(["VOIDED"]),
+    releasedCents:
+      sum(["VOIDED"]) + orders.reduce((n, o) => n + (o.refunded_cents ?? 0), 0),
   };
 }
 export async function listUsage(

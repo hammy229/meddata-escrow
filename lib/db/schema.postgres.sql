@@ -48,6 +48,14 @@ CREATE TABLE IF NOT EXISTS orders (
   -- Most the buyer can be metered for queries on this order (cents). Added to
   -- existing DBs via a guarded ALTER in migrate().
   query_cap_cents  INTEGER NOT NULL DEFAULT 1000,
+  -- Set when a dispute settles for part of the price: amount_cents becomes what
+  -- was captured and this is what went back to the buyer. Added to existing DBs
+  -- via a guarded ALTER.
+  refunded_cents   INTEGER NOT NULL DEFAULT 0,
+  -- The open split offer on a disputed order: what the vendor would keep, and
+  -- which side proposed it (the other side has to accept).
+  split_offer_cents INTEGER,
+  split_offer_by   TEXT,
   -- Canonical EscrowState (see lib/escrow/state-machine.ts). One of:
   --   MATCHED | AUTHORIZED | DELIVERED | CAPTURED | PAID_OUT
   --   | DISPUTED | VOIDED | CANCELLED
@@ -196,5 +204,20 @@ BEGIN
       WHERE table_schema = current_schema() AND table_name = 'datasets'
         AND column_name = 'tags_json') THEN
     ALTER TABLE datasets ADD COLUMN tags_json TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'orders'
+        AND column_name = 'refunded_cents') THEN
+    ALTER TABLE orders ADD COLUMN refunded_cents INTEGER NOT NULL DEFAULT 0;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'orders'
+        AND column_name = 'split_offer_cents') THEN
+    ALTER TABLE orders ADD COLUMN split_offer_cents INTEGER;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+      WHERE table_schema = current_schema() AND table_name = 'orders'
+        AND column_name = 'split_offer_by') THEN
+    ALTER TABLE orders ADD COLUMN split_offer_by TEXT;
   END IF;
 END $$;

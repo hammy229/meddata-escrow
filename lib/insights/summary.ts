@@ -17,6 +17,7 @@ export interface InsightOrder {
   dataset_id: string;
   status: string;
   amount_cents: number;
+  refunded_cents?: number;
 }
 export interface InsightDataset {
   id: string;
@@ -168,6 +169,7 @@ export function summarizeInsights(
       feeTotal += platformFeeCents(o.amount_cents);
     }
     if (o.status === "VOIDED") refundedCents += o.amount_cents;
+    refundedCents += o.refunded_cents ?? 0;
 
     const ds = datasets.get(o.dataset_id);
     const vendorId = ds?.vendor_id ?? "";
@@ -268,7 +270,7 @@ export function loadInsights(
   return summarizeInsights(
     {
       orders: all<InsightOrder>(
-        `SELECT id, dataset_id, status, amount_cents FROM orders`,
+        `SELECT id, dataset_id, status, amount_cents, refunded_cents FROM orders`,
       ),
       datasets: all<InsightDataset>(
         `SELECT id, vendor_id, title FROM datasets`,
@@ -292,7 +294,7 @@ export async function loadAppInsights(
 ): Promise<Insights> {
   const all = async <T>(sql: string) => (await db.prepare(sql).all()) as T[];
   let orders = await all<InsightOrder & { account_id?: string | null }>(
-    "SELECT id, dataset_id, status, amount_cents, account_id FROM orders",
+    "SELECT id, dataset_id, status, amount_cents, refunded_cents, account_id FROM orders",
   );
   let datasets = await all<InsightDataset>(
     "SELECT id, vendor_id, title FROM datasets",

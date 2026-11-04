@@ -23,8 +23,12 @@ import type { Account } from "../../../lib/auth/store";
 //   PATCH { orderId, action, resolution?, requestId?, note? }
 //         action: authorize | deliver | capture | payout | void | dispute
 //                 | cancel | resolve  (resolve needs resolution: "capture" |
-//                 "void"; cancel is the buyer backing out of a MATCHED order
-//                 before approving — any other state is 409)
+//                 "void" | "split"; cancel is the buyer backing out of a MATCHED
+//                 order before approving — any other state is 409)
+//                 | propose_split  (captureCents: what the vendor keeps. Moves
+//                 no money. The other side accepts with resolve + resolution
+//                 "split" + the same captureCents; PayPal captures that part
+//                 and releases the rest)
 //         note:   optional free-text context recorded on the audit event —
 //                 a dispute reason on dispute, a resolution note on resolve.
 //         -> advance the escrow. The stored row is the source of truth: `from`
@@ -57,6 +61,7 @@ import { listUsage } from "../../../lib/db/store";
 import {
   createEscrowOrder,
   advanceEscrowOrder,
+  proposeSplit,
   EscrowError,
   type AdvanceEscrowOrderResult,
 } from "../../../lib/escrow/service";
@@ -152,7 +157,9 @@ export async function GET(request: Request, account?: Account) {
           datasetTitle: found.dataset?.title ?? found.order.dataset_id,
           vendorName: found.vendor?.name ?? "Unknown vendor",
           buyerEmail: found.order.buyer_email,
-          amountCents: found.order.amount_cents,
+          // The agreed price, so settling a dispute can't change the fingerprint.
+          amountCents:
+            found.order.amount_cents + (found.order.refunded_cents ?? 0),
           issuedAt: found.order.created_at,
         });
         return Response.json({
@@ -246,13 +253,28 @@ function advanceBody({
     mock,
   };
 }
-export async function PATCH(request: Request) {
+export async function PATCH(request: Request, account?: Account) {
   const body = await request.json().catch(() => null);
   try {
+    if (body?.action === "propose_split") {
+      const order = await proposeSplit({
+        orderId: body?.orderId,
+        captureCents: body?.captureCents,
+        actor: account?.role === "vendor" ? "vendor" : "researcher",
+        note: body?.note,
+      });
+      return Response.json({
+        escrowState: order.status,
+        splitOfferCents: order.split_offer_cents,
+        splitOfferBy: order.split_offer_by,
+      });
+    }
     const result = await advanceEscrowOrder({
       orderId: body?.orderId,
       action: body?.action,
       resolution: body?.resolution,
+      captureCents: body?.captureCents,
+      actor: account?.role,
       note: body?.note,
       requestId: body?.requestId,
     });
@@ -299,6 +321,7 @@ function summarizeAccountOrders(
       (n, o) => n + platformFeeCents(o.amount_cents),
       0,
     ),
-    releasedCents: sum(["VOIDED"]),
+    releasedCents:
+      sum(["VOIDED"]) + orders.reduce((n, o) => n + (o.refunded_cents ?? 0), 0),
   };
 }

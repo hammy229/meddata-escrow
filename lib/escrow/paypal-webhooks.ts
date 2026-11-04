@@ -70,6 +70,7 @@ interface EventMapping {
   decide?(
     state: EscrowState,
     resource: Record<string, unknown>,
+    order?: OrderRow,
   ): {
     event: EscrowEvent;
     patch?: OrderPatch;
@@ -122,10 +123,26 @@ const MAPPINGS: Record<string, EventMapping> = {
   },
   "PAYMENT.CAPTURE.COMPLETED": {
     refs: paymentRefs,
-    decide: (state) =>
-      state === "DISPUTED"
-        ? { event: "RESOLVE_CAPTURE" }
-        : { event: "CAPTURE" },
+    decide: (state, r, order) => {
+      if (state !== "DISPUTED") return { event: "CAPTURE" };
+      // This delivery can beat our own write after an accepted split. A capture
+      // for exactly the offered amount settles it at that amount, not in full.
+      const offer = order?.split_offer_cents;
+      const amount = r.amount as { value?: unknown } | undefined;
+      if (
+        offer != null &&
+        order &&
+        Math.round(Number(amount?.value) * 100) === offer
+      )
+        return {
+          event: "RESOLVE_SPLIT",
+          patch: {
+            amountCents: offer,
+            refundedCents: order.amount_cents - offer,
+          },
+        };
+      return { event: "RESOLVE_CAPTURE" };
+    },
   },
   // No escrow state models these; record them for the audit/ops trail.
   "PAYMENT.CAPTURE.DENIED": { refs: paymentRefs },
@@ -197,7 +214,7 @@ export async function applyPayPalWebhookEvent(
       console.warn(
         `paypal webhook ${eventId}: ${eventType} for order ${order.id} (state ${order.status}) needs review`,
       );
-    const decision = mapping.decide?.(order.status, resource) ?? null;
+    const decision = mapping.decide?.(order.status, resource, order) ?? null;
     if (!decision)
       return {
         kind: "recorded",

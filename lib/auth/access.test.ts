@@ -320,6 +320,44 @@ test("persistent account lifecycle and API isolation", async (t) => {
       const released = await (await settle(otherToken, "capture")).json();
       assert.equal(released.escrowState, "CAPTURED");
     });
+    await t.test("a split needs both sides of the dispute", async () => {
+      const created = await ordersPost(
+        req("/api/orders", otherToken, "POST", { datasetId: "ds_owned" }),
+      );
+      const { orderId } = await created.json();
+      for (const [action, actor] of [
+        ["authorize", otherToken],
+        ["deliver", vendorToken],
+        ["dispute", otherToken],
+      ]) {
+        const step = await ordersPatch(
+          req("/api/orders", actor, "PATCH", { orderId, action }),
+        );
+        assert.equal(step.status, 200, `${action}: ${await step.text()}`);
+      }
+      const offer = await ordersPatch(
+        req("/api/orders", vendorToken, "PATCH", {
+          orderId,
+          action: "propose_split",
+          captureCents: 100,
+        }),
+      );
+      assert.equal(offer.status, 200, await offer.clone().text());
+      assert.equal((await offer.json()).splitOfferBy, "vendor");
+      const accept = (actor: string) =>
+        ordersPatch(
+          req("/api/orders", actor, "PATCH", {
+            orderId,
+            action: "resolve",
+            resolution: "split",
+            captureCents: 100,
+          }),
+        );
+      assert.equal((await accept(vendorToken)).status, 409);
+      const settled = await accept(otherToken);
+      assert.equal(settled.status, 200, await settled.clone().text());
+      assert.equal((await settled.json()).escrowState, "CAPTURED");
+    });
     await t.test(
       "researcher and provider can complete the authenticated escrow lifecycle",
       async () => {

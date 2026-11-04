@@ -12,6 +12,7 @@ interface Receipt {
   amountCents: number;
   platformFeeCents: number;
   vendorPayoutCents: number;
+  refundedCents?: number;
   queryCount: number;
   queryChargesCents: number;
   totalCents: number;
@@ -41,6 +42,8 @@ function parseReceipt(raw: unknown): Receipt | null {
     amountCents: r.amountCents as number,
     platformFeeCents: r.platformFeeCents as number,
     vendorPayoutCents: r.vendorPayoutCents as number,
+    refundedCents:
+      typeof r.refundedCents === "number" ? r.refundedCents : undefined,
     queryCount: r.queryCount as number,
     queryChargesCents: r.queryChargesCents as number,
     totalCents: r.totalCents as number,
@@ -87,6 +90,12 @@ export default function OrderReceipt({
     ["Amount paid", usd(receipt.amountCents)],
     ["Platform fee", usd(receipt.platformFeeCents)],
     ["Vendor payout", usd(receipt.vendorPayoutCents)],
+    ...(receipt.refundedCents
+      ? ([["Returned to you", usd(receipt.refundedCents)]] as [
+          string,
+          string,
+        ][])
+      : []),
     [
       `Query charges (${receipt.queryCount} ${receipt.queryCount === 1 ? "query" : "queries"})`,
       usd(receipt.queryChargesCents),

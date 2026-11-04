@@ -36,7 +36,14 @@ export interface OrderRow {
   /** PayPal Payouts batch id, set when the vendor is paid (PAYOUT). */
   payout_batch_id: string | null;
   status: EscrowState;
+  /** What the order costs: the price, or what was captured after a split. */
   amount_cents: number;
+  /** What a split dispute sent back to the buyer. */
+  refunded_cents?: number;
+  /** The open split offer: what the vendor would keep. */
+  split_offer_cents?: number | null;
+  /** Which side made the open split offer. */
+  split_offer_by?: string | null;
   /** Most the buyer can be metered for queries on this order (cents). */
   query_cap_cents: number;
   created_at: string;
@@ -116,6 +123,10 @@ export function migrate(db: DatabaseSync): void {
   // Vendor payout receiver + the payout batch id recorded on PAYOUT.
   ensureColumn(db, "vendors", "payout_email", "TEXT");
   ensureColumn(db, "orders", "payout_batch_id", "TEXT");
+  // Partial settlement of a dispute.
+  ensureColumn(db, "orders", "refunded_cents", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "orders", "split_offer_cents", "INTEGER");
+  ensureColumn(db, "orders", "split_offer_by", "TEXT");
   // Per-order query spend cap; older rows get the default.
   ensureColumn(
     db,
@@ -272,6 +283,12 @@ export function summarizeOrders(
   }
   const sum = (states: readonly EscrowState[]) =>
     states.reduce((t, s) => t + cents[s], 0);
+  const { refunded } = db
+    .prepare(
+      `SELECT COALESCE(SUM(refunded_cents), 0) AS refunded FROM orders ${clause}`,
+    )
+    .get(...values) as { refunded: number };
+  const splitRefunds = refunded;
   // Fees round per order, so fold the paid-out orders one by one.
   const paid = db
     .prepare(
@@ -293,7 +310,7 @@ export function summarizeOrders(
     paidOutCents: cents.PAID_OUT,
     vendorPaidOutCents,
     platformFeeCents: feeCents,
-    releasedCents: cents.VOIDED,
+    releasedCents: cents.VOIDED + splitRefunds,
   };
 }
 
@@ -325,6 +342,10 @@ export interface OrderPatch {
   paypalOrderId?: string | null;
   authorizationId?: string | null;
   payoutBatchId?: string | null;
+  /** A dispute settled for part of the price: what was captured. */
+  amountCents?: number;
+  /** A dispute settled for part of the price: what went back to the buyer. */
+  refundedCents?: number;
 }
 
 /**
@@ -414,7 +435,7 @@ export function advanceOrder(
   // (authorization id on AUTHORIZE, etc.), so state and ids never drift apart.
   // updated_at tracks last activity for the UI.
   const sets = ["status = ?", "updated_at = CURRENT_TIMESTAMP"];
-  const values: (string | null)[] = [next];
+  const values: (string | number | null)[] = [next];
   if (patch && "paypalOrderId" in patch) {
     sets.push("paypal_order_id = ?");
     values.push(patch.paypalOrderId ?? null);
@@ -426,6 +447,14 @@ export function advanceOrder(
   if (patch && "payoutBatchId" in patch) {
     sets.push("payout_batch_id = ?");
     values.push(patch.payoutBatchId ?? null);
+  }
+  if (patch?.amountCents !== undefined) {
+    sets.push("amount_cents = ?");
+    values.push(patch.amountCents);
+  }
+  if (patch?.refundedCents !== undefined) {
+    sets.push("refunded_cents = ?");
+    values.push(patch.refundedCents);
   }
   values.push(id);
   db.prepare(`UPDATE orders SET ${sets.join(", ")} WHERE id = ?`).run(

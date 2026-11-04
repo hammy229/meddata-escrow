@@ -697,6 +697,7 @@ test(
       amountCents: 4900,
       platformFeeCents: 490,
       vendorPayoutCents: 4410,
+      refundedCents: 0,
       queryCount: 2,
       queryChargesCents: 2 * PER_QUERY_FEE_CENTS,
       queryCapCents: 1000,
