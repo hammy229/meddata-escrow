@@ -470,3 +470,82 @@ test(
     );
   }),
 );
+
+// --- Fitness audit --------------------------------------------------------
+
+const ALS_STUDY = "Predict survival from baseline FVC and age at onset in ALS";
+const ALS_FLAWED = "ds_als_survival_axonpoint_v1"; // 2900 cents
+const ALS_CLEAN = "ds_als_survival_motorneuron_v1"; // 4900 cents
+
+test(
+  "scripted planner rejects the flawed ALS listing on its audit and orders the clean one",
+  withAgentDb(async () => {
+    // 5000 cents leaves out the 5400 curated listing, so the choice is between
+    // the flawed and the clean synthetic cohort.
+    const r = await runProcurementAgent(
+      { study: ALS_STUDY, budgetCents: 5000 },
+      { useLlm: false },
+    );
+    const checks = r.steps.filter((s) => s.tool === "check_sample");
+    const outcomes = Object.fromEntries(
+      checks.map((s) => [
+        (s.output as { datasetId: string }).datasetId,
+        (s.output as { passed: boolean }).passed,
+      ]),
+    );
+    assert.equal(outcomes[ALS_FLAWED], false);
+    assert.equal(outcomes[ALS_CLEAN], true);
+    assert.equal(r.order?.datasetId, ALS_CLEAN);
+    assert.equal(r.recommendation.datasetId, ALS_CLEAN);
+    assert.equal(orderCount(), 1);
+    // The shortlist and the summary both say why the flawed one was dropped.
+    const flawed = r.shortlist.find((i) => i.datasetId === ALS_FLAWED);
+    assert.equal(flawed?.sampleCheck, "failed");
+    assert.match(flawed?.reason ?? "", /fitness audit/i);
+    assert.match(r.recommendation.reasoning, /fitness audit/i);
+  }),
+);
+
+test(
+  "LLM loop: ordering a dataset that failed the fitness audit is refused by name",
+  withAgentDb(async () => {
+    const { client, calls } = fakeAgentLlm([
+      message("tool_use", [
+        toolUse("check_sample", { datasetId: ALS_FLAWED, study: ALS_STUDY }),
+      ]),
+      message("tool_use", [
+        toolUse("create_escrow_order", {
+          datasetId: ALS_FLAWED,
+          justification: "It is cheap",
+        }),
+      ]),
+      message("end_turn", [text("Could not buy.")]),
+    ]);
+    const r = await runProcurementAgent(
+      { study: ALS_STUDY, budgetCents: 10_000 },
+      { client, useLlm: true },
+    );
+    assert.equal(r.order, undefined);
+    assert.equal(orderCount(), 0);
+    const res = calls[2].messages[4]
+      .content as Anthropic.ToolResultBlockParam[];
+    assert.equal(res[0].is_error, true);
+    assert.match(res[0].content as string, /fitness audit/i);
+  }),
+);
+
+test(
+  "the system prompt and tool text tell the model about the fitness audit",
+  withAgentDb(async () => {
+    const { client, calls } = fakeAgentLlm([message("end_turn", [text("ok")])]);
+    await runProcurementAgent(
+      { study: STUDY, budgetCents: 5000 },
+      { client, useLlm: true },
+    );
+    assert.match(String(calls[0].system), /fitness audit/i);
+    const tool = (calls[0].tools ?? []).find(
+      (t) => "name" in t && t.name === "check_sample",
+    );
+    assert.match(JSON.stringify(tool), /fitness audit/i);
+  }),
+);

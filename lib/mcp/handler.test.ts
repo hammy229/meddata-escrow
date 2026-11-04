@@ -304,3 +304,44 @@ test("serveStdio frames one JSON message per line", async () => {
   assert.deepEqual(JSON.parse(lines[0]).result, {});
   assert.equal(JSON.parse(lines[1]).error.code, -32700);
 });
+
+test(
+  "place_escrow_order refuses a dataset whose sample failed the fitness audit and names the audit",
+  withAgentDb(async () => {
+    const s = createSession();
+    const checked = await call(s, "sample_check", {
+      datasetId: "ds_als_survival_axonpoint_v1",
+      study: "Predict survival from baseline FVC and age at onset in ALS",
+    });
+    assert.equal(checked.isError, false, checked.text);
+    assert.equal(checked.data.passed, false);
+    assert.equal(
+      (checked.data.audit as { verdict: string }).verdict,
+      "fail",
+    );
+    const r = await call(s, "place_escrow_order", {
+      datasetId: "ds_als_survival_axonpoint_v1",
+      mandate: token(),
+    });
+    assert.equal(r.isError, true);
+    assert.match(r.text, /fitness audit/i);
+    assert.equal(withDb((db) => listOrders(db)).length, 0);
+  }),
+);
+
+test(
+  "place_escrow_order buys a clean ALS listing after its audit passes",
+  withAgentDb(async () => {
+    const s = createSession();
+    const checked = await call(s, "sample_check", {
+      datasetId: "ds_als_survival_motorneuron_v1",
+      study: "Predict survival from baseline FVC and age at onset in ALS",
+    });
+    assert.equal(checked.data.passed, true);
+    const r = await call(s, "place_escrow_order", {
+      datasetId: "ds_als_survival_motorneuron_v1",
+      mandate: token(),
+    });
+    assert.equal(r.isError, false, r.text);
+  }),
+);

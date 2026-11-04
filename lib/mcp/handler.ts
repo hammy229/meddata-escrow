@@ -55,6 +55,8 @@ const INVALID_PARAMS = -32602;
 export interface McpSession {
   /** Datasets whose sample check passed in this session. */
   readonly passedSamples: Set<string>;
+  /** Datasets whose sample failed the fitness audit, with the reasons. */
+  readonly failedAudits: Map<string, string>;
   readonly escrowDeps?: EscrowDeps;
   readonly ai: AiOptions;
 }
@@ -66,6 +68,7 @@ export function createSession(
 ): McpSession {
   return {
     passedSamples: new Set(),
+    failedAudits: new Map(),
     escrowDeps: init.escrowDeps,
     ai: init.ai ?? {},
   };
@@ -99,7 +102,9 @@ export const MCP_TOOLS: McpTool[] = [
     name: "sample_check",
     description:
       "Run the quality and privacy check on a dataset's sample for a study. " +
-      "A passing check is required before place_escrow_order.",
+      "It also runs a fitness audit on the sample (a screen, not proof); a " +
+      "dataset that fails it cannot be ordered. A passing check is required " +
+      "before place_escrow_order.",
     inputSchema: {
       type: "object",
       properties: {
@@ -229,6 +234,9 @@ async function sampleCheck(
   const r = await viaAgentTool(ctx, "check_sample", a.value);
   if (ctx.passedSamples.has(a.value.datasetId))
     session.passedSamples.add(a.value.datasetId);
+  const failedAudit = ctx.failedAudits.get(a.value.datasetId);
+  if (failedAudit) session.failedAudits.set(a.value.datasetId, failedAudit);
+  else session.failedAudits.delete(a.value.datasetId);
   return r;
 }
 async function placeEscrowOrder(
@@ -262,6 +270,7 @@ async function placeEscrowOrder(
     mandate,
   });
   for (const id of session.passedSamples) ctx.passedSamples.add(id);
+  for (const [id, why] of session.failedAudits) ctx.failedAudits.set(id, why);
   const r = await viaAgentTool(ctx, "create_escrow_order", {
     datasetId: a.value.datasetId,
     justification: a.value.justification ?? "Requested via MCP",

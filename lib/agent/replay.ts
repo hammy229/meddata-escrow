@@ -103,6 +103,12 @@ function guardrails(
       detail: "No order without a passing sample check in the same run.",
     },
     {
+      label: "Fitness audit",
+      status: status(/fitness audit/),
+      detail:
+        "A dataset whose sample fails the fitness audit is never ordered. The audit is a screen, not proof.",
+    },
+    {
       label: "Sample check limit",
       status: status(/sample check limit/),
       detail: `At most ${MAX_SAMPLE_CHECKS} sample checks per run.`,

@@ -163,3 +163,25 @@ test("summarize skips prose, nulls and nested objects", () => {
   );
   assert.equal(summarize(undefined), "");
 });
+
+test("the fitness audit guardrail is enforced, and triggered when it refuses an order", () => {
+  const find = (r: ReturnType<typeof buildReplay>) =>
+    r.guardrails.find((x) => x.label === "Fitness audit");
+  const quiet = find(buildReplay(run));
+  assert.equal(quiet?.status, "enforced");
+  assert.match(quiet?.detail ?? "", /fitness audit/i);
+  const refused: StoredAgentRun = {
+    ...run,
+    steps: [
+      ...run.steps,
+      {
+        tool: "create_escrow_order",
+        input: { datasetId: "ds_a" },
+        error:
+          "the fitness audit failed for ds_a (a column is known only after the outcome); not buying it",
+        at,
+      },
+    ],
+  };
+  assert.equal(find(buildReplay(refused))?.status, "triggered");
+});

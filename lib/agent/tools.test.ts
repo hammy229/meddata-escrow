@@ -369,3 +369,99 @@ test(
     assert.equal(s.ok, false);
   }),
 );
+
+// --- Fitness audit on the sample ---------------------------------------------
+
+const ALS_STUDY = "Predict survival from baseline FVC and age at onset in ALS";
+const ALS_FLAWED = "ds_als_survival_axonpoint_v1"; // 2900 cents, flawed sample
+const ALS_CLEAN = "ds_als_survival_motorneuron_v1"; // 4900 cents
+const ALS_CURATED = "ds_als_survival_curated_v1"; // 5400 cents, clean sample
+
+function alsCtx() {
+  return createAgentContext({
+    study: ALS_STUDY,
+    budgetCents: 10_000,
+    ai: { useLlm: false },
+  });
+}
+
+test(
+  "check_sample fails a flawed sample with FAIL-prefixed fitness findings and names the audit when ordering",
+  withAgentDb(async () => {
+    const c = alsCtx();
+    const r = await executeTool(c, "check_sample", {
+      datasetId: ALS_FLAWED,
+      study: ALS_STUDY,
+    });
+    assert.ok(r.ok);
+    const out = r.output as {
+      passed: boolean;
+      findings: string[];
+      audit: { verdict: string; findings: { id: string; severity: string }[] };
+    };
+    assert.equal(out.passed, false);
+    assert.equal(out.audit.verdict, "fail");
+    assert.ok(out.audit.findings.length > 0);
+    assert.ok(out.findings.some((f) => f.startsWith("FAIL: Fitness audit")));
+    assert.ok(!c.passedSamples.has(ALS_FLAWED));
+    assert.ok(c.failedAudits.has(ALS_FLAWED));
+
+    const order = await executeTool(c, "create_escrow_order", {
+      datasetId: ALS_FLAWED,
+      justification: "looks fine",
+    });
+    assert.ok(!order.ok);
+    assert.match(order.error, /fitness audit/i);
+    assert.equal(c.order, undefined);
+  }),
+);
+
+test(
+  "check_sample passes a clean ALS sample, and a curated one whose flaw only shows at delivery",
+  withAgentDb(async () => {
+    for (const id of [ALS_CLEAN, ALS_CURATED]) {
+      const c = alsCtx();
+      const r = await executeTool(c, "check_sample", {
+        datasetId: id,
+        study: ALS_STUDY,
+      });
+      assert.ok(r.ok);
+      const out = r.output as { passed: boolean; audit: { verdict: string } };
+      assert.equal(out.passed, true, id);
+      assert.notEqual(out.audit.verdict, "fail");
+      assert.ok(c.passedSamples.has(id));
+      assert.equal(c.failedAudits.size, 0);
+    }
+  }),
+);
+
+test(
+  "check_sample output carries no rows or subject keys",
+  withAgentDb(async () => {
+    const c = alsCtx();
+    const r = await executeTool(c, "check_sample", {
+      datasetId: ALS_FLAWED,
+      study: ALS_STUDY,
+    });
+    assert.ok(r.ok);
+    const text = JSON.stringify(r.output);
+    assert.ok(!text.includes("subject_key"));
+    assert.doesNotMatch(text, /"(survival_months|age_at_onset)":\s*[\d"]/);
+  }),
+);
+
+test(
+  "a listing with no fixture is not audited and is never blocked by one",
+  withAgentDb(async () => {
+    const c = ctx();
+    const r = await executeTool(c, "check_sample", {
+      datasetId: CARDIO,
+      study: STUDY,
+    });
+    assert.ok(r.ok);
+    const out = r.output as { passed: boolean; audit?: unknown };
+    assert.equal(out.passed, true);
+    assert.equal("audit" in out, false);
+    assert.equal(c.failedAudits.size, 0);
+  }),
+);

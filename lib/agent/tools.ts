@@ -18,6 +18,10 @@ import { availableCatalog } from "../catalog/live";
 //   - its listed price is <= the run's budgetCents,
 //   - a PASSING sample check for that dataset already ran in this run
 //     (and check_sample itself is capped at MAX_SAMPLE_CHECKS per run),
+//   - the sample did not fail the fitness audit that check_sample also runs
+//     (leakage, coverage, group imbalance and the listing's own claims; a
+//     screen, not proof). A failure is recorded in ctx.failedAudits so the
+//     refusal can name the audit,
 //   - the buyer does not already own the dataset (an AUTHORIZED, DELIVERED,
 //     CAPTURED, PAID_OUT or DISPUTED order for it),
 //   - no order has been created yet in this run (at most one per run),
@@ -34,6 +38,9 @@ import * as z from "zod/v4";
 import { matchDatasets, type CatalogEntry } from "../ai/matcher";
 import { checkSample } from "../ai/sample-check";
 import type { AiOptions } from "../ai/options";
+import { runFitnessAudit } from "../fitness/audit";
+import { fixtureCohort, listingClaims } from "../fitness/source";
+import type { FitnessReport } from "../fitness/types";
 import { getDataset, listOrders, withDb } from "../db/store";
 import {
   createEscrowOrder,
@@ -77,6 +84,8 @@ export interface AgentContext {
   readonly steps: AgentStep[];
   /** Dataset ids whose sample check passed earlier in this run. */
   readonly passedSamples: Set<string>;
+  /** Dataset ids whose sample failed the fitness audit, with the reasons. */
+  readonly failedAudits: Map<string, string>;
   /** Sample checks run so far in this run (capped at MAX_SAMPLE_CHECKS). */
   sampleChecks: number;
   order?: AgentOrder;
@@ -105,6 +114,7 @@ export function createAgentContext(init: {
     escrowDeps: init.escrowDeps ?? {},
     steps: [],
     passedSamples: new Set(),
+    failedAudits: new Map(),
     sampleChecks: 0,
     mandate: init.mandate,
     mandateDenials: [],
@@ -166,7 +176,10 @@ export const AGENT_TOOLS: Anthropic.Tool[] = [
     name: "check_sample",
     description:
       "Run the quality + privacy check on the vendor's sample of a dataset " +
-      "for this study. An order can only be created for a dataset whose " +
+      "for this study. It also runs a fitness audit on the sample's rows " +
+      "(leakage, coverage, group imbalance, the listing's claims); a FAIL " +
+      "line from it means the dataset will not be ordered. The audit is a " +
+      "screen, not proof. An order can only be created for a dataset whose " +
       "sample check passed earlier in this run.",
     input_schema: schema({
       datasetId: { type: "string", description: "A dataset id from search." },
@@ -284,6 +297,30 @@ async function getDatasetDetails(ctx: AgentContext, input: unknown) {
     alreadyOwned: (await ownedState(ctx, datasetId)) !== null,
   };
 }
+const MAX_AUDIT_LINES = 5;
+
+/** The fitness audit of a listing's sample, or null if it has no fixture. */
+function sampleAudit(datasetId: string, study: string): FitnessReport | null {
+  const cohort = fixtureCohort(datasetId, "sample");
+  if (!cohort) return null;
+  try {
+    return runFitnessAudit({
+      datasetId,
+      stage: "sample",
+      synthetic: cohort.synthetic,
+      study,
+      subjects: cohort.subjects,
+      visits: cohort.visits,
+      featureTiming: cohort.featureTiming,
+      claims: listingClaims(datasetId),
+    });
+  } catch (err) {
+    // The screen could not run; it neither passes nor blocks the sample.
+    console.warn(`fitness audit of ${datasetId} failed:`, err);
+    return null;
+  }
+}
+
 async function runSampleCheck(ctx: AgentContext, input: unknown) {
   const { datasetId, study } = parse(SampleInput, input);
   if (!(await catalogEntry(datasetId)))
@@ -297,8 +334,50 @@ async function runSampleCheck(ctx: AgentContext, input: unknown) {
     ...ctx.ai,
     studyDescription: study,
   });
-  if (result.passed) ctx.passedSamples.add(datasetId);
-  return { datasetId, ...result };
+  const report = sampleAudit(datasetId, study);
+  if (!report) {
+    if (result.passed) ctx.passedSamples.add(datasetId);
+    return { datasetId, ...result };
+  }
+  const failures = report.findings.filter((f) => f.severity === "fail");
+  const failed = report.verdict === "fail";
+  const passed = result.passed && !failed;
+  if (failed)
+    ctx.failedAudits.set(
+      datasetId,
+      failures
+        .slice(0, 3)
+        .map((f) => f.title)
+        .join("; "),
+    );
+  else ctx.failedAudits.delete(datasetId);
+  if (passed) ctx.passedSamples.add(datasetId);
+  // Only the findings and counts the audit already reports: never rows.
+  return {
+    datasetId,
+    ...result,
+    passed,
+    findings: [
+      ...result.findings,
+      ...failures
+        .slice(0, MAX_AUDIT_LINES)
+        .map((f) => `FAIL: Fitness audit: ${f.title}`),
+    ],
+    audit: {
+      verdict: report.verdict,
+      synthetic: report.synthetic,
+      disclaimer: report.disclaimer,
+      findings: report.findings
+        .filter((f) => f.severity === "fail" || f.severity === "warn")
+        .map((f) => ({
+          id: f.id,
+          severity: f.severity,
+          column: f.column,
+          title: f.title,
+          reason: f.reason,
+        })),
+    },
+  };
 }
 async function placeOrder(ctx: AgentContext, input: unknown) {
   const { datasetId } = parse(OrderInput, input);
@@ -316,6 +395,11 @@ async function placeOrder(ctx: AgentContext, input: unknown) {
   if (owned)
     throw new ToolError(
       `you already own ${datasetId} (an order is ${owned}); not buying it again`,
+    );
+  const failedAudit = ctx.failedAudits.get(datasetId);
+  if (failedAudit)
+    throw new ToolError(
+      `the fitness audit failed for ${datasetId} (${failedAudit}); not buying it`,
     );
   if (!ctx.passedSamples.has(datasetId))
     throw new ToolError(
