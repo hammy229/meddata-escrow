@@ -76,3 +76,12 @@ test("each suggestion plans the operation its wording names", () => {
     groupBy: null,
   });
 });
+
+test("ALS listings are asked only about columns their rows have", () => {
+  for (const id of catalog.map((d) => d.id).filter((x) => x.startsWith("ds_als_"))) {
+    const [, grouped, average, extreme] = suggestQuestions(id);
+    assert.deepEqual(keywordPlan(grouped), { op: "count", field: null, groupBy: "age_group" });
+    assert.deepEqual(keywordPlan(average), { op: "avg", field: "score", groupBy: "sex" });
+    assert.deepEqual(keywordPlan(extreme), { op: "max", field: "age", groupBy: null });
+  }
+});

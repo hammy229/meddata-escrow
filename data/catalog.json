@@ -53,5 +53,38 @@
     "recordCount": 9000,
     "tags": ["copd", "respiratory", "pulmonology", "synthetic"],
     "mockSample": { "duplicateRowPct": 3.4 }
+  },
+  {
+    "id": "ds_als_survival_axonpoint_v1",
+    "vendorId": "vnd_axonpoint_synth",
+    "title": "SYNTHETIC ALS Survival Visits (Axonpoint)",
+    "description": "SYNTHETIC amyotrophic lateral sclerosis (ALS) survival data: ALSFRS-R scores and FVC at three-month visits, follow-up time and deaths. Made by a seeded program with invented parameters. Not real people.",
+    "priceCents": 2900,
+    "recordCount": 2763,
+    "tags": ["als", "neurology", "survival", "synthetic", "planted-flaw"],
+    "fixture": { "kind": "als", "subjects": 400, "sample": { "variant": "flawed", "seed": 2 }, "delivery": { "variant": "flawed", "seed": 2 } },
+    "claims": { "subjects": 400, "records": 2763, "eventRatePct": 57.3, "coveragePct": { "baseline_fvc_pct": 95 }, "noPostIndexFeatures": true, "uniqueSubjects": true }
+  },
+  {
+    "id": "ds_als_survival_motorneuron_v1",
+    "vendorId": "vnd_motorneuron_synth",
+    "title": "SYNTHETIC ALS Survival Visits (Motorneuron)",
+    "description": "SYNTHETIC amyotrophic lateral sclerosis (ALS) survival data: ALSFRS-R scores and FVC at three-month visits, follow-up time and deaths. Made by a seeded program with invented parameters. Not real people.",
+    "priceCents": 4900,
+    "recordCount": 2619,
+    "tags": ["als", "neurology", "survival", "synthetic"],
+    "fixture": { "kind": "als", "subjects": 400, "sample": { "variant": "clean", "seed": 3 }, "delivery": { "variant": "clean", "seed": 3 } },
+    "claims": { "subjects": 400, "records": 2619, "eventRatePct": 60.8, "coveragePct": { "baseline_fvc_pct": 95 }, "noPostIndexFeatures": true, "uniqueSubjects": true }
+  },
+  {
+    "id": "ds_als_survival_curated_v1",
+    "vendorId": "vnd_axonpoint_synth",
+    "title": "SYNTHETIC ALS Survival Visits (Curated Sample)",
+    "description": "SYNTHETIC amyotrophic lateral sclerosis (ALS) survival data: ALSFRS-R scores and FVC at three-month visits, follow-up time and deaths. Made by a seeded program with invented parameters. Not real people.",
+    "priceCents": 5400,
+    "recordCount": 2633,
+    "tags": ["als", "neurology", "survival", "synthetic", "planted-flaw"],
+    "fixture": { "kind": "als", "subjects": 400, "sample": { "variant": "clean", "seed": 20 }, "delivery": { "variant": "flawed", "seed": 34 } },
+    "claims": { "subjects": 400, "records": 2633, "eventRatePct": 60, "coveragePct": { "baseline_fvc_pct": 95 }, "noPostIndexFeatures": true, "uniqueSubjects": true }
   }
 ]

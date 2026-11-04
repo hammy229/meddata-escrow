@@ -89,10 +89,10 @@ test("sampleCheck reports a failing verdict for the built-to-fail datasets", asy
   }
 });
 
-test("the catalog lists all six datasets (200)", async () => {
+test("the catalog lists all nine datasets (200)", async () => {
   const res = await POST(req({ description: "synthetic" }));
   const json = await res.json();
-  assert.equal(json.matches.length, 6);
+  assert.equal(json.matches.length, 9);
 });
 
 test("sampleCheck for an unknown dataset -> 404", async () => {

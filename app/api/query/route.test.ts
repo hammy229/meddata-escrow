@@ -14,6 +14,7 @@ import { POST } from "./handlers";
 import { openDb, createOrder } from "../../../lib/db/client";
 import { listUsage } from "../../../lib/db/usage";
 import type { EscrowState } from "../../../lib/escrow/state-machine";
+import { fixtureCohort } from "../../../lib/fitness/source";
 import { PER_QUERY_FEE_CENTS } from "../../../lib/query/pricing";
 
 const DATASET_ID = "ds_cardio_synthea_v1";
@@ -337,3 +338,58 @@ for (const status of ["CAPTURED", "PAID_OUT"] as const) {
     }),
   );
 }
+
+// --- SYNTHETIC ALS fixture datasets ---
+
+const ALS_ID = "ds_als_survival_axonpoint_v1";
+
+/** Like withEnv, but the order is for an ALS fixture dataset. */
+function withAlsOrder(
+  fn: (ctx: { url: string; orderId: string }) => Promise<void>,
+) {
+  return withEnv(async ({ url }) => {
+    const db = openDb(url);
+    db.prepare(`INSERT INTO vendors (id, name) VALUES (?, ?)`).run(
+      "vnd_axonpoint_synth",
+      "Axonpoint Synth",
+    );
+    db.prepare(
+      `INSERT INTO datasets (id, vendor_id, title, price_cents) VALUES (?, ?, ?, ?)`,
+    ).run(ALS_ID, "vnd_axonpoint_synth", "SYNTHETIC ALS", 2900);
+    db.close();
+    await fn({ url, orderId: seedOrder(url, "DELIVERED", ALS_ID) });
+  });
+}
+
+test(
+  "an ALS dataset answers from its fixture rows and counts people, not visits",
+  withAlsOrder(async ({ url, orderId }) => {
+    const res = await ask(orderId, "How many patients are in this dataset?", ALS_ID);
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.execution, "fixture");
+    const people = fixtureCohort(ALS_ID, "delivery")!.subjects.length;
+    assert.deepEqual(json.result, [{ count: people }]);
+    assert.equal(usageFor(url, orderId).length, 1);
+  }),
+);
+
+test(
+  "a cardio question still goes to the mock executor",
+  withEnv(async ({ orderId }) => {
+    const res = await ask(orderId, "How many patients by sex?");
+    assert.equal((await res.json()).execution, "mock");
+  }),
+);
+
+test(
+  "an ALS question the rows cannot answer is refused and never billed",
+  withAlsOrder(async ({ url, orderId }) => {
+    const res = await ask(orderId, "Count of patients by region", ALS_ID);
+    assert.equal(res.status, 422);
+    assert.match((await res.json()).error, /no "region" column/);
+    const bmi = await ask(orderId, "Average bmi", ALS_ID);
+    assert.equal(bmi.status, 422);
+    assert.equal(usageFor(url, orderId).length, 0);
+  }),
+);

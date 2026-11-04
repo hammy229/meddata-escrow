@@ -35,6 +35,20 @@ const COLUMNS: Record<string, Columns> = {
     numeric: ["value", "age"],
     groups: ["diagnosis", "region"],
   },
+  // SYNTHETIC ALS listings. Their fixture rows map age, score (ALSFRS-R), value
+  // (FVC), sex and age group; the planner's other columns are refused.
+  ds_als_survival_axonpoint_v1: {
+    numeric: ["score", "age"],
+    groups: ["age_group", "sex"],
+  },
+  ds_als_survival_motorneuron_v1: {
+    numeric: ["score", "age"],
+    groups: ["age_group", "sex"],
+  },
+  ds_als_survival_curated_v1: {
+    numeric: ["score", "age"],
+    groups: ["age_group", "sex"],
+  },
 };
 
 // Unknown datasets still get questions, from the columns every dataset has.

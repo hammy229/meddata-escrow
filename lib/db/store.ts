@@ -15,6 +15,7 @@ import type {
   OrderSummary,
 } from "./client";
 import type { NewUsage, UsageRow } from "./usage";
+import type { ListingClaims } from "../fitness/types";
 import type { Dataset } from "./datasets";
 import { UnknownOrderError } from "./usage";
 import {
@@ -326,7 +327,12 @@ export async function recordUsage(
 function meta() {
   return new Map(
     (
-      catalogMetadata as { id: string; tags?: string[]; recordCount?: number }[]
+      catalogMetadata as {
+        id: string;
+        tags?: string[];
+        recordCount?: number;
+        claims?: ListingClaims;
+      }[]
     ).map((d) => [d.id, d]),
   );
 }
@@ -350,6 +356,7 @@ export async function listDatasets(db: AppDatabase): Promise<Dataset[]> {
       ? JSON.parse(r.tags_json)
       : (metadata.get(r.id)?.tags ?? []),
     recordCount: r.record_count ?? metadata.get(r.id)?.recordCount ?? null,
+    ...(metadata.get(r.id)?.claims && { claims: metadata.get(r.id)!.claims }),
   }));
 }
 export async function updateDatasetPrice(

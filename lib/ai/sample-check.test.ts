@@ -128,3 +128,18 @@ test("an LLM failure or malformed review falls back to the rules verdict", async
     );
   }
 });
+
+test("the SYNTHETIC ALS listings pass the rules check", async () => {
+  for (const id of [
+    "ds_als_survival_axonpoint_v1",
+    "ds_als_survival_motorneuron_v1",
+    "ds_als_survival_curated_v1",
+  ]) {
+    const entry = loadCatalog().find((d) => d.id === id)!;
+    assert.ok(entry.recordCount >= MIN_RECORDS, id);
+    assert.ok(entry.tags.includes("synthetic"), id);
+    const v = await checkSample(id, { useLlm: false });
+    assert.equal(v.passed, true, `${id}: ${v.findings.join("; ")}`);
+    assert.ok(v.findings.every((f) => f.startsWith("PASS")));
+  }
+});

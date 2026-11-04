@@ -4,6 +4,7 @@
 import { readFileSync } from "node:fs";
 import type { DatabaseSync } from "node:sqlite";
 
+import type { ListingClaims } from "../fitness/types";
 import { getDataset, type DatasetRow } from "./client";
 
 /** A listing as returned by /api/datasets. */
@@ -15,6 +16,8 @@ export interface Dataset {
   priceCents: number;
   recordCount: number | null;
   tags: string[];
+  /** What the seller says the data contains. Only synthetic listings carry it. */
+  claims?: ListingClaims;
 }
 
 interface CatalogMeta {

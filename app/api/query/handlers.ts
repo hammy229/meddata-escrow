@@ -9,8 +9,11 @@ import { executeDataset } from "../../../lib/sources/store";
 //   2. nl2query     — compile to parameterized, aggregate-only SQL, then
 //                     re-check the COMPILED SQL with checkQuery (403) as
 //                     defense in depth against a translator bug.
-//   3. mockExecute  — the vendor-side aggregate query runs here (mock; no raw
-//                     records ever leave the vendor).
+//   3. execute      - the vendor-side aggregate query runs here, first match
+//                     wins: a live provider database, then the dataset's
+//                     SYNTHETIC fixture rows (a question those rows cannot
+//                     answer is refused, unbilled), then the mock. No raw
+//                     records ever leave the vendor.
 //   4. checkResult  — small-cell suppression on the aggregate (403 if unsafe).
 //      The 200 also carries a one-sentence `summary` of the rows.
 //   5. recordUsage  — meter the answered query against the order at
@@ -24,6 +27,7 @@ import {
   checkResult,
   suggestRewrite,
 } from "../../../lib/ai/privacy-guard";
+import { executeFixture } from "../../../lib/query/fixture-execute";
 import { mockExecute } from "../../../lib/query/mock-execute";
 import { getOrder, withDb } from "../../../lib/db/store";
 import { recordUsage, queryCapStatus } from "../../../lib/db/store";
@@ -119,7 +123,7 @@ export async function POST(request: Request) {
   }
   // 3. Execute the aggregate (mock vendor-side; raw records stay with vendor).
   let rows;
-  let execution: "postgres" | "mock" = "mock";
+  let execution: "postgres" | "fixture" | "mock" = "mock";
   let executedSql: string | undefined;
   try {
     const live = compiled.plan
@@ -129,7 +133,16 @@ export async function POST(request: Request) {
       rows = live.rows;
       executedSql = live.sql;
       execution = "postgres";
-    } else rows = mockExecute(compiled);
+    } else {
+      const fixture = compiled.plan
+        ? executeFixture(datasetId, compiled.plan)
+        : ({ kind: "none" } as const);
+      if (fixture.kind === "refused") return bad(fixture.reason, 422);
+      if (fixture.kind === "rows") {
+        rows = fixture.rows;
+        execution = "fixture";
+      } else rows = mockExecute(compiled);
+    }
   } catch (err) {
     // The client gets a generic 503; keep the cause in the server log so a
     // provider outage is visible to whoever runs the app.

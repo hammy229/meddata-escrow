@@ -228,3 +228,35 @@ test("migrating an older database adds the dataset columns it lacks", async () =
     await pg.close();
   }
 });
+
+test("listDatasets adds claims only for listings that carry them", async () => {
+  const pg = await PGlite.create();
+  const db = postgresConnection({
+    query: async (sql, params) => {
+      const result =
+        params === undefined
+          ? (await pg.exec(sql)).at(-1)!
+          : await pg.query(sql, params);
+      return { rows: result.rows, rowCount: result.affectedRows ?? 0 };
+    },
+  });
+  try {
+    await migratePostgres(db);
+    await db
+      .prepare("INSERT INTO vendors (id, name, payout_email) VALUES (?, ?, ?)")
+      .run("vendor", "Test Provider", "payout@example.test");
+    const insert = db.prepare(
+      "INSERT INTO datasets (id, vendor_id, title, price_cents) VALUES (?, ?, ?, ?)",
+    );
+    await insert.run("ds_als_survival_axonpoint_v1", "vendor", "SYNTHETIC ALS", 2900);
+    await insert.run("ds_cardio_synthea_v1", "vendor", "Cardio", 4900);
+    const listed = await listDatasets(db);
+    const als = listed.find((d) => d.id === "ds_als_survival_axonpoint_v1")!;
+    const cardio = listed.find((d) => d.id === "ds_cardio_synthea_v1")!;
+    assert.equal(als.claims?.subjects, 400);
+    assert.equal(als.claims?.noPostIndexFeatures, true);
+    assert.equal("claims" in cardio, false);
+  } finally {
+    await pg.close();
+  }
+});
