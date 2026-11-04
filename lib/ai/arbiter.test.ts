@@ -6,9 +6,13 @@ import {
   arbitrate,
   enforceAdvisory,
   MIN_CONFIDENCE,
+  type ArbiterAudit,
   type ArbiterInput,
   type Recommendation,
 } from "./arbiter";
+import { AUDIT_NOTE_PREFIX } from "../escrow/audit-note";
+import { auditDelivery } from "../escrow/delivery-audit";
+import type { Finding } from "../fitness/types";
 import { fakeLlm, failingLlm, promptOf } from "./testing";
 
 const ev = (event: string, seq: number, note: string | null = null) => ({
@@ -202,4 +206,253 @@ test("the arbiter module cannot move money: no escrow service or PayPal imports"
   for (const i of imports) {
     assert.doesNotMatch(i, /escrow\/service|paypal|db\/client/);
   }
+});
+
+// --- Delivery audit evidence -------------------------------------------------
+
+const claimFinding = (over: Partial<Finding>): Finding => ({
+  id: "claim",
+  severity: "fail",
+  title: "x",
+  reason: "r",
+  ...over,
+});
+function auditWith(
+  findings: Finding[],
+  over: Partial<ArbiterAudit> = {},
+): ArbiterAudit {
+  return {
+    verdict: "fail",
+    blocking: findings.some((f) => f.severity === "fail"),
+    report: {
+      datasetId: "ds_1",
+      stage: "delivery",
+      synthetic: true,
+      verdict: "fail",
+      findings,
+      disclaimer: "screen, not proof",
+      methodVersion: 1,
+    },
+    ...over,
+  };
+}
+const coverageMiss = (claimed: number, delivered: number) =>
+  claimFinding({
+    column: "baseline_fvc_pct",
+    title: "baseline_fvc_pct coverage is below the listing",
+    reason: `The listing says ${claimed}%; the delivered rows have ${delivered}%.`,
+    metric: { claimedPct: claimed, deliveredPct: delivered },
+  });
+const eventMiss = () =>
+  claimFinding({ title: "Event rate differs from the listing" });
+const withSystemNote = () => [
+  ...input().events.slice(0, 3),
+  ev(
+    "DISPUTE",
+    4,
+    `${AUDIT_NOTE_PREFIX} the delivered data breaks 2 claims in the listing. A person decides what happens next.`,
+  ),
+];
+
+test("two claim misses favor a refund even when the sample passed", async () => {
+  const stored = auditDelivery({
+    id: "ord_1",
+    dataset_id: "ds_als_survival_curated_v1",
+  })!;
+  const r = await arbitrate(
+    input({ events: withSystemNote(), audit: stored }),
+    rules,
+  );
+  assert.equal(r.outcome, "refund");
+  assert.ok(r.confidence >= MIN_CONFIDENCE);
+  assert.equal(r.source, "rules");
+  assert.ok(r.evidence.some((e) => /claim/i.test(e)));
+  assert.equal(r.advisoryOnly, true);
+});
+
+test("the audit branch comes before the missing-sample branch", async () => {
+  const r = await arbitrate(
+    input({
+      sample: null,
+      audit: auditWith([coverageMiss(92, 60), eventMiss()]),
+    }),
+    rules,
+  );
+  assert.equal(r.outcome, "refund");
+});
+
+test("a broken integrity promise is a refund on its own", async () => {
+  for (const title of [
+    "Listing says no post-index features, but one is present",
+    "Listing says one row per subject, but subjects repeat",
+  ]) {
+    const r = await arbitrate(
+      input({ audit: auditWith([claimFinding({ title })]) }),
+      rules,
+    );
+    assert.equal(r.outcome, "refund", title);
+  }
+});
+
+test("one narrow miss is a split, sized by how far short the data fell", async () => {
+  const r = await arbitrate(
+    input({ audit: auditWith([coverageMiss(92, 80)]) }),
+    rules,
+  );
+  assert.equal(r.outcome, "split");
+  assert.equal(r.suggestedCaptureCents, Math.round((4900 * 80) / 92));
+  assert.ok(r.confidence >= MIN_CONFIDENCE);
+});
+
+test("the split figure stays between 1 cent and one cent short of the price", async () => {
+  const none = await arbitrate(
+    input({ audit: auditWith([coverageMiss(92, 0)]) }),
+    rules,
+  );
+  assert.equal(none.suggestedCaptureCents, 1);
+  const over = await arbitrate(
+    input({ audit: auditWith([coverageMiss(50, 90)]) }),
+    rules,
+  );
+  assert.equal(over.suggestedCaptureCents, 4899);
+  const odd = await arbitrate(
+    input({
+      audit: auditWith([
+        claimFinding({
+          title: "Listed subjects do not match the delivered rows",
+          metric: { claimed: 400, delivered: "fewer than 5" },
+        }),
+      ]),
+    }),
+    rules,
+  );
+  assert.equal(odd.outcome, "split");
+  assert.equal(odd.suggestedCaptureCents, 2450);
+});
+
+test("an inconclusive audit goes to a person", async () => {
+  const r = await arbitrate(
+    input({
+      audit: { verdict: "inconclusive", blocking: false, report: null },
+    }),
+    rules,
+  );
+  assert.equal(r.outcome, "needs_human");
+});
+
+test("a warning-only audit leaves the usual reasoning in place", async () => {
+  const r = await arbitrate(
+    input({
+      audit: auditWith([claimFinding({ severity: "warn" })], {
+        verdict: "warn",
+        blocking: false,
+      }),
+    }),
+    rules,
+  );
+  assert.equal(r.outcome, "split"); // the buyer's missing-values note, as before
+});
+
+test("a system note never counts as the buyer's words", async () => {
+  const noted = [
+    ...input().events.slice(0, 3),
+    ev("DISPUTE", 3, `${AUDIT_NOTE_PREFIX} identifier missing mismatch.`),
+  ];
+  const r = await arbitrate(
+    input({
+      events: noted,
+      audit: auditWith([], { verdict: "pass", blocking: false }),
+    }),
+    rules,
+  );
+  assert.equal(r.outcome, "release");
+  assert.ok(!r.evidence.some((e) => e.includes("Buyer's dispute note")));
+  assert.ok(r.evidence.some((e) => e.includes("Buyer gave no dispute note")));
+});
+
+test("a buyer note beside a system note is still read", async () => {
+  const both = [
+    ...input().events.slice(0, 3),
+    ev("DISPUTE", 3, `${AUDIT_NOTE_PREFIX} something`),
+    ev("DISPUTE", 4, "Please look at the re-identification risk"),
+  ];
+  const r = await arbitrate(input({ events: both }), rules);
+  assert.equal(r.outcome, "needs_human");
+  assert.ok(r.evidence.some((e) => e.includes("re-identification risk")));
+});
+
+test("an LLM release against a blocking audit becomes needs_human; refund and split stand", async () => {
+  const audit = auditWith([coverageMiss(92, 60), eventMiss()]);
+  const release = fakeLlm({
+    outcome: "release",
+    confidence: 0.95,
+    rationale: "fine",
+    evidence: [],
+  });
+  const r = await arbitrate(input({ audit }), {
+    useLlm: true,
+    client: release.client,
+  });
+  assert.equal(r.source, "llm");
+  assert.equal(r.outcome, "needs_human");
+  assert.match(r.rationale, /audit/i);
+  const prompt = promptOf(release.calls[0]);
+  assert.match(prompt, /Delivery audit/);
+  assert.match(prompt, /coverage is below the listing/);
+  for (const outcome of ["refund", "split"]) {
+    const llm = fakeLlm({
+      outcome,
+      confidence: 0.9,
+      rationale: "x",
+      evidence: [],
+    });
+    const got = await arbitrate(input({ audit }), {
+      useLlm: true,
+      client: llm.client,
+    });
+    assert.equal(got.outcome, outcome);
+  }
+});
+
+test("an LLM release without a blocking audit is untouched", async () => {
+  const llm = fakeLlm({
+    outcome: "release",
+    confidence: 0.9,
+    rationale: "fine",
+    evidence: [],
+  });
+  const r = await arbitrate(
+    input({ audit: auditWith([], { verdict: "pass", blocking: false }) }),
+    { useLlm: true, client: llm.client },
+  );
+  assert.equal(r.outcome, "release");
+});
+
+test("off-schema LLM output with an audit falls back to the audit rules", async () => {
+  const audit = auditWith([coverageMiss(92, 60), eventMiss()]);
+  const r = await arbitrate(input({ audit }), {
+    useLlm: true,
+    client: fakeLlm({ outcome: "burn_it_all", confidence: 1 }).client,
+  });
+  assert.equal(r.source, "rules");
+  assert.equal(r.outcome, "refund");
+});
+
+test("the LLM prompt does not carry the system note text as the buyer's words", async () => {
+  const llm = fakeLlm({
+    outcome: "needs_human",
+    confidence: 0.9,
+    rationale: "x",
+    evidence: [],
+  });
+  await arbitrate(
+    input({
+      events: withSystemNote(),
+      audit: auditWith([coverageMiss(92, 60)]),
+    }),
+    { useLlm: true, client: llm.client },
+  );
+  assert.ok(
+    !promptOf(llm.calls[0]).includes("A person decides what happens next"),
+  );
 });

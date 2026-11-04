@@ -101,6 +101,11 @@ function errorResponse(err: unknown): Response {
 //       `deadline` says what happens if nobody acts ({ action, dueAt, daysLeft },
 //       see lib/escrow/sweep): delivered data releases the payment, and an
 //       undelivered hold is refunded. Null for every other state.
+//   GET /api/orders?id=ord_..&audit=1
+//       -> { audit }  the stored delivery audit (verdict, blocking, fingerprint,
+//          the listing's claims and the findings), or { audit: null } when the
+//          listing was not audited. Never rows or subject keys. A screen, not
+//          proof; the fingerprint shows which bytes were audited, nothing more.
 //   GET /api/orders?id=ord_..&receipt=1
 //       -> { order, receipt }  fee breakdown (lib/escrow/receipt): amount,
 //          platform fee, vendor payout, per-query charges and the total. All
@@ -131,10 +136,24 @@ export async function GET(request: Request, account?: Account) {
       // `?events` (any value) also returns the order's audit timeline. Order
       // and events are read in one DB open so they are a consistent snapshot.
       const includeEvents = params.get("events") !== null;
+      if (params.get("audit") !== null) {
+        const found = await withDb(async (db) => {
+          const order = await getOrder(db, id);
+          return order && { audit: (await getDeliveryAudit(db, id)) ?? null };
+        });
+        if (!found) return bad(`unknown orderId: ${id}`, 404);
+        return Response.json(found);
+      }
       if (params.get("arbitrate") !== null) {
         const found = await withDb(async (db) => {
           const order = await getOrder(db, id);
-          return order && { order, events: await listOrderEvents(db, id) };
+          return (
+            order && {
+              order,
+              events: await listOrderEvents(db, id),
+              audit: await getDeliveryAudit(db, id),
+            }
+          );
         });
         if (!found) return bad(`unknown orderId: ${id}`, 404);
         if (found.order.status !== "DISPUTED")
@@ -149,6 +168,7 @@ export async function GET(request: Request, account?: Account) {
           order: found.order,
           events: found.events,
           sample,
+          audit: found.audit,
         });
         return Response.json({ order: found.order, recommendation });
       }

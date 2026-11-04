@@ -10,6 +10,21 @@ import { rmSync } from "node:fs";
 import { randomUUID, createHash } from "node:crypto";
 
 import { GET, POST, PATCH } from "./handlers";
+import { GET as secureGet } from "./route";
+import { withAgentDb } from "../../../lib/agent/test-db";
+import {
+  createEscrowOrder,
+  advanceEscrowOrder,
+} from "../../../lib/escrow/service";
+import { fixtureCohort } from "../../../lib/fitness/source";
+import {
+  register,
+  createSession,
+  sessionAccount,
+  completeSetup,
+  SESSION_COOKIE,
+  type Role,
+} from "../../../lib/auth/store";
 import { recordUsage, PER_QUERY_FEE_CENTS } from "../../../lib/db/usage";
 import {
   openDb,
@@ -1018,5 +1033,132 @@ test(
       await deadlineOf(make({ verdict: "inconclusive", blocking: 0 })),
       null,
     );
+  }),
+);
+
+// --- GET ?audit=1: the stored delivery audit --------------------------------
+
+const CURATED = "ds_als_survival_curated_v1";
+const noEmit = { emit: () => {} };
+
+async function disputedByAudit(accountId?: string) {
+  const { orderId } = await createEscrowOrder(
+    { datasetId: CURATED, buyerEmail: "b@example.test", accountId },
+    noEmit,
+  );
+  await advanceEscrowOrder({ orderId, action: "authorize" }, noEmit);
+  const res = await advanceEscrowOrder({ orderId, action: "deliver" }, noEmit);
+  assert.equal(res.escrowState, "DISPUTED");
+  return orderId;
+}
+
+test(
+  "GET ?audit=1 returns the stored audit and never a row or a subject key",
+  withAgentDb(async () => {
+    const orderId = await disputedByAudit();
+    const keys = fixtureCohort(CURATED, "delivery")!.subjects.map((s) =>
+      String(s.subject_key),
+    );
+    const bodies: string[] = [];
+    const get = async (query: string) => {
+      const res = await GET(
+        new Request(`http://localhost/api/orders?id=${orderId}&${query}`),
+      );
+      const text = await res.text();
+      bodies.push(text);
+      return { status: res.status, body: JSON.parse(text) };
+    };
+
+    const { status, body } = await get("audit=1");
+    assert.equal(status, 200);
+    assert.equal(body.audit.orderId, orderId);
+    assert.equal(body.audit.verdict, "fail");
+    assert.equal(body.audit.blocking, true);
+    assert.match(body.audit.fingerprint, /^[0-9a-f]{64}$/);
+    assert.ok(body.audit.claims.subjects > 0);
+    assert.ok(
+      body.audit.report.findings.some(
+        (f: { id: string; severity: string }) =>
+          f.id === "claim" && f.severity === "fail",
+      ),
+    );
+
+    // The arbiter sees the audit and advises a refund. It moves nothing.
+    const arb = await get("arbitrate=1");
+    assert.equal(arb.body.recommendation.outcome, "refund");
+    assert.equal(arb.body.recommendation.advisoryOnly, true);
+    assert.equal(arb.body.order.status, "DISPUTED");
+
+    await get("events=1");
+    await get("receipt=1");
+    for (const text of bodies)
+      for (const key of keys)
+        assert.ok(!text.includes(`"${key}"`), `subject key leaked: ${key}`);
+    // Aggregate counts such as "rows":400 are fine; row values are not.
+    for (const text of bodies) {
+      assert.ok(!text.includes('"subject_key"'));
+      assert.doesNotMatch(text, /"(survival_months|baseline_alsfrs|age_at_onset)":\s*[\d"]/);
+    }
+  }),
+);
+
+test(
+  "GET ?audit=1 on an unknown order is 404 and on an unaudited order is null",
+  withAgentDb(async () => {
+    const missing = await GET(
+      new Request("http://localhost/api/orders?id=ord_nope&audit=1"),
+    );
+    assert.equal(missing.status, 404);
+    const { orderId } = await createEscrowOrder(
+      { datasetId: "ds_cardio_synthea_v1", buyerEmail: "b@example.test" },
+      noEmit,
+    );
+    const none = await GET(
+      new Request(`http://localhost/api/orders?id=${orderId}&audit=1`),
+    );
+    assert.equal(none.status, 200);
+    assert.deepEqual(await none.json(), { audit: null });
+  }),
+);
+
+test(
+  "GET ?audit=1 is closed to strangers and open to the buyer and the owning vendor",
+  withAgentDb(async () => {
+    const password = "test password long enough";
+    const setup = async (name: string, email: string, role: Role) => {
+      const account = await register({ name, email, password, role });
+      await completeSetup(account, {
+        organization: "Test Institution",
+        purpose: "Research using synthetic cohorts",
+        payoutEmail: role === "vendor" ? "payout@example.com" : "",
+      });
+      const ready = (await sessionAccount(await createSession(account.id)))!;
+      return { account: ready, token: await createSession(account.id) };
+    };
+    const buyer = await setup("Buyer", "buyer@example.com", "researcher");
+    const stranger = await setup("Other", "other@example.com", "researcher");
+    const vendor = await setup("Vendor", "vendor@example.com", "vendor");
+    const otherVendor = await setup("Rival", "rival@example.com", "vendor");
+    const raw = openDb(process.env.DATABASE_URL!);
+    raw
+      .prepare("UPDATE datasets SET vendor_id = ? WHERE id = ?")
+      .run(vendor.account.vendor_id, CURATED);
+    raw.close();
+    const orderId = await disputedByAudit(buyer.account.id);
+
+    const as = async (token?: string) =>
+      secureGet(
+        new Request(`http://localhost/api/orders?id=${orderId}&audit=1`, {
+          headers: token ? { cookie: `${SESSION_COOKIE}=${token}` } : {},
+        }),
+      );
+    assert.equal((await as()).status, 401);
+    assert.equal((await as(stranger.token)).status, 404);
+    assert.equal((await as(otherVendor.token)).status, 404);
+    for (const token of [buyer.token, vendor.token]) {
+      const res = await as(token);
+      assert.equal(res.status, 200);
+      assert.equal((await res.json()).audit.verdict, "fail");
+    }
   }),
 );

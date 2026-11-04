@@ -15,6 +15,8 @@
 import * as z from "zod/v4";
 
 import { llmEnabled, structured } from "../llm/client";
+import { isSystemNote } from "../escrow/audit-note";
+import type { DeliveryAudit, Finding } from "../fitness/types";
 import type { AiOptions } from "./options";
 import type { SampleCheck } from "./sample-check";
 
@@ -31,6 +33,12 @@ export interface ArbiterEvent {
   created_at: string;
 }
 
+/** What the delivery audit stored for the order. Evidence only, never rows. */
+export type ArbiterAudit = Pick<
+  DeliveryAudit,
+  "verdict" | "blocking" | "report"
+>;
+
 export interface ArbiterInput {
   order: {
     id: string;
@@ -42,6 +50,8 @@ export interface ArbiterInput {
   events: ArbiterEvent[];
   /** Sample-check evidence, or null if unavailable. */
   sample: SampleCheck | null;
+  /** The stored delivery audit, when the listing was audited. */
+  audit?: ArbiterAudit | null;
 }
 
 export interface Recommendation {
@@ -60,6 +70,36 @@ export interface Recommendation {
 const PRIVACY = /re-?identif|privacy|hipaa|\bphi\b|identif(y|ier)|\bssn\b/i;
 const QUALITY =
   /missing|duplicate|incomplete|wrong|corrupt|empty|inaccurate|stale|outdated|quality|null|mismatch/i;
+
+/** Claim findings that mean the listing's own integrity promises were broken. */
+const HARD_INTEGRITY = /post-index|subjects repeat/i;
+
+const claimFails = (audit: ArbiterAudit): Finding[] =>
+  audit.report?.findings.filter(
+    (f) => f.id === "claim" && f.severity === "fail",
+  ) ?? [];
+
+/** The share of the listed figure the delivery reached, if the finding says. */
+function shortfallRatio(f: Finding): number | null {
+  const m = f.metric;
+  const pair: [unknown, unknown] | null = !m
+    ? null
+    : "claimedPct" in m
+      ? [m.claimedPct, m.deliveredPct]
+      : "claimed" in m
+        ? [m.claimed, m.delivered]
+        : null;
+  if (!pair) return null;
+  const [claimed, got] = pair;
+  if (typeof claimed !== "number" || typeof got !== "number" || claimed <= 0)
+    return null;
+  return Math.min(1, Math.max(0, got / claimed));
+}
+
+/** Keep a split figure inside what a split can be: 1 cent to one cent short. */
+function clampSplit(cents: number, amount: number): number {
+  return Math.max(1, Math.min(Math.max(1, amount - 1), Math.round(cents)));
+}
 
 /** Clamp confidence and force needs_human when it is too low. Pure. */
 export function enforceAdvisory(rec: Recommendation): Recommendation {
@@ -84,7 +124,8 @@ function rules(input: ArbiterInput): Recommendation {
   const { events, sample } = input;
   const delivered = events.some((e) => e.event === "DELIVER");
   const complaint = events
-    .filter((e) => e.event === "DISPUTE" && e.note)
+    // Notes the system wrote are not the buyer's words and are never matched.
+    .filter((e) => e.event === "DISPUTE" && e.note && !isSystemNote(e.note))
     .map((e) => e.note as string)
     .join(" ")
     .trim();
@@ -124,6 +165,44 @@ function rules(input: ArbiterInput): Recommendation {
       "refund",
       0.9,
       "The vendor never delivered the data, so the buyer should get the held funds back.",
+    );
+  const audit = input.audit;
+  if (audit?.blocking) {
+    const misses = claimFails(audit);
+    evidence.push(
+      `Delivery audit found ${misses.length} broken listing claim${misses.length === 1 ? "" : "s"}.`,
+      ...misses.slice(0, 5).map((f) => f.title),
+    );
+    if (misses.length === 0)
+      return done(
+        "needs_human",
+        0.4,
+        "The delivery audit blocked this order but its evidence is missing, so a person should review.",
+      );
+    if (misses.length >= 2 || misses.some((f) => HARD_INTEGRITY.test(f.title)))
+      return done(
+        "refund",
+        0.9,
+        "The delivered data breaks the listing in a way that matters, so the buyer should get the held funds back.",
+      );
+    const ratio = shortfallRatio(misses[0]);
+    return {
+      ...done(
+        "split",
+        0.7,
+        "The delivered data misses one listed claim by a narrow margin, so a partial remedy looks fairest.",
+      ),
+      suggestedCaptureCents: clampSplit(
+        input.order.amount_cents * (ratio ?? 0.5),
+        input.order.amount_cents,
+      ),
+    };
+  }
+  if (audit?.verdict === "inconclusive")
+    return done(
+      "needs_human",
+      0.4,
+      "The delivery audit could not reach a verdict, so a person should review.",
     );
   if (!sample)
     return done(
@@ -186,12 +265,15 @@ export async function arbitrate(
   opts: AiOptions = {},
 ): Promise<Recommendation> {
   const rec = await recommend(input, opts);
-  return rec.outcome === "split"
-    ? {
-        ...rec,
-        suggestedCaptureCents: Math.round(input.order.amount_cents / 2),
-      }
-    : rec;
+  if (rec.outcome !== "split") return rec;
+  // The rules size a split from the audit; otherwise it starts at half.
+  return {
+    ...rec,
+    suggestedCaptureCents: clampSplit(
+      rec.suggestedCaptureCents ?? input.order.amount_cents / 2,
+      input.order.amount_cents,
+    ),
+  };
 }
 
 async function recommend(
@@ -204,13 +286,43 @@ async function recommend(
       system: SYSTEM,
       prompt:
         `Order ${input.order.id} (${input.order.amount_cents} cents, dataset ${input.order.dataset_id}).\n\n` +
-        `Audit trail (JSON):\n${JSON.stringify(input.events)}\n\n` +
-        `Sample check (JSON):\n${JSON.stringify(input.sample)}`,
+        // System notes are left out; the audit evidence below replaces them.
+        `Audit trail (JSON):\n${JSON.stringify(
+          input.events.map((e) =>
+            isSystemNote(e.note) ? { ...e, note: null } : e,
+          ),
+        )}\n\n` +
+        `Sample check (JSON):\n${JSON.stringify(input.sample)}` +
+        (input.audit
+          ? `\n\nDelivery audit (JSON; a screen, not proof):\n${JSON.stringify({
+              verdict: input.audit.verdict,
+              blocking: input.audit.blocking,
+              findings: (input.audit.report?.findings ?? [])
+                .filter((f) => f.severity === "fail" || f.severity === "warn")
+                .map((f) => ({
+                  id: f.id,
+                  severity: f.severity,
+                  title: f.title,
+                  reason: f.reason,
+                })),
+            })}`
+          : ""),
       schema: Answer,
       client: opts.client,
     });
     const a = Answer.parse(raw);
-    return enforceAdvisory({ ...a, source: "llm", advisoryOnly: true });
+    // The model may tighten but never loosen: it cannot release money the
+    // delivery audit says is in doubt.
+    const held = input.audit?.blocking && a.outcome === "release";
+    return enforceAdvisory({
+      ...a,
+      ...(held && {
+        outcome: "needs_human" as const,
+        rationale: `The delivery audit found broken listing claims, so a release goes to a person. Model said: ${a.rationale}`,
+      }),
+      source: "llm",
+      advisoryOnly: true,
+    });
   } catch (err) {
     console.warn(
       `arbiter: LLM failed, using rules (${(err as Error).message})`,

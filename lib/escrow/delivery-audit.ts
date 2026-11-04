@@ -22,9 +22,9 @@ import { runFitnessAudit } from "../fitness/audit";
 import { fingerprintRows } from "../fitness/fingerprint";
 import { fixtureCohort, fixtureSpec, listingClaims } from "../fitness/source";
 import type { DeliveryAudit } from "../fitness/types";
+import { AUDIT_NOTE_PREFIX } from "./audit-note";
 
-/** Start of the system note written on the DISPUTE an audit raises. */
-export const AUDIT_NOTE_PREFIX = "Delivery audit:";
+export { AUDIT_NOTE_PREFIX };
 
 /** What the delivered data is screened for: the same study the sample was. */
 const DELIVERY_STUDY = "Predict survival from baseline FVC and age at onset";
