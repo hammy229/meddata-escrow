@@ -38,6 +38,12 @@ jobs:
       - name: Test
         run: npm test
 
+      # The tests already hold retrieval and the red team to their committed
+      # results. This does the same for the audit: its numbers must not move
+      # unless the new ones are committed with the change.
+      - name: Audit eval matches committed results
+        run: npm run eval:audit && git diff --exit-code evals/results/audit.json
+
       - name: Build
         run: npm run build
         env:

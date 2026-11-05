@@ -6,3 +6,4 @@ data/output
 *.sqlite
 *.sqlite3
 *.db
+evals/
