@@ -2,6 +2,35 @@
 
 All notable changes to MedData Escrow. Newest first.
 
+## 2026-11-05: Audits you can see, and evals with real numbers
+
+### Added
+
+- **Evals.** `npm run eval` measures the audit, retrieval and a hostile model, and CI
+  holds the numbers to what is committed. See `docs/evals.md`.
+- **Survival as a paid query.** Kaplan-Meier curves and log-rank tests, raw and within
+  age bands, charted in the researcher workspace.
+- **Fitness audit on screen** for the sample and the delivery, on both workspaces, and
+  a longer `/demo` where a delivery fails its audit and the money stays held.
+- **Leak lift and drift** evidence in the audit. Neither one holds money.
+- **Tracing and timeouts** for every model call.
+
+### Changed
+
+- **Offline matching uses BM25** with a small medical synonym map. Scores now run 0 to
+  100, and a weak match is flagged.
+
+### Fixed
+
+- A small group could be recovered by subtracting the published groups from the total.
+  The next smallest group is now hidden too, so a table with two groups can come back
+  empty when one is small.
+- One model reply could run any number of tool calls. It is now capped at 8.
+- The agent could buy on a weak match, like a COPD dataset for an Alzheimer's study.
+- A buyer's dispute note starting with "Delivery audit:" could pass as a system note.
+- The imbalance check fired on most small clean cohorts.
+- `lib/mcp/handler.test.ts` failed on Node 26.
+
 ## 2026-11-03: Agent spending controls and fairer disputes
 
 ### Added

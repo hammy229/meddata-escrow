@@ -65,12 +65,15 @@ PAID_OUT`, plus dispute/void) with an append-only audit trail of every
 - **AG Grid** for matches, the vendor order queue, the ledger and the catalog;
   **OpenAPI 3.1** spec with drift tests and a generated **Postman** collection;
   **Render** blueprint; signed outbound webhooks for **Zapier**.
-- **Hold window, receipts and a webhook simulator.** `lib/escrow/auth-window`
-  works out the 3-day honor period and 29-day validity from the authorize
-  event. The receipt keeps platform fee plus vendor payout equal to the price.
-  The vendor page has a mock PayPal webhook simulator that posts through the
-  same webhook route, accepted only in mock mode. Replaying an event shows the
-  dedupe.
+- **Hold window and receipts.** `lib/escrow/auth-window` works out the 3-day honor
+  period and 29-day validity from the authorize event. The receipt keeps platform
+  fee plus vendor payout equal to the price.
+- **Payment tied to whether the data holds up.** A fitness audit screens delivered
+  data against what the listing promised. If a claim is broken, the money stays held
+  until a person decides. The audit also trains a small model with and without a
+  suspicious column: on our flawed SYNTHETIC listing, it lifts held-out AUC from 0.69
+  to 0.81. A paid survival query shows a gap between arms (p below 0.001) that goes
+  away within age bands (p 0.886).
 - **AG Grid beyond the defaults.** A custom set filter for order status,
   checkbox row selection for the compare view, inline price editing with undo in
   the catalog, a "Needs action" filter and resolve buttons on the order queue, a
@@ -113,8 +116,16 @@ PAID_OUT`, plus dispute/void) with an append-only audit trail of every
 - The whole escrow lifecycle runs end to end, keyless, in one command.
 - The server, not the client, sets every price and gates every query on a
   paid, delivered order, and caps what each order can be metered for.
-- A `node:test` suite of 626 tests covering the state machine, PayPal client,
+- More than 1,000 `node:test` tests covering the state machine, PayPal client,
   webhooks, privacy screens, agent guardrails and every route.
+- Evals with real numbers, enforced in CI (`docs/evals.md`). Clean data with a
+  truthful listing held money 0 of 200 times at each cohort size. Retrieval reached
+  MRR 0.846 on a held-out set, against 0.664 for word overlap. A scripted hostile
+  model is blocked in 26 of 26 attacks. All of it is on synthetic data, and Claude
+  itself is not evaluated yet.
+- The evals found our own bugs: a check that fired on 97% of small clean cohorts, an
+  agent that would buy a COPD dataset for an Alzheimer's study, and a hidden group
+  anyone could recover by subtraction.
 
 ## What we learned
 
@@ -129,7 +140,9 @@ model can't talk its way around them.
 - Live PayPal capture for per-query charges (today they are metered in our own
   ledger).
 - Vendor-side dataset onboarding and real (de-identified) data partners.
-- Postgres for multi-instance deploys (the SQL is already portable).
+- Run the evals against real Claude once Bedrock access is on, including how often
+  it falls for an injection.
+- Test the audit on real, messy data. Today it has only seen our own generator.
 
 ## Built with
 

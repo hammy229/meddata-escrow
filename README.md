@@ -57,6 +57,46 @@ out), incoming orders with dispute buttons, and the full ledger.
 
 ![Vendor workspace: listing stats, earnings, incoming orders and the order ledger](docs/screenshots/vendor-workspace.png)
 
+## Measured, not claimed
+
+Each AI and ML piece has a number you can reproduce with `npm run eval`, no keys
+needed, and CI fails if a number moves without being committed. Everything is on
+SYNTHETIC data, and Claude itself has not been evaluated because Bedrock access is
+not on yet. Full tables and limits are in [`docs/evals.md`](docs/evals.md).
+
+| What                                             | Result                                                      |
+| ------------------------------------------------ | ----------------------------------------------------------- |
+| Money held on clean data with a truthful listing | 0 of 200 at each cohort size, upper bound 2%                |
+| Retrieval on a held-out golden set               | MRR 0.846, up from 0.664 for the word overlap baseline      |
+| Hostile model red team                           | 26 of 26 blocked, after fixing the 2 that first got through |
+| A planted leak on the shipped flawed listing     | Lifts a from-scratch model from AUC 0.69 to 0.81            |
+
+The evals have already found real problems: an imbalance check firing on 97% of
+small clean cohorts, an agent willing to buy a COPD dataset for an Alzheimer's study,
+one model reply running 300 tool calls, and a hidden group recoverable by subtraction.
+
+## Audits and survival
+
+Added Nov 4 and 5. It runs in mock mode with no keys, and you can watch it at `/demo`.
+
+- **Fitness audit** (`lib/fitness`). Screens a dataset for missing data, too few
+  events, repeated subjects, outcome leaks, unbalanced arms and broken listing claims.
+  It runs on the sample before purchase and on the data at delivery. It is a screen,
+  not proof.
+- **Money follows the claims.** Delivered data that breaks a listing's claim moves the
+  order to `DISPUTED` and holds the payment for a person to decide. Nothing else holds
+  money: not a leak, weak power or drift. A dispute always waits for a person, so a
+  silent vendor is not voided automatically.
+- **Leak lift and drift.** A flagged column gets a model trained with and without it,
+  and the delivery is compared with the sample the buyer checked, using PSI with a
+  noise floor. Both are evidence only.
+- **Survival as a paid query** (`POST /api/query` with `analysis`). Kaplan-Meier curves
+  and log-rank tests, raw and within age bands, on a coarse grid with no filters and no
+  exact event times. The flawed cohort shows a gap between arms (p below 0.001) that
+  goes away within age bands (p 0.886).
+
+Audits only run on the seeded SYNTHETIC listings. Other listings show as not applicable.
+
 ## Agentic commerce, trust and insights
 
 Added Nov 2 for the PayPal AI Hackathon. All of it runs in mock mode with no keys.
@@ -144,6 +184,7 @@ locally without credentials; see the status line above for what is not yet live.
 | Most Impactful               | Cuts weeks of data sourcing for medical researchers; buyers never pay for failed samples, vendors never hand over raw records                                                                         |
 | Best Demo Delivery           | `/demo` runs the whole story through the real APIs in one click; script in `docs/demo-script.md`                                                                                                      |
 | Most Creative                | Pay-per-query aggregates, trust scores and a signed data use agreement on every order                                                                                                                 |
+| Most Creative: research fit  | Payment tied to whether the data holds up: fitness audit, leak lift, survival query. Numbers in `docs/evals.md`, story at `/demo`                                                                     |
 | AG Grid                      | Catalog, compare, order queue, ledger, insights and trust tables (`app/components`, `/insights`)                                                                                                      |
 | APIMatic                     | OpenAPI 3.1 spec with drift tests (`openapi/openapi.yaml`); SDK generation steps in `docs/api.md`. Not run through APIMatic yet                                                                       |
 | Render                       | `render.yaml` Blueprint with a seeded SQLite demo and health check. A hosted deploy is still pending                                                                                                  |
@@ -209,8 +250,12 @@ Claude on Amazon Bedrock is opt-in (`LLM_PROVIDER=bedrock`, client in
 `lib/llm/client.ts`). Every AI step has a deterministic fallback, so the full
 app (including the agent) runs with no AWS access.
 
-- **Matching**: Claude ranks catalog datasets for a study; keyword scoring is
-  the fallback (`lib/ai/matcher`).
+- **Matching**: Claude ranks catalog datasets for a study; BM25 with a small
+  medical synonym map is the fallback (`lib/ai/matcher`). A weak offline match is
+  flagged and the agent will not buy on it.
+- **Tracing and timeouts**: every model call records operation, prompt hash,
+  latency, tokens and outcome, never prompts or data (`lib/llm/trace.ts`). A hung
+  call stops after `LLM_TIMEOUT_MS` and falls back.
 - **Questions → plans, never SQL**: Claude emits a typed query plan that
   `compilePlan` turns into SQL; the model never writes SQL itself.
 - **Privacy second opinion**: Claude can only _tighten_ the rule-based privacy
@@ -297,13 +342,16 @@ each guardrail marked as enforced or triggered.
 | `GET /api/orders?id=<id>[&events=1]`                                     | One order with its `authorization` window (while funds are held), a `delivery` link (once data is granted, minted per read) and optional audit timeline                                  |
 | `GET /api/orders?id=<id>&receipt=1`                                      | Receipt: amount, platform fee, vendor payout, query charges, query cap, total                                                                                                            |
 | `GET /api/orders?summary=1[&datasetId=]`                                 | Vendor earnings: counts by status, held / captured / paid-out (gross) / released cents, plus vendor net and platform fee on paid-out orders                                              |
+| `POST /api/query` `{ orderId, datasetId, analysis }`                     | Kaplan-Meier survival on a SYNTHETIC listing, `analysis` is `{ type: "survival", groupBy }`, metered like an answer                                                                      |
+| `POST /api/match` `{ fitnessCheck, description? }`                       | Fitness audit on the sample of a SYNTHETIC listing, or `null` if it has no rows to screen                                                                                                |
+| `GET /api/orders?id=&audit=1`                                            | The order's stored delivery audit, or `null` if the listing was not audited                                                                                                              |
 | `POST /api/query` `{ orderId, datasetId, question }`                     | Plain-English question → privacy-safe aggregate with a one-sentence `summary`, metered (`usage` in response); a `403` may carry a safe `suggestion`; `402` once the query cap is reached |
 | `GET /api/billing?orderId=<id>`                                          | An order's per-query usage, `queryCount`, `totalCents`                                                                                                                                   |
 | `POST /api/billing` `{ orderId, question }`                              | Record one query charge (fee is server-set; `409` without data access; `402` at the cap)                                                                                                 |
 | `POST /api/agent` `{ study, budgetCents }`                               | Run the procurement agent; returns `runId`, steps, recommendation, `shortlist`, order                                                                                                    |
 | `GET /api/agent?runId=<id>`                                              | Replay a stored agent run (audit), with its `shortlist`                                                                                                                                  |
 | `GET /api/mandates`, `DELETE /api/mandates?mandateId=`                   | List your mandates with spent and remaining, or revoke one so the agent and MCP server stop buying under it right away                                                                   |
-| `POST /api/escrow/sweep`                                                 | For a scheduler, with a bearer secret: acts on escrow deadlines. Returns `released`, `refunded`, `needsReview` and `failed`                                                              |
+| `POST /api/escrow/sweep`                                                 | For a scheduler, with a bearer secret: acts on escrow deadlines. Returns `released`, `refunded`, `needsReview`, `blocked` and `failed`                                                   |
 | `POST /api/mandates` `{ maxTotalCents, maxPerOrderCents?, ... }`         | Issue a signed spending mandate; pass the `token` to `POST /api/agent` as `mandate` (`401` if bad or expired)                                                                            |
 | `GET /api/trust` `?vendorId= or ?datasetId=`                             | Trust score, grade and per-factor reasons (no query lists everything)                                                                                                                    |
 | `GET /api/orders?id=<id>&arbitrate=1`                                    | Advisory dispute recommendation (`409` unless the order is `DISPUTED`)                                                                                                                   |
