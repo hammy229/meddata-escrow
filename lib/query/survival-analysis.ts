@@ -28,6 +28,8 @@ export type GroupBy = (typeof GROUP_BYS)[number];
 export const GRID_MONTHS: readonly number[] = Array.from({ length: 13 }, (_, i) => i * 3);
 
 const ROUND_TO = 5;
+// Age bands read youngest first; every other grouping sorts by name.
+const AGE_ORDER = ["<50", "50-59", "60-69", "70+"];
 export const SYNTHETIC_LABEL =
   "SYNTHETIC data. Invented for demos. Not from any real patient.";
 
@@ -161,7 +163,9 @@ export function survivalAnalysis(cohort: AlsCohort, by: GroupBy): SurvivalOutcom
     list.push(s);
     buckets.set(k, list);
   }
-  const keys = [...buckets.keys()].sort();
+  const keys = [...buckets.keys()].sort(
+    (a, b) => AGE_ORDER.indexOf(a) - AGE_ORDER.indexOf(b) || a.localeCompare(b),
+  );
   const shown = keys.filter((k) => buckets.get(k)!.length >= MIN_CELL_SIZE);
   const withheldGroups = keys.length - shown.length;
   if (shown.length === 0)

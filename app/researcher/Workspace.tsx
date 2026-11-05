@@ -26,6 +26,8 @@ import SampleCheckCard, {
   type SampleCheck,
 } from "../components/SampleCheckCard";
 import QuerySpend from "../components/QuerySpend";
+import SurvivalPanel from "../components/SurvivalPanel";
+import { supportsSurvival } from "../../lib/query/survival-chart";
 import {
   DeliveryAuditPanel,
   SampleFitnessCard,
@@ -1190,6 +1192,19 @@ export default function ResearcherWorkspace({
               <p className="mt-2 text-xs text-muted">
                 Billed {usd(queryCharge)} to this order.
               </p>
+            )}
+
+            {orderId && supportsSurvival(selected.datasetId) && (
+              <SurvivalPanel
+                key={`${orderId}:${selected.datasetId}`}
+                orderId={orderId}
+                datasetId={selected.datasetId}
+                onAnswered={() => setSpendKey((k) => k + 1)}
+                onCapReached={(cap) => {
+                  setQueryCap(cap);
+                  setSpendKey((k) => k + 1);
+                }}
+              />
             )}
 
             {orderId && (
