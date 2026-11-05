@@ -389,9 +389,20 @@ export interface AuditEvalResult {
     falseBlockTruthful: Record<string, Proportion>;
     falseBlockEstimated: Record<string, Proportion>;
   };
+  /** What was changed after seeing this eval, and on which seeds it was checked again. */
+  tuning: string;
   conditions: ConditionResult[];
   leakImpact: Record<string, LeakImpactRow[]>;
+  /** Clean and imbalance conditions re-run on seeds that were not used when the imbalance rule was tuned. */
+  freshSeeds?: AuditEvalResult;
 }
+
+export const TUNING_NOTE =
+  "The imbalance check was changed after a first run of this eval (commit 078aab0) showed it flagged most small clean cohorts: " +
+  "the standardized difference must now also exceed 2.58 standard errors (SMD_NOISE_Z). " +
+  "That rule was tuned on base seed 1000, the seeds of the main tables, so the main imbalance numbers are in-sample. " +
+  "The freshSeeds block re-runs clean and imbalance on base seed 900000, which was not used for tuning. " +
+  "Every other threshold is unchanged from before the eval.";
 
 export const LIMITATIONS =
   "All cohorts are SYNTHETIC, made by lib/synth/als, and the checks were designed against that same generator family. " +
@@ -404,7 +415,14 @@ export interface EvalOptions {
   sizes?: number[];
   baseSeed?: number;
   leakImpactSeeds?: number;
+  /** Only run these families (clean is always needed for the summary). */
+  families?: Condition["family"][];
+  /** Also re-run clean and imbalance on seeds never used for tuning. Default true. */
+  fresh?: boolean;
 }
+
+/** Seeds the imbalance rule was NOT tuned on. */
+export const FRESH_BASE_SEED = 900_000;
 
 function emptyTally(): Record<CheckId, number> {
   return Object.fromEntries(CHECK_IDS.map((c) => [c, 0])) as Record<
@@ -418,7 +436,12 @@ export function runAuditEval(opts: EvalOptions = {}): AuditEvalResult {
   const sizes = opts.sizes ?? [100, 200, 400, 1000];
   const baseSeed = opts.baseSeed ?? 1000;
   const leakSeeds = opts.leakImpactSeeds ?? 20;
-  const conditions = buildConditions();
+  const all = buildConditions();
+  const conditions = opts.families
+    ? all.filter(
+        (c) => c.family === "clean" || opts.families!.includes(c.family),
+      )
+    : all;
 
   const tallies = new Map<
     string,
@@ -450,7 +473,8 @@ export function runAuditEval(opts: EvalOptions = {}): AuditEvalResult {
       });
       const honest = truthfulClaims(base.subjects, base.visits);
       const estimated = truthfulClaims(other.subjects, other.visits);
-      conditions.forEach((c, ci) => {
+      conditions.forEach((c) => {
+        const ci = all.findIndex((x) => x.id === c.id);
         const rng = createRng(seed * 7919 + ci * 104_729 + n);
         const planted = c.plant(base, honest, estimated, rng);
         const out = auditPlanted(planted);
@@ -512,7 +536,21 @@ export function runAuditEval(opts: EvalOptions = {}): AuditEvalResult {
     },
     summary: { falseAlarmByCheck, falseBlockTruthful, falseBlockEstimated },
     conditions: results,
-    leakImpact: leakImpactSection(sizes, baseSeed, leakSeeds),
+    tuning: TUNING_NOTE,
+    leakImpact:
+      leakSeeds > 0 ? leakImpactSection(sizes, baseSeed, leakSeeds) : {},
+    ...(opts.fresh === false
+      ? {}
+      : {
+          freshSeeds: runAuditEval({
+            seeds,
+            sizes,
+            baseSeed: FRESH_BASE_SEED,
+            leakImpactSeeds: 0,
+            families: ["imbalance"],
+            fresh: false,
+          }),
+        }),
   };
 }
 
@@ -669,6 +707,28 @@ export function formatAuditTable(r: AuditEvalResult): string {
       }),
     ),
   );
+  if (r.freshSeeds) {
+    const f = r.freshSeeds;
+    head(
+      `Fresh seeds (base ${f.config.baseSeed}, not used for tuning): imbalance rule`,
+    );
+    cols(
+      "",
+      sizes.map((n) => `n=${n}`),
+    );
+    cols(
+      "false alarm on clean data (imbalance)",
+      sizes.map((n) => ci(f.summary.falseAlarmByCheck[n].imbalance)),
+    );
+    for (const c of f.conditions.filter((x) => x.family === "imbalance"))
+      cols(
+        `${c.label} (flagged)`,
+        sizes.map(
+          (n) =>
+            `${Math.round(c.bySize[n].flagged.imbalance.rate * 100)} s${c.bySize[n].medianNote}`,
+        ),
+      );
+  }
   return lines.join("\n");
 }
 

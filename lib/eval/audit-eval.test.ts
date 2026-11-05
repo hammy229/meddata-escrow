@@ -14,7 +14,7 @@ import {
 } from "./audit-eval";
 import { createRng } from "../synth/prng";
 
-const small = { seeds: 6, sizes: [100, 200], leakImpactSeeds: 2 };
+const small = { seeds: 6, sizes: [100, 200], leakImpactSeeds: 2, fresh: false };
 
 describe("audit eval", () => {
   const result = runAuditEval(small);
@@ -56,6 +56,27 @@ describe("audit eval", () => {
     const strongest = rows[rows.length - 1];
     assert.ok(Math.abs(control.meanGap) < 0.05, String(control.meanGap));
     assert.ok(strongest.meanGap > control.meanGap + 0.03);
+  });
+
+  it("re-checks the tuned imbalance rule on seeds it was not tuned on, and records the tuning", () => {
+    const withFresh = runAuditEval({
+      ...small,
+      sizes: [100],
+      seeds: 4,
+      fresh: true,
+    });
+    assert.ok(withFresh.freshSeeds);
+    assert.equal(withFresh.freshSeeds.config.baseSeed, 900000);
+    assert.notEqual(
+      withFresh.freshSeeds.config.baseSeed,
+      withFresh.config.baseSeed,
+    );
+    assert.ok(
+      withFresh.freshSeeds.conditions.every(
+        (c) => c.family === "clean" || c.family === "imbalance",
+      ),
+    );
+    assert.match(withFresh.tuning, /tuned on base seed 1000/);
   });
 
   it("prints a table and a stable rounded file form", () => {

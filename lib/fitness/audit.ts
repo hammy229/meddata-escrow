@@ -1,8 +1,12 @@
-import { checkGroupBalance } from "./balance";
+import { checkGroupBalance, SMD_NOISE_Z } from "./balance";
 import { cell, displayCount, isMissing, verdictOf, type Row } from "./common";
 import { checkCoverage, coveragePct } from "./coverage";
 import { checkLeakImpact } from "./leak-impact";
-import { checkLabelAssociation, checkTemporalLeak, type Timing } from "./leakage";
+import {
+  checkLabelAssociation,
+  checkTemporalLeak,
+  type Timing,
+} from "./leakage";
 import { deriveNeeds } from "./needs";
 import { checkEventsPerVariable } from "./power";
 import { checkSubjectUniqueness } from "./subjects";
@@ -39,19 +43,32 @@ export interface AuditInput {
   leakImpact?: boolean;
 }
 
-function worse(a: number, warn: number, fail: number): "pass" | "warn" | "fail" {
+function worse(
+  a: number,
+  warn: number,
+  fail: number,
+): "pass" | "warn" | "fail" {
   const d = Math.abs(a);
   return d > fail ? "fail" : d > warn ? "warn" : "pass";
 }
 
 function relDiff(claimed: number, seen: number): number {
-  return claimed === 0 ? (seen === 0 ? 0 : 1) : Math.abs(seen - claimed) / claimed;
+  return claimed === 0
+    ? seen === 0
+      ? 0
+      : 1
+    : Math.abs(seen - claimed) / claimed;
 }
 
 /** Compare what the listing said with what the rows show. */
 export function checkClaims(
   claims: ListingClaims,
-  seen: { subjects: number; records: number; eventRatePct: number; coverage: Record<string, number> },
+  seen: {
+    subjects: number;
+    records: number;
+    eventRatePct: number;
+    coverage: Record<string, number>;
+  },
   findings: readonly Finding[],
 ): Finding[] {
   const out: Finding[] = [];
@@ -67,12 +84,16 @@ export function checkClaims(
         severity: sev,
         title: `Listed ${name} do not match the delivered rows`,
         reason: `The listing says ${displayCount(claimed)} ${name}; the delivered rows show ${displayCount(got)}.`,
-        metric: { claimed: displayCount(claimed), delivered: displayCount(got) },
+        metric: {
+          claimed: displayCount(claimed),
+          delivered: displayCount(got),
+        },
       });
     }
   }
 
-  const eventGap = Math.round(Math.abs(seen.eventRatePct - claims.eventRatePct) * 10) / 10;
+  const eventGap =
+    Math.round(Math.abs(seen.eventRatePct - claims.eventRatePct) * 10) / 10;
   const eventSev = worse(eventGap, 2, 5);
   if (eventSev !== "pass") {
     out.push({
@@ -80,7 +101,10 @@ export function checkClaims(
       severity: eventSev,
       title: "Event rate differs from the listing",
       reason: `The listing says ${claims.eventRatePct}% of subjects had the event; the delivered rows show ${seen.eventRatePct}%.`,
-      metric: { claimedPct: claims.eventRatePct, deliveredPct: seen.eventRatePct },
+      metric: {
+        claimedPct: claims.eventRatePct,
+        deliveredPct: seen.eventRatePct,
+      },
     });
   }
 
@@ -99,20 +123,28 @@ export function checkClaims(
     }
   }
 
-  if (claims.noPostIndexFeatures && findings.some((f) => f.id === "temporal_leak" && f.severity === "fail")) {
+  if (
+    claims.noPostIndexFeatures &&
+    findings.some((f) => f.id === "temporal_leak" && f.severity === "fail")
+  ) {
     out.push({
       id: "claim",
       severity: "fail",
       title: "Listing says no post-index features, but one is present",
-      reason: "The listing promises that no feature is recorded after the index. The temporal screen found one.",
+      reason:
+        "The listing promises that no feature is recorded after the index. The temporal screen found one.",
     });
   }
-  if (claims.uniqueSubjects && findings.some((f) => f.id === "subject_overlap" && f.severity === "fail")) {
+  if (
+    claims.uniqueSubjects &&
+    findings.some((f) => f.id === "subject_overlap" && f.severity === "fail")
+  ) {
     out.push({
       id: "claim",
       severity: "fail",
       title: "Listing says one row per subject, but subjects repeat",
-      reason: "The listing promises unique subjects. The delivered rows repeat at least one subject key.",
+      reason:
+        "The listing promises unique subjects. The delivered rows repeat at least one subject key.",
     });
   }
 
@@ -121,7 +153,8 @@ export function checkClaims(
       id: "claim",
       severity: "pass",
       title: "Delivered rows match the listing",
-      reason: "Subject count, record count, event rate and coverage agree with the listing within tolerance.",
+      reason:
+        "Subject count, record count, event rate and coverage agree with the listing within tolerance.",
     });
   }
   return out;
@@ -158,18 +191,30 @@ export function runFitnessAudit(input: AuditInput): FitnessReport {
   }
 
   const columns = Object.keys(first);
-  const features = columns.filter((c) => ![label, timeColumn, idColumn, groupColumn].includes(c));
+  const features = columns.filter(
+    (c) => ![label, timeColumn, idColumn, groupColumn].includes(c),
+  );
   const needs = deriveNeeds(input.study, columns);
   const predictors = needs.needed.filter((c) => features.includes(c));
-  const events = input.subjects.filter((r) => Number(cell(r, label)) === 1).length;
+  const events = input.subjects.filter(
+    (r) => Number(cell(r, label)) === 1,
+  ).length;
 
   const findings: Finding[] = [
     ...checkCoverage(input.subjects, needs),
     checkEventsPerVariable(events, predictors.length),
-    checkSubjectUniqueness(input.subjects.map((r) => String(cell(r, idColumn)))),
-    ...checkTemporalLeak(features, input.featureTiming ?? {}, input.landmarkMonth ?? 0),
+    checkSubjectUniqueness(
+      input.subjects.map((r) => String(cell(r, idColumn))),
+    ),
+    ...checkTemporalLeak(
+      features,
+      input.featureTiming ?? {},
+      input.landmarkMonth ?? 0,
+    ),
     ...checkLabelAssociation(input.subjects, label, features),
-    ...checkGroupBalance(input.subjects, groupColumn, features),
+    ...checkGroupBalance(input.subjects, groupColumn, features, {
+      noiseZ: SMD_NOISE_Z,
+    }),
   ];
 
   // Evidence only: how much do the flagged columns inflate a model? Info severity.
@@ -196,15 +241,21 @@ export function runFitnessAudit(input: AuditInput): FitnessReport {
 
   if (input.claims) {
     const coverage: Record<string, number> = {};
-    for (const column of Object.keys(input.claims.coveragePct)) coverage[column] = coveragePct(input.subjects, column);
-    const keys = new Set(input.subjects.map((r) => String(cell(r, idColumn))).filter((k) => !isMissing(k)));
+    for (const column of Object.keys(input.claims.coveragePct))
+      coverage[column] = coveragePct(input.subjects, column);
+    const keys = new Set(
+      input.subjects
+        .map((r) => String(cell(r, idColumn)))
+        .filter((k) => !isMissing(k)),
+    );
     findings.push(
       ...checkClaims(
         input.claims,
         {
           subjects: keys.size,
           records: (input.visits ?? input.subjects).length,
-          eventRatePct: Math.round((events / input.subjects.length) * 1000) / 10,
+          eventRatePct:
+            Math.round((events / input.subjects.length) * 1000) / 10,
           coverage,
         },
         findings,

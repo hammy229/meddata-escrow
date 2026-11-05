@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { checkGroupBalance, smdBinary, smdNumeric } from "./balance";
+import {
+  checkGroupBalance,
+  SMD_NOISE_Z,
+  smdBinary,
+  smdNumeric,
+  smdStdError,
+} from "./balance";
 
 const near = (a: number, b: number, eps = 1e-9) => Math.abs(a - b) < eps;
 
@@ -27,7 +33,9 @@ describe("smdNumeric", () => {
 describe("smdBinary", () => {
   // pA = 0.5, pB = 0.25. SMD = -0.25 / sqrt((0.25 + 0.1875) / 2) = -0.25 / 0.46771 = -0.5345
   it("matches a hand calculation", () => {
-    assert.ok(near(smdBinary([1, 0, 1, 0], [1, 0, 0, 0]), -0.25 / Math.sqrt(0.21875)));
+    assert.ok(
+      near(smdBinary([1, 0, 1, 0], [1, 0, 0, 0]), -0.25 / Math.sqrt(0.21875)),
+    );
   });
 
   it("is 0 when both groups are all one value", () => {
@@ -44,11 +52,64 @@ describe("checkGroupBalance", () => {
   ];
 
   it("warns from 0.1 and fails from 0.25", () => {
-    assert.equal(checkGroupBalance(rowsFor(0.0999), "g", ["x"])[0].severity, "pass");
-    assert.equal(checkGroupBalance(rowsFor(0.1001), "g", ["x"])[0].severity, "warn");
-    assert.equal(checkGroupBalance(rowsFor(0.2499), "g", ["x"])[0].severity, "warn");
-    assert.equal(checkGroupBalance(rowsFor(0.2501), "g", ["x"])[0].severity, "fail");
-    assert.equal(checkGroupBalance(rowsFor(-0.5), "g", ["x"])[0].severity, "fail");
+    assert.equal(
+      checkGroupBalance(rowsFor(0.0999), "g", ["x"])[0].severity,
+      "pass",
+    );
+    assert.equal(
+      checkGroupBalance(rowsFor(0.1001), "g", ["x"])[0].severity,
+      "warn",
+    );
+    assert.equal(
+      checkGroupBalance(rowsFor(0.2499), "g", ["x"])[0].severity,
+      "warn",
+    );
+    assert.equal(
+      checkGroupBalance(rowsFor(0.2501), "g", ["x"])[0].severity,
+      "fail",
+    );
+    assert.equal(
+      checkGroupBalance(rowsFor(-0.5), "g", ["x"])[0].severity,
+      "fail",
+    );
+  });
+
+  it("with the noise gate, ignores a chance-sized gap in a small sample but keeps a big one", () => {
+    // Six subjects per group: SMD 0.3 is well inside sampling noise.
+    const rows = (d: number) => [
+      ...[-1, 0, 1, -1, 0, 1].map((x) => ({ g: "A", x })),
+      ...[-1, 0, 1, -1, 0, 1].map((x) => ({ g: "B", x: x + d })),
+    ];
+    assert.equal(checkGroupBalance(rows(0.3), "g", ["x"])[0].severity, "fail");
+    const gated = checkGroupBalance(rows(0.3), "g", ["x"], {
+      noiseZ: SMD_NOISE_Z,
+    });
+    assert.deepEqual(
+      gated.map((f) => f.severity),
+      ["pass"],
+    );
+    assert.equal(
+      checkGroupBalance(rows(3), "g", ["x"], { noiseZ: SMD_NOISE_Z })[0]
+        .severity,
+      "fail",
+    );
+  });
+
+  it("with the noise gate, the same SMD counts once the sample is large", () => {
+    const big = (d: number) => [
+      ...Array.from({ length: 500 }, (_, i) => ({ g: "A", x: (i % 3) - 1 })),
+      ...Array.from({ length: 500 }, (_, i) => ({
+        g: "B",
+        x: (i % 3) - 1 + d,
+      })),
+    ];
+    const f = checkGroupBalance(big(0.3), "g", ["x"], { noiseZ: SMD_NOISE_Z });
+    assert.equal(f[0].severity, "fail");
+  });
+
+  it("standard error of an SMD shrinks with sample size", () => {
+    assert.ok(smdStdError(0, 50, 50) > smdStdError(0, 500, 500));
+    assert.ok(Math.abs(smdStdError(0, 50, 50) - 0.2) < 1e-9);
   });
 
   it("treats 0/1 columns as binary", () => {
@@ -75,14 +136,20 @@ describe("checkGroupBalance", () => {
   });
 
   it("is informational unless there are exactly two groups", () => {
-    assert.equal(checkGroupBalance([{ g: "A", x: 1 }], "g", ["x"])[0].severity, "info");
+    assert.equal(
+      checkGroupBalance([{ g: "A", x: 1 }], "g", ["x"])[0].severity,
+      "info",
+    );
     assert.equal(checkGroupBalance([], "g", ["x"])[0].severity, "info");
     const three = ["A", "B", "C"].map((g) => ({ g, x: 1 }));
     assert.equal(checkGroupBalance(three, "g", ["x"])[0].severity, "info");
   });
 
   it("skips the group column and all-missing features", () => {
-    const rows = [{ g: "A", x: null }, { g: "B", x: null }];
+    const rows = [
+      { g: "A", x: null },
+      { g: "B", x: null },
+    ];
     assert.equal(checkGroupBalance(rows, "g", ["g", "x"])[0].severity, "pass");
   });
 });
