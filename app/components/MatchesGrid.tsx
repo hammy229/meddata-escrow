@@ -33,8 +33,9 @@ function usd(cents: number): string {
 }
 
 interface ScoreParams {
-  /** Scale for the bar. Both rankers score 0 to 100. */
+  /** Scale for the bar: 100 for Claude's scores, else the top keyword score. */
   max: number;
+  source: MatchSource;
 }
 
 // Visible number + proportional bar: the number carries the meaning, the bar
@@ -42,15 +43,18 @@ interface ScoreParams {
 function ScoreCell(
   props: CustomCellRendererProps<Match, number> & ScoreParams,
 ) {
-  const { value, max } = props;
+  const { value, max, source } = props;
   if (typeof value !== "number") return null;
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
-  const label = `${value} out of 100`;
+  const label =
+    source === "llm" ? `${value} out of 100` : `Keyword score ${value}`;
   return (
     <span className="flex h-full items-center gap-2.5" title={label}>
       <span className="w-9 text-right font-mono text-sm font-semibold tabular-nums">
         {value}
-        <span className="sr-only"> out of 100</span>
+        <span className="sr-only">
+          {source === "llm" ? " out of 100" : " keyword score"}
+        </span>
       </span>
       <span
         aria-hidden="true"
@@ -107,7 +111,13 @@ export default function MatchesGrid({
   const picked = useRef<string[]>([]);
 
   const columns = useMemo<ColDef<Match>[]>(() => {
-    const scoreParams: ScoreParams = { max: 100 };
+    // BM25 is not a percentage, so a keyword bar shows the score against the
+    // best match rather than against 100.
+    const top = Math.max(0, ...matches.map((m) => m.score));
+    const scoreParams: ScoreParams = {
+      max: source === "llm" ? 100 : top,
+      source,
+    };
     return [
       {
         field: "title",
@@ -152,7 +162,7 @@ export default function MatchesGrid({
           typeof p.value === "number" ? usd(p.value) : "",
       },
     ];
-  }, [source]);
+  }, [matches, source]);
 
   return (
     <div>
