@@ -182,6 +182,7 @@ export async function checkSample(
 
   try {
     const raw = await structured({
+      operation: "sample.review",
       system: REVIEW_SYSTEM,
       prompt:
         `Study needs: ${opts.studyDescription?.trim() || "(not given)"}\n\n` +

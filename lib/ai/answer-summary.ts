@@ -123,6 +123,7 @@ export async function summarizeAnswer(
   if (!(opts.useLlm ?? llmEnabled())) return rule;
   try {
     const raw = await structured({
+      operation: "answer.summary",
       system: SUMMARY_SYSTEM,
       prompt:
         `Question: ${question}\nSummary: ${rule}\n` +

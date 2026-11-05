@@ -283,6 +283,7 @@ async function recommend(
   if (!(opts.useLlm ?? llmEnabled())) return enforceAdvisory(rules(input));
   try {
     const raw = await structured({
+      operation: "dispute.arbiter",
       system: SYSTEM,
       prompt:
         `Order ${input.order.id} (${input.order.amount_cents} cents, dataset ${input.order.dataset_id}).\n\n` +
