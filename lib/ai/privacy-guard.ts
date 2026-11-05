@@ -137,6 +137,7 @@ export async function reviewQuestion(
   opts: Pick<AiOptions, "client"> = {},
 ): Promise<QuestionReview> {
   const raw = await structured({
+    operation: "privacy.review",
     system: REVIEW_SYSTEM,
     prompt: `Question: ${question}`,
     schema: Review,

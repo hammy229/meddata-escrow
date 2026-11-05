@@ -22,6 +22,7 @@ import {
   llmModel,
   type LlmClient,
 } from "../llm/client";
+import { tracedCall, type TraceOutcome } from "../llm/trace";
 import type { EscrowDeps } from "../escrow/service";
 import type { Mandate } from "./mandate";
 import { spentUnderMandate } from "./mandate-ledger";
@@ -143,14 +144,31 @@ async function runLlm(
   ];
 
   for (let turn = 0; turn < maxTurns; turn++) {
-    const response = await client.messages.create({
-      model: llmModel(),
-      max_tokens: 16000,
-      system: SYSTEM,
-      messages,
-      tools: AGENT_TOOLS,
-      tool_choice: { type: "auto" },
-    });
+    const model = llmModel();
+    const response = await tracedCall(
+      {
+        operation: "agent.turn",
+        model,
+        system: SYSTEM,
+        // A failed turn drops to the scripted planner, unless an order exists.
+        fellBack: () => !ctx.order,
+      },
+      () =>
+        client.messages.create({
+          model,
+          max_tokens: 16000,
+          system: SYSTEM,
+          messages,
+          tools: AGENT_TOOLS,
+          tool_choice: { type: "auto" },
+        }),
+      (r): TraceOutcome =>
+        r.stop_reason === "refusal"
+          ? "refusal"
+          : r.stop_reason === "max_tokens"
+            ? "truncated"
+            : "ok",
+    );
     if (response.stop_reason === "refusal")
       throw new Error("LLM declined the request");
     if (response.stop_reason === "max_tokens")

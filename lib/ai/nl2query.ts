@@ -157,6 +157,7 @@ export async function nl2query(
   if (opts.useLlm ?? llmEnabled()) {
     try {
       const raw = await structured({
+        operation: "nl2query.plan",
         system: PLAN_SYSTEM,
         prompt: `Question: ${question}`,
         schema: LlmPlan,

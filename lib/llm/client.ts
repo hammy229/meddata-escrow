@@ -14,6 +14,8 @@ import { AnthropicBedrockMantle } from "@anthropic-ai/bedrock-sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type * as z from "zod/v4";
 
+import { tracedCall, type TraceOutcome } from "./trace";
+
 /** Bedrock model id for Claude Opus 5.5 (override with LLM_MODEL). */
 export const DEFAULT_MODEL = "anthropic.claude-opus-5-5";
 
@@ -44,6 +46,8 @@ export function getLlmClient(): LlmClient {
 }
 
 export interface StructuredRequest<S extends z.ZodType> {
+  /** Name shown in call traces, e.g. "match.rank". Never put data in it. */
+  operation?: string;
   system: string;
   prompt: string;
   schema: S;
@@ -61,16 +65,36 @@ export async function structured<S extends z.ZodType>(
   req: StructuredRequest<S>,
 ): Promise<z.infer<S>> {
   const client = req.client ?? getLlmClient();
-  const message = await client.messages.parse({
-    model: llmModel(),
-    max_tokens: 16000,
-    system: req.system,
-    messages: [{ role: "user", content: req.prompt }],
-    output_config: {
-      effort: req.effort ?? "low",
-      format: zodOutputFormat(req.schema),
+  const model = llmModel();
+  // Every caller treats a throw as "use the deterministic path", so any
+  // non-ok outcome here is a fallback.
+  const message = await tracedCall(
+    {
+      operation: req.operation ?? "unspecified",
+      model,
+      system: req.system,
+      fellBack: () => true,
     },
-  });
+    () =>
+      client.messages.parse({
+        model,
+        max_tokens: 16000,
+        system: req.system,
+        messages: [{ role: "user", content: req.prompt }],
+        output_config: {
+          effort: req.effort ?? "low",
+          format: zodOutputFormat(req.schema),
+        },
+      }),
+    (m): TraceOutcome =>
+      m.stop_reason === "refusal"
+        ? "refusal"
+        : m.stop_reason === "max_tokens"
+          ? "truncated"
+          : m.parsed_output == null
+            ? "no_output"
+            : "ok",
+  );
   if (message.stop_reason === "refusal")
     throw new Error("LLM declined the request");
   if (message.stop_reason === "max_tokens")

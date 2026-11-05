@@ -127,6 +127,7 @@ async function llmMatch(
     }),
   );
   const { ranking } = await structured({
+    operation: "match.rank",
     system: RANK_SYSTEM,
     prompt:
       `Study description:\n${studyDescription}\n\n` +
