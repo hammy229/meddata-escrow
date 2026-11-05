@@ -1,5 +1,9 @@
 import { executeDataset } from "../../../lib/sources/store";
 // POST /api/query  { orderId, datasetId, question }
+//                  or { orderId, datasetId, analysis: { type: "survival", groupBy } }
+//   The analysis form is for SYNTHETIC fixture listings only and skips the
+//   question steps below. groupBy is one of arm, sex, onset_site, age_band;
+//   filters are refused. Same entitlement, cap and metering as an answer.
 // Runs a plain-English question against a purchased dataset and returns a
 // privacy-safe aggregate. Pipeline:
 //   0. entitlement  — the order must exist (404), be for this dataset (422),
@@ -28,6 +32,12 @@ import {
   suggestRewrite,
 } from "../../../lib/ai/privacy-guard";
 import { executeFixture } from "../../../lib/query/fixture-execute";
+import { fixtureCohort } from "../../../lib/fitness/source";
+import {
+  parseAnalysis,
+  survivalAnalysis,
+  type GroupBy,
+} from "../../../lib/query/survival-analysis";
 import { mockExecute } from "../../../lib/query/mock-execute";
 import { getOrder, withDb } from "../../../lib/db/store";
 import { recordUsage, queryCapStatus } from "../../../lib/db/store";
@@ -43,8 +53,19 @@ function bad(error: string, status = 422) {
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const datasetId = body?.datasetId;
-  const question = body?.question;
   const orderId = body?.orderId;
+  // `analysis` swaps the plain-English question for a fixed survival request.
+  // The question text is then ours, never the client's.
+  const hasAnalysis = body?.analysis !== undefined;
+  let analysisGroupBy: GroupBy | null = null;
+  if (hasAnalysis) {
+    const parsed = parseAnalysis(body.analysis);
+    if (!parsed.ok) return bad(parsed.error);
+    analysisGroupBy = parsed.groupBy;
+  }
+  const question: unknown = hasAnalysis
+    ? `Survival by ${analysisGroupBy} (synthetic)`
+    : body?.question;
   if (
     typeof datasetId !== "string" ||
     datasetId.trim() === "" ||
@@ -97,6 +118,44 @@ export async function POST(request: Request) {
       },
       { status: 402 },
     );
+  }
+  // Survival analysis: fixture listings only, a fixed grouping, metered like
+  // any answer. Refusals are never billed.
+  if (analysisGroupBy) {
+    const cohort = fixtureCohort(datasetId, "delivery");
+    if (!cohort)
+      return bad(
+        "Survival analysis is only available for synthetic fixture listings. No query charge was recorded.",
+        422,
+      );
+    const outcome = survivalAnalysis(cohort, analysisGroupBy);
+    if (outcome.kind === "refused")
+      return Response.json(
+        { error: "result suppressed", reasons: [outcome.reason] },
+        { status: 403 },
+      );
+    let usage;
+    try {
+      usage = await withDb(
+        async (db) =>
+          await recordUsage(db, {
+            orderId,
+            question,
+            chargeCents: PER_QUERY_FEE_CENTS,
+          }),
+      );
+    } catch (err) {
+      console.error(`query: could not record usage for ${orderId}:`, err);
+      return bad("could not record query usage", 500);
+    }
+    return Response.json({
+      datasetId,
+      question,
+      execution: "fixture",
+      analysis: outcome.analysis,
+      summary: outcome.analysis.interpretation,
+      usage: { usageId: usage.id, chargeCents: usage.charge_cents },
+    });
   }
   // 1. Reject the question before compiling if it asks for row-level/PII data.
   const questionVerdict = await checkQuestion(question, datasetId);

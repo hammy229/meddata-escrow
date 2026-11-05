@@ -393,3 +393,97 @@ test(
     assert.equal(usageFor(url, orderId).length, 0);
   }),
 );
+
+// --- Survival analysis (analysis field) ---
+
+function survive(orderId: string, datasetId: string, analysis: unknown) {
+  return POST(req({ orderId, datasetId, analysis }));
+}
+
+test(
+  "survival by arm is metered once and shows the gap fade within age bands",
+  withAlsOrder(async ({ url, orderId }) => {
+    const res = await survive(orderId, ALS_ID, { type: "survival", groupBy: "arm" });
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.execution, "fixture");
+    assert.equal(json.analysis.synthetic, true);
+    assert.match(json.analysis.label, /SYNTHETIC/);
+    assert.ok(json.analysis.logRank.raw.pValue < 0.001);
+    assert.ok(json.analysis.logRank.adjusted.pValue > 0.05);
+    assert.match(json.analysis.interpretation, /once age band is held fixed/);
+    assert.equal(json.usage.chargeCents, PER_QUERY_FEE_CENTS);
+    assert.equal(usageFor(url, orderId).length, 1);
+  }),
+);
+
+test(
+  "survival is refused unpaid, on a mismatched dataset and for unknown orders, unbilled",
+  withAlsOrder(async ({ url }) => {
+    const unpaid = seedOrder(url, "AUTHORIZED", ALS_ID);
+    const res = await survive(unpaid, ALS_ID, { type: "survival", groupBy: "arm" });
+    assert.equal(res.status, 403);
+    assert.equal(usageFor(url, unpaid).length, 0);
+    const wrong = await survive(seedOrder(url, "DELIVERED", ALS_ID), DATASET_ID, {
+      type: "survival",
+      groupBy: "arm",
+    });
+    assert.equal(wrong.status, 422);
+    const unknown = await survive("ord_nope", ALS_ID, { type: "survival", groupBy: "arm" });
+    assert.equal(unknown.status, 404);
+  }),
+);
+
+test(
+  "survival on a non-fixture listing is refused and never billed",
+  withEnv(async ({ url, orderId }) => {
+    const res = await survive(orderId, DATASET_ID, { type: "survival", groupBy: "arm" });
+    assert.equal(res.status, 422);
+    assert.match((await res.json()).error, /synthetic fixture listings/);
+    assert.equal(usageFor(url, orderId).length, 0);
+  }),
+);
+
+test(
+  "survival refuses filters and groupings off the allowlist, unbilled",
+  withAlsOrder(async ({ url, orderId }) => {
+    for (const analysis of [
+      { type: "survival", groupBy: "subject_key" },
+      { type: "survival", groupBy: "arm", where: "age > 70" },
+      { type: "survival" },
+      "arm",
+    ]) {
+      const res = await survive(orderId, ALS_ID, analysis);
+      assert.equal(res.status, 422, JSON.stringify(analysis));
+    }
+    assert.equal(usageFor(url, orderId).length, 0);
+  }),
+);
+
+test(
+  "survival leaks no rows, subject keys or exact times",
+  withAlsOrder(async ({ orderId }) => {
+    for (const groupBy of ["arm", "sex", "onset_site", "age_band"]) {
+      const res = await survive(orderId, ALS_ID, { type: "survival", groupBy });
+      assert.equal(res.status, 200, groupBy);
+      const text = JSON.stringify(await res.json());
+      assert.equal(/subject_key|survival_months|"died"|"result"|"rows"/.test(text), false);
+      const months = [...text.matchAll(/"month":([\d.]+)/g)].map((m) => Number(m[1]));
+      assert.ok(months.every((m) => m % 3 === 0));
+    }
+  }),
+);
+
+test(
+  "survival honours the order spend cap",
+  withAlsOrder(async ({ orderId }) => {
+    for (let i = 0; i < 20; i += 1) {
+      assert.equal(
+        (await survive(orderId, ALS_ID, { type: "survival", groupBy: "sex" })).status,
+        200,
+      );
+    }
+    const res = await survive(orderId, ALS_ID, { type: "survival", groupBy: "sex" });
+    assert.equal(res.status, 402);
+  }),
+);
