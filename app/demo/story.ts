@@ -660,8 +660,7 @@ export async function runStep(
       const a: SurvivalAnalysis | undefined = data.analysis;
       if (!a?.logRank?.adjusted)
         throw new StoryError("Survival: no age-adjusted result came back.");
-      const p = (v: number | null) =>
-        v === null ? "not available" : v < 0.001 ? "below 0.001" : v.toFixed(3);
+      // The p-values and the reading are shown by the survival panel below.
       return {
         ctx,
         analysis: a,
@@ -670,16 +669,6 @@ export async function runStep(
             label: "Decision",
             value: "The buyer keeps the data. A person chose, not the audit.",
           },
-          {
-            label: "Raw arm gap",
-            value: `log-rank p ${p(a.logRank.raw.pValue)}`,
-          },
-          {
-            label: "Within age bands",
-            value: `log-rank p ${p(a.logRank.adjusted.pValue)}`,
-          },
-          { label: "Reading", value: a.interpretation },
-          { label: "Data", value: a.label },
           { label: "Metered", value: usd(data.usage?.chargeCents ?? 0) },
         ],
       };
