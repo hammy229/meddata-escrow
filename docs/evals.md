@@ -28,16 +28,16 @@ seeds per cell. Intervals are 95% Wilson.
 **The number that matters most is the false block rate:** how often honest data
 would get a vendor's money held.
 
-| Percent of runs                                      | n=100      | n=200      | n=400      | n=1000     |
-| ---------------------------------------------------- | ---------- | ---------- | ---------- | ---------- |
-| Money held, clean data, truthful listing             | 0 [0-2]    | 0 [0-2]    | 0 [0-2]    | 0 [0-2]    |
-| Money held, whole listing from another sample        | 56 [49-63] | 37 [30-43] | 19 [14-24] | 2 [1-5]    |
-| False alarm, imbalance, before the fix               | 97 [93-98] | 78 [72-83] | 56 [49-63] | 17 [12-22] |
-| False alarm, imbalance, after the fix                | 2 [1-5]    | 3 [1-6]    | 2 [1-5]    | 1 [0-4]    |
-| False alarm, imbalance, after the fix, fresh seeds   | 1 [0-4]    | 2 [1-4]    | 2 [1-5]    | 2 [1-4]    |
-| Outcome leak at column AUC 0.86, flagged             | 6          | 4          | 2          | 0          |
-| Outcome leak at column AUC 0.90, flagged             | 44         | 53         | 48         | 43         |
-| Outcome leak at column AUC 0.94, flagged             | 95         | 99         | 100        | 100        |
+| Percent of runs                                    | n=100      | n=200      | n=400      | n=1000     |
+| -------------------------------------------------- | ---------- | ---------- | ---------- | ---------- |
+| Money held, clean data, truthful listing           | 0 [0-2]    | 0 [0-2]    | 0 [0-2]    | 0 [0-2]    |
+| Money held, whole listing from another sample      | 56 [49-63] | 37 [30-43] | 19 [14-24] | 2 [1-5]    |
+| False alarm, imbalance, before the fix             | 97 [93-98] | 78 [72-83] | 56 [49-63] | 17 [12-22] |
+| False alarm, imbalance, after the fix              | 2 [1-5]    | 3 [1-6]    | 2 [1-5]    | 1 [0-4]    |
+| False alarm, imbalance, after the fix, fresh seeds | 1 [0-4]    | 2 [1-4]    | 2 [1-5]    | 2 [1-4]    |
+| Outcome leak at column AUC 0.86, flagged           | 6          | 4          | 2          | 0          |
+| Outcome leak at column AUC 0.90, flagged           | 44         | 53         | 48         | 43         |
+| Outcome leak at column AUC 0.94, flagged           | 95         | 99         | 100        | 100        |
 
 What this taught us:
 
