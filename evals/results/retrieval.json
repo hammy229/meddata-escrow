@@ -1,0 +1,1766 @@
+{
+  "generatedAt": "2026-11-05T06:37:56.923Z",
+  "caveats": [
+    "The catalog holds only 9 listings and the relevance labels are the author's own judgment, so these numbers are a regression check, not a benchmark.",
+    "The golden set was written before any ranker was scored on it and its labels have not been edited to raise a score.",
+    "Metrics are means over the answerable queries; with this few queries a difference of a few points is noise.",
+    "No-answer queries have no relevant listing; falseRelevantRate is how often the top result still has score > 0 (or above a cut-off in the curve)."
+  ],
+  "catalogSize": 9,
+  "golden": {
+    "path": "evals/golden/matcher.json",
+    "queries": 39,
+    "answerable": 31,
+    "noAnswer": 8
+  },
+  "rankersRun": [
+    "overlap_baseline",
+    "bm25"
+  ],
+  "rankersSkipped": [
+    {
+      "name": "claude",
+      "reason": "Claude was not evaluated: LLM_PROVIDER is not bedrock (no Bedrock model access), so no Claude numbers exist in this report."
+    }
+  ],
+  "claudeEvaluated": false,
+  "results": [
+    {
+      "ranker": "overlap_baseline",
+      "description": "Original offline scorer: count of distinct words shared with the listing (copy in retrieval-baseline.ts)",
+      "scoreScale": "count",
+      "queries": {
+        "answerable": 31,
+        "noAnswer": 8
+      },
+      "errors": 0,
+      "metrics": {
+        "mrr": 0.774,
+        "hitAt1": 0.6774,
+        "recallAt1": 0.4086,
+        "recallAt3": 0.7419,
+        "ndcgAt3": 0.7191
+      },
+      "byKind": {
+        "literal": {
+          "n": 10,
+          "mrr": 1,
+          "hitAt1": 1,
+          "recallAt1": 0.65,
+          "recallAt3": 0.9167,
+          "ndcgAt3": 0.9637
+        },
+        "paraphrase": {
+          "n": 17,
+          "mrr": 0.6174,
+          "hitAt1": 0.4706,
+          "recallAt1": 0.2549,
+          "recallAt3": 0.6078,
+          "ndcgAt3": 0.5498
+        },
+        "broad": {
+          "n": 3,
+          "mrr": 0.8333,
+          "hitAt1": 0.6667,
+          "recallAt1": 0.2778,
+          "recallAt3": 0.8333,
+          "ndcgAt3": 0.7689
+        },
+        "adjacent": {
+          "n": 1,
+          "mrr": 1,
+          "hitAt1": 1,
+          "recallAt1": 1,
+          "recallAt3": 1,
+          "ndcgAt3": 1
+        }
+      },
+      "noAnswer": {
+        "n": 8,
+        "falseRelevantRate": 0.5,
+        "curve": []
+      },
+      "perQuery": [
+        {
+          "id": "q01",
+          "kind": "literal",
+          "query": "Cardiovascular outcomes in a synthetic cohort with encounters and medications",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 5
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 4
+            },
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 2
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q02",
+          "kind": "literal",
+          "query": "Type 2 diabetes HbA1c trajectories after starting medication",
+          "top3": [
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 3
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q03",
+          "kind": "literal",
+          "query": "Blood pressure control among patients prescribed antihypertensives",
+          "top3": [
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 2
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 1
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q04",
+          "kind": "literal",
+          "query": "Thirty day readmissions after hospital discharge for heart failure",
+          "top3": [
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 6
+            },
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q05",
+          "kind": "literal",
+          "query": "Pediatric asthma inhaler use and environmental triggers",
+          "top3": [
+            {
+              "datasetId": "ds_asthma_pediatric_pilot_v1",
+              "score": 5
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q06",
+          "kind": "literal",
+          "query": "COPD exacerbations and spirometry decline",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 3
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q07",
+          "kind": "literal",
+          "query": "Survival analysis in ALS using ALSFRS-R scores and FVC",
+          "top3": [
+            {
+              "datasetId": "ds_als_survival_axonpoint_v1",
+              "score": 5
+            },
+            {
+              "datasetId": "ds_als_survival_motorneuron_v1",
+              "score": 5
+            },
+            {
+              "datasetId": "ds_als_survival_curated_v1",
+              "score": 5
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q08",
+          "kind": "literal",
+          "query": "Predicting death in amyotrophic lateral sclerosis from baseline FVC",
+          "top3": [
+            {
+              "datasetId": "ds_als_survival_axonpoint_v1",
+              "score": 4
+            },
+            {
+              "datasetId": "ds_als_survival_motorneuron_v1",
+              "score": 4
+            },
+            {
+              "datasetId": "ds_als_survival_curated_v1",
+              "score": 4
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q09",
+          "kind": "literal",
+          "query": "Hospital admissions for chronic obstructive pulmonary disease",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 6
+            },
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q10",
+          "kind": "literal",
+          "query": "Antihypertensive prescription patterns in clinic visits",
+          "top3": [
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 3
+            },
+            {
+              "datasetId": "ds_asthma_pediatric_pilot_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_als_survival_axonpoint_v1",
+              "score": 1
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q11",
+          "kind": "paraphrase",
+          "query": "lou gehrig's disease progression",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 0.1429
+        },
+        {
+          "id": "q12",
+          "kind": "paraphrase",
+          "query": "motor neuron disease survival",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_als_survival_axonpoint_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_als_survival_motorneuron_v1",
+              "score": 1
+            }
+          ],
+          "reciprocalRank": 0.5
+        },
+        {
+          "id": "q13",
+          "kind": "paraphrase",
+          "query": "congestive heart failure hospital returns",
+          "top3": [
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 3
+            },
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q14",
+          "kind": "paraphrase",
+          "query": "kids with wheezing",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 0.2
+        },
+        {
+          "id": "q15",
+          "kind": "paraphrase",
+          "query": "high blood pressure in adults",
+          "top3": [
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 2
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q16",
+          "kind": "paraphrase",
+          "query": "elevated blood sugar and insulin resistance",
+          "top3": [
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 0.3333
+        },
+        {
+          "id": "q17",
+          "kind": "paraphrase",
+          "query": "heart attack and coronary artery disease risk",
+          "top3": [
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q18",
+          "kind": "paraphrase",
+          "query": "emphysema and chronic bronchitis lung function",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q19",
+          "kind": "paraphrase",
+          "query": "children's breathing problems and rescue inhalers",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 0.2
+        },
+        {
+          "id": "q20",
+          "kind": "paraphrase",
+          "query": "patients who bounced back to hospital within a month of leaving",
+          "top3": [
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 2
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 1
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q21",
+          "kind": "paraphrase",
+          "query": "neurodegenerative disease with respiratory decline measured by forced vital capacity",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 2
+            },
+            {
+              "datasetId": "ds_asthma_pediatric_pilot_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 0.1429
+        },
+        {
+          "id": "q22",
+          "kind": "paraphrase",
+          "query": "glycemic control in type two diabetics",
+          "top3": [
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q23",
+          "kind": "paraphrase",
+          "query": "hypertensive drug adherence",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 0.3333
+        },
+        {
+          "id": "q24",
+          "kind": "paraphrase",
+          "query": "T2DM and A1c",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 0.5
+        },
+        {
+          "id": "q25",
+          "kind": "paraphrase",
+          "query": "lung disease in smokers",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q26",
+          "kind": "paraphrase",
+          "query": "cardiac patients medication history",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q27",
+          "kind": "paraphrase",
+          "query": "progressive muscle weakness from dying nerve cells",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 0.1429
+        },
+        {
+          "id": "q28",
+          "kind": "broad",
+          "query": "pulmonology respiratory cohort",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 2
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 1
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q29",
+          "kind": "broad",
+          "query": "respiratory conditions",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_asthma_pediatric_pilot_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 1
+            }
+          ],
+          "reciprocalRank": 0.5
+        },
+        {
+          "id": "q30",
+          "kind": "broad",
+          "query": "synthetic neurology survival data",
+          "top3": [
+            {
+              "datasetId": "ds_als_survival_axonpoint_v1",
+              "score": 4
+            },
+            {
+              "datasetId": "ds_als_survival_motorneuron_v1",
+              "score": 4
+            },
+            {
+              "datasetId": "ds_als_survival_curated_v1",
+              "score": 4
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q31",
+          "kind": "adjacent",
+          "query": "pediatric cardiology congenital heart defects",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_asthma_pediatric_pilot_v1",
+              "score": 1
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q32",
+          "kind": "none",
+          "query": "pediatric oncology imaging",
+          "top3": [
+            {
+              "datasetId": "ds_asthma_pediatric_pilot_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": null
+        },
+        {
+          "id": "q33",
+          "kind": "none",
+          "query": "dermatology skin cancer lesion photographs",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": null
+        },
+        {
+          "id": "q34",
+          "kind": "none",
+          "query": "genomic variants in rare kidney disease",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": null
+        },
+        {
+          "id": "q35",
+          "kind": "none",
+          "query": "mental health depression therapy outcomes",
+          "top3": [
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": null
+        },
+        {
+          "id": "q36",
+          "kind": "none",
+          "query": "orthopedic knee replacement recovery",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": null
+        },
+        {
+          "id": "q37",
+          "kind": "none",
+          "query": "emergency department sepsis early warning",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": null
+        },
+        {
+          "id": "q38",
+          "kind": "none",
+          "query": "Alzheimer's disease MRI brain scans",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": null
+        },
+        {
+          "id": "q39",
+          "kind": "none",
+          "query": "maternal health and pregnancy complications",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": null
+        }
+      ]
+    },
+    {
+      "ranker": "bm25",
+      "description": "BM25F over title (x3), tags (x2), description (x1), k1 1.2, light plural stemming",
+      "scoreScale": "percent",
+      "queries": {
+        "answerable": 31,
+        "noAnswer": 8
+      },
+      "errors": 0,
+      "metrics": {
+        "mrr": 0.7783,
+        "hitAt1": 0.6774,
+        "recallAt1": 0.4086,
+        "recallAt3": 0.7742,
+        "ndcgAt3": 0.7364
+      },
+      "byKind": {
+        "literal": {
+          "n": 10,
+          "mrr": 1,
+          "hitAt1": 1,
+          "recallAt1": 0.65,
+          "recallAt3": 0.9167,
+          "ndcgAt3": 0.9637
+        },
+        "paraphrase": {
+          "n": 17,
+          "mrr": 0.6644,
+          "hitAt1": 0.5294,
+          "recallAt1": 0.3137,
+          "recallAt3": 0.6667,
+          "ndcgAt3": 0.6108
+        },
+        "broad": {
+          "n": 3,
+          "mrr": 0.8333,
+          "hitAt1": 0.6667,
+          "recallAt1": 0.2778,
+          "recallAt3": 0.8333,
+          "ndcgAt3": 0.7689
+        },
+        "adjacent": {
+          "n": 1,
+          "mrr": 0.3333,
+          "hitAt1": 0,
+          "recallAt1": 0,
+          "recallAt3": 1,
+          "ndcgAt3": 0.5
+        }
+      },
+      "noAnswer": {
+        "n": 8,
+        "falseRelevantRate": 0.5,
+        "curve": [
+          {
+            "threshold": 0,
+            "falseRelevantRate": 0.5,
+            "answerableTop1Kept": 0.6774
+          },
+          {
+            "threshold": 5,
+            "falseRelevantRate": 0.5,
+            "answerableTop1Kept": 0.6774
+          },
+          {
+            "threshold": 10,
+            "falseRelevantRate": 0.125,
+            "answerableTop1Kept": 0.5484
+          },
+          {
+            "threshold": 15,
+            "falseRelevantRate": 0.125,
+            "answerableTop1Kept": 0.4516
+          },
+          {
+            "threshold": 20,
+            "falseRelevantRate": 0.125,
+            "answerableTop1Kept": 0.4194
+          },
+          {
+            "threshold": 25,
+            "falseRelevantRate": 0,
+            "answerableTop1Kept": 0.4194
+          },
+          {
+            "threshold": 30,
+            "falseRelevantRate": 0,
+            "answerableTop1Kept": 0.2903
+          },
+          {
+            "threshold": 35,
+            "falseRelevantRate": 0,
+            "answerableTop1Kept": 0.2258
+          },
+          {
+            "threshold": 40,
+            "falseRelevantRate": 0,
+            "answerableTop1Kept": 0.2258
+          },
+          {
+            "threshold": 45,
+            "falseRelevantRate": 0,
+            "answerableTop1Kept": 0.0968
+          },
+          {
+            "threshold": 50,
+            "falseRelevantRate": 0,
+            "answerableTop1Kept": 0.0323
+          },
+          {
+            "threshold": 60,
+            "falseRelevantRate": 0,
+            "answerableTop1Kept": 0.0323
+          }
+        ]
+      },
+      "perQuery": [
+        {
+          "id": "q01",
+          "kind": "literal",
+          "query": "Cardiovascular outcomes in a synthetic cohort with encounters and medications",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 42.5
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 29.9
+            },
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 6.6
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q02",
+          "kind": "literal",
+          "query": "Type 2 diabetes HbA1c trajectories after starting medication",
+          "top3": [
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 28.4
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 3.4
+            },
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 3.2
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q03",
+          "kind": "literal",
+          "query": "Blood pressure control among patients prescribed antihypertensives",
+          "top3": [
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 26.1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 1.9
+            },
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 1.8
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q04",
+          "kind": "literal",
+          "query": "Thirty day readmissions after hospital discharge for heart failure",
+          "top3": [
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 42.9
+            },
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 3.9
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q05",
+          "kind": "literal",
+          "query": "Pediatric asthma inhaler use and environmental triggers",
+          "top3": [
+            {
+              "datasetId": "ds_asthma_pediatric_pilot_v1",
+              "score": 47.8
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q06",
+          "kind": "literal",
+          "query": "COPD exacerbations and spirometry decline",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 45
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q07",
+          "kind": "literal",
+          "query": "Survival analysis in ALS using ALSFRS-R scores and FVC",
+          "top3": [
+            {
+              "datasetId": "ds_als_survival_axonpoint_v1",
+              "score": 26.6
+            },
+            {
+              "datasetId": "ds_als_survival_motorneuron_v1",
+              "score": 26.6
+            },
+            {
+              "datasetId": "ds_als_survival_curated_v1",
+              "score": 26.6
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q08",
+          "kind": "literal",
+          "query": "Predicting death in amyotrophic lateral sclerosis from baseline FVC",
+          "top3": [
+            {
+              "datasetId": "ds_als_survival_axonpoint_v1",
+              "score": 18.6
+            },
+            {
+              "datasetId": "ds_als_survival_motorneuron_v1",
+              "score": 18.6
+            },
+            {
+              "datasetId": "ds_als_survival_curated_v1",
+              "score": 18.6
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q09",
+          "kind": "literal",
+          "query": "Hospital admissions for chronic obstructive pulmonary disease",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 47.9
+            },
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 6.1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q10",
+          "kind": "literal",
+          "query": "Antihypertensive prescription patterns in clinic visits",
+          "top3": [
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 34.1
+            },
+            {
+              "datasetId": "ds_als_survival_axonpoint_v1",
+              "score": 4.9
+            },
+            {
+              "datasetId": "ds_als_survival_motorneuron_v1",
+              "score": 4.9
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q11",
+          "kind": "paraphrase",
+          "query": "lou gehrig's disease progression",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 8.3
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 0.1429
+        },
+        {
+          "id": "q12",
+          "kind": "paraphrase",
+          "query": "motor neuron disease survival",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 10.2
+            },
+            {
+              "datasetId": "ds_als_survival_axonpoint_v1",
+              "score": 9.7
+            },
+            {
+              "datasetId": "ds_als_survival_motorneuron_v1",
+              "score": 9.7
+            }
+          ],
+          "reciprocalRank": 0.5
+        },
+        {
+          "id": "q13",
+          "kind": "paraphrase",
+          "query": "congestive heart failure hospital returns",
+          "top3": [
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 34.3
+            },
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 5.9
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q14",
+          "kind": "paraphrase",
+          "query": "kids with wheezing",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 0.2
+        },
+        {
+          "id": "q15",
+          "kind": "paraphrase",
+          "query": "high blood pressure in adults",
+          "top3": [
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 28.2
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q16",
+          "kind": "paraphrase",
+          "query": "elevated blood sugar and insulin resistance",
+          "top3": [
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 10
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 0.3333
+        },
+        {
+          "id": "q17",
+          "kind": "paraphrase",
+          "query": "heart attack and coronary artery disease risk",
+          "top3": [
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 10
+            },
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 5.8
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q18",
+          "kind": "paraphrase",
+          "query": "emphysema and chronic bronchitis lung function",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 6.5
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q19",
+          "kind": "paraphrase",
+          "query": "children's breathing problems and rescue inhalers",
+          "top3": [
+            {
+              "datasetId": "ds_asthma_pediatric_pilot_v1",
+              "score": 6.7
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q20",
+          "kind": "paraphrase",
+          "query": "patients who bounced back to hospital within a month of leaving",
+          "top3": [
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 6.3
+            },
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 5.9
+            },
+            {
+              "datasetId": "ds_als_survival_axonpoint_v1",
+              "score": 2.8
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q21",
+          "kind": "paraphrase",
+          "query": "neurodegenerative disease with respiratory decline measured by forced vital capacity",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 8.3
+            },
+            {
+              "datasetId": "ds_asthma_pediatric_pilot_v1",
+              "score": 4.1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 0.1429
+        },
+        {
+          "id": "q22",
+          "kind": "paraphrase",
+          "query": "glycemic control in type two diabetics",
+          "top3": [
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 10.6
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q23",
+          "kind": "paraphrase",
+          "query": "hypertensive drug adherence",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 0.3333
+        },
+        {
+          "id": "q24",
+          "kind": "paraphrase",
+          "query": "T2DM and A1c",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 0.5
+        },
+        {
+          "id": "q25",
+          "kind": "paraphrase",
+          "query": "lung disease in smokers",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 11.5
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q26",
+          "kind": "paraphrase",
+          "query": "cardiac patients medication history",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 10.9
+            },
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 10.5
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 9.5
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q27",
+          "kind": "paraphrase",
+          "query": "progressive muscle weakness from dying nerve cells",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": 0.1429
+        },
+        {
+          "id": "q28",
+          "kind": "broad",
+          "query": "pulmonology respiratory cohort",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 43.9
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 21.2
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 21.2
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q29",
+          "kind": "broad",
+          "query": "respiratory conditions",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 29.1
+            },
+            {
+              "datasetId": "ds_asthma_pediatric_pilot_v1",
+              "score": 26.4
+            },
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 26.4
+            }
+          ],
+          "reciprocalRank": 0.5
+        },
+        {
+          "id": "q30",
+          "kind": "broad",
+          "query": "synthetic neurology survival data",
+          "top3": [
+            {
+              "datasetId": "ds_als_survival_axonpoint_v1",
+              "score": 72.1
+            },
+            {
+              "datasetId": "ds_als_survival_motorneuron_v1",
+              "score": 72.1
+            },
+            {
+              "datasetId": "ds_als_survival_curated_v1",
+              "score": 72.1
+            }
+          ],
+          "reciprocalRank": 1
+        },
+        {
+          "id": "q31",
+          "kind": "adjacent",
+          "query": "pediatric cardiology congenital heart defects",
+          "top3": [
+            {
+              "datasetId": "ds_heart_failure_readmissions_v1",
+              "score": 13.6
+            },
+            {
+              "datasetId": "ds_asthma_pediatric_pilot_v1",
+              "score": 13.6
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 13.1
+            }
+          ],
+          "reciprocalRank": 0.3333
+        },
+        {
+          "id": "q32",
+          "kind": "none",
+          "query": "pediatric oncology imaging",
+          "top3": [
+            {
+              "datasetId": "ds_asthma_pediatric_pilot_v1",
+              "score": 20.1
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": null
+        },
+        {
+          "id": "q33",
+          "kind": "none",
+          "query": "dermatology skin cancer lesion photographs",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": null
+        },
+        {
+          "id": "q34",
+          "kind": "none",
+          "query": "genomic variants in rare kidney disease",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 6.5
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": null
+        },
+        {
+          "id": "q35",
+          "kind": "none",
+          "query": "mental health depression therapy outcomes",
+          "top3": [
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 6.5
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": null
+        },
+        {
+          "id": "q36",
+          "kind": "none",
+          "query": "orthopedic knee replacement recovery",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": null
+        },
+        {
+          "id": "q37",
+          "kind": "none",
+          "query": "emergency department sepsis early warning",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": null
+        },
+        {
+          "id": "q38",
+          "kind": "none",
+          "query": "Alzheimer's disease MRI brain scans",
+          "top3": [
+            {
+              "datasetId": "ds_copd_exacerbations_v1",
+              "score": 6.5
+            },
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": null
+        },
+        {
+          "id": "q39",
+          "kind": "none",
+          "query": "maternal health and pregnancy complications",
+          "top3": [
+            {
+              "datasetId": "ds_cardio_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_diabetes_synthea_v1",
+              "score": 0
+            },
+            {
+              "datasetId": "ds_hypertension_registry_v1",
+              "score": 0
+            }
+          ],
+          "reciprocalRank": null
+        }
+      ]
+    }
+  ]
+}

@@ -60,7 +60,8 @@ const RANK_SYSTEM =
   "study's specific needs. Use only dataset ids from the catalog provided " +
   "and include every dataset exactly once.";
 
-async function llmMatch(
+/** Claude ranking only, no fallback: throws if the call fails (used by the eval). */
+export async function llmMatch(
   studyDescription: string,
   catalog: CatalogEntry[],
   client?: LlmClient,
