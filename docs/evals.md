@@ -31,7 +31,7 @@ would get a vendor's money held.
 | Percent of runs                                      | n=100      | n=200      | n=400      | n=1000     |
 | ---------------------------------------------------- | ---------- | ---------- | ---------- | ---------- |
 | Money held, clean data, truthful listing             | 0 [0-2]    | 0 [0-2]    | 0 [0-2]    | 0 [0-2]    |
-| Money held, listing's event rate from another sample | 56 [49-63] | 37 [30-43] | 19 [14-24] | 2 [1-5]    |
+| Money held, whole listing from another sample        | 56 [49-63] | 37 [30-43] | 19 [14-24] | 2 [1-5]    |
 | False alarm, imbalance, before the fix               | 97 [93-98] | 78 [72-83] | 56 [49-63] | 17 [12-22] |
 | False alarm, imbalance, after the fix                | 2 [1-5]    | 3 [1-6]    | 2 [1-5]    | 1 [0-4]    |
 | False alarm, imbalance, after the fix, fresh seeds   | 1 [0-4]    | 2 [1-4]    | 2 [1-5]    | 2 [1-4]    |
