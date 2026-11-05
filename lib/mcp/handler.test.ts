@@ -299,7 +299,10 @@ test("serveStdio frames one JSON message per line", async () => {
   );
   input.end();
   await done;
-  const lines = output.read().toString().trim().split("\n");
+  // Node 26 read() hands back one chunk per call, so drain until empty.
+  let text = "";
+  for (let chunk = output.read(); chunk; chunk = output.read()) text += chunk;
+  const lines = text.trim().split("\n");
   assert.equal(lines.length, 2);
   assert.deepEqual(JSON.parse(lines[0]).result, {});
   assert.equal(JSON.parse(lines[1]).error.code, -32700);
