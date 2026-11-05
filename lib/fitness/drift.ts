@@ -22,7 +22,11 @@ export interface DriftOptions {
 }
 
 /** PSI between two share vectors over the same bins. Zero shares are floored at epsilon. */
-export function psi(expected: readonly number[], actual: readonly number[], epsilon = PSI_EPSILON): number {
+export function psi(
+  expected: readonly number[],
+  actual: readonly number[],
+  epsilon = PSI_EPSILON,
+): number {
   let total = 0;
   for (let i = 0; i < expected.length; i += 1) {
     const e = Math.max(expected[i], epsilon);
@@ -56,17 +60,24 @@ function shares(values: readonly number[], edges: readonly number[]): number[] {
 }
 
 /** PSI of a numeric column, with bins cut from the SAMPLE's quantiles. Null if either side has no values. */
-export function numericPsi(sample: readonly number[], delivery: readonly number[]): number | null {
+export function numericPsi(
+  sample: readonly number[],
+  delivery: readonly number[],
+): number | null {
   if (sample.length === 0 || delivery.length === 0) return null;
   const edges = quantileEdges(sample, BINS);
   return psi(shares(sample, edges), shares(delivery, edges));
 }
 
 /** PSI of a categorical column over the union of categories seen on either side. */
-export function categoricalPsi(sample: readonly string[], delivery: readonly string[]): number | null {
+export function categoricalPsi(
+  sample: readonly string[],
+  delivery: readonly string[],
+): number | null {
   if (sample.length === 0 || delivery.length === 0) return null;
   const levels = [...new Set([...sample, ...delivery])].sort();
-  const share = (v: readonly string[]) => levels.map((l) => v.filter((x) => x === l).length / v.length);
+  const share = (v: readonly string[]) =>
+    levels.map((l) => v.filter((x) => x === l).length / v.length);
   return psi(share(sample), share(delivery));
 }
 
@@ -75,14 +86,19 @@ const pct = (x: number) => Math.round(x * 1000) / 10;
 
 function kindOf(values: readonly unknown[]): "numeric" | "categorical" | null {
   if (values.length === 0) return null;
-  if (values.every((v) => typeof v === "number" && Number.isFinite(v))) return "numeric";
+  if (values.every((v) => typeof v === "number" && Number.isFinite(v)))
+    return "numeric";
   if (values.every((v) => typeof v === "boolean")) return "numeric";
   if (values.every((v) => typeof v === "string")) return "categorical";
   return null;
 }
 
 /** Compare the sample the buyer checked with the delivered rows. */
-export function checkDrift(sample: readonly Row[], delivery: readonly Row[], opts: DriftOptions = {}): Finding[] {
+export function checkDrift(
+  sample: readonly Row[],
+  delivery: readonly Row[],
+  opts: DriftOptions = {},
+): Finding[] {
   if (sample.length < MIN_DRIFT_ROWS || delivery.length < MIN_DRIFT_ROWS) {
     return [
       {
@@ -132,7 +148,10 @@ export function checkDrift(sample: readonly Row[], delivery: readonly Row[], opt
         column: c,
         title: `${c} missingness changed from ${pct(sMissing)}% to ${pct(dMissing)}%`,
         reason: `${pct(sMissing)}% of the sample had no ${c}; ${pct(dMissing)}% of the delivered rows have none.`,
-        metric: { sampleMissingPct: pct(sMissing), deliveryMissingPct: pct(dMissing) },
+        metric: {
+          sampleMissingPct: pct(sMissing),
+          deliveryMissingPct: pct(dMissing),
+        },
       });
     }
 

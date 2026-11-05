@@ -1,0 +1,694 @@
+// Measure the fitness audit on planted flaws. SYNTHETIC: the cohorts come from
+// lib/synth/als and every flaw is injected here, by post-processing clean rows,
+// at a graded strength. Each flaw is planted alone so a miss or a false alarm
+// can be pinned on one check. Same seeds, same output, on every machine.
+//
+// What it answers, per check and per cohort size:
+//   - sensitivity: how often the check flags a planted flaw, by strength
+//   - false alarm rate: how often it flags clean data
+//   - FALSE BLOCK rate: how often clean data, with a listing that tells the
+//     truth, would have had money held up (a failed claim finding)
+//
+// Limits are written into the result under `limitations`.
+import { smdNumeric } from "../fitness/balance";
+import { runFitnessAudit } from "../fitness/audit";
+import { LEAK_GAP, measureLeakImpact } from "../fitness/leak-impact";
+import type { FitnessReport, ListingClaims } from "../fitness/types";
+import { generateAlsCohort, type AlsCohort, type AlsVisit } from "../synth/als";
+import { createRng, type Rng } from "../synth/prng";
+import {
+  mean,
+  median,
+  normalCdf,
+  round,
+  wilson,
+  type Proportion,
+} from "./stats";
+
+export const CHECK_IDS = [
+  "coverage",
+  "epv",
+  "subject_overlap",
+  "temporal_leak",
+  "label_association",
+  "imbalance",
+  "claim",
+] as const;
+export type CheckId = (typeof CHECK_IDS)[number];
+
+type Row = Record<string, unknown>;
+const STUDY = "Predict survival from baseline FVC and age at onset";
+
+export interface Planted {
+  subjects: Row[];
+  visits: readonly AlsVisit[];
+  claims: ListingClaims | null;
+  featureTiming?: Record<string, "followup">;
+  /** Extra number worth reporting, e.g. the measured age SMD. */
+  note?: number;
+}
+
+export interface Condition {
+  id: string;
+  family: "clean" | "leak" | "missing" | "duplicates" | "imbalance" | "claim";
+  /** The check that is supposed to notice this flaw. */
+  check: CheckId;
+  label: string;
+  level: number;
+  plant(
+    base: AlsCohort,
+    honest: ListingClaims,
+    estimated: ListingClaims,
+    rng: Rng,
+  ): Planted;
+}
+
+const clone = (rows: readonly object[]): Row[] => rows.map((r) => ({ ...r }));
+const round1 = (x: number) => Math.round(x * 10) / 10;
+const floor5 = (x: number) => Math.floor(x / 5) * 5;
+
+/** A listing that states exactly what the rows hold (coverage rounded down to a multiple of 5, as a vendor would). */
+export function truthfulClaims(
+  rows: readonly object[],
+  visits: readonly object[],
+): ListingClaims {
+  const subjects = rows as readonly Row[];
+  const events = subjects.filter((r) => Number(r.died) === 1).length;
+  const present = subjects.filter(
+    (r) => r.baseline_fvc_pct !== null && r.baseline_fvc_pct !== undefined,
+  ).length;
+  return {
+    subjects: new Set(subjects.map((r) => String(r.subject_key))).size,
+    records: visits.length,
+    eventRatePct: round1((events / subjects.length) * 100),
+    coveragePct: {
+      baseline_fvc_pct: floor5((present / subjects.length) * 100),
+    },
+    noPostIndexFeatures: true,
+    uniqueSubjects: true,
+  };
+}
+
+/** Mean AUC of a binormal score with separation d: Phi(d / sqrt 2). */
+export const aucOfSeparation = (d: number): number => normalCdf(d / Math.SQRT2);
+
+function plantLeak(base: AlsCohort, d: number, rng: Rng): Row[] {
+  return clone(base.subjects).map((r) => ({
+    ...r,
+    // Recorded at the end of follow-up and split by outcome, with strength d.
+    last_contact_alsfrs: round(rng.normal(0, 1) + d * Number(r.died), 3),
+  }));
+}
+
+function plantMissing(base: AlsCohort, rate: number, rng: Rng): Row[] {
+  return clone(base.subjects).map((r) =>
+    rng.chance(rate) ? { ...r, baseline_fvc_pct: null } : r,
+  );
+}
+
+function plantDuplicates(base: AlsCohort, rate: number, rng: Rng): Row[] {
+  const rows = clone(base.subjects);
+  const count = Math.max(1, Math.ceil(rate * rows.length));
+  const idx = rows.map((_, i) => i);
+  for (let i = idx.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(rng.next() * (i + 1));
+    [idx[i], idx[j]] = [idx[j], idx[i]];
+  }
+  for (const i of idx.slice(0, count)) rows.push({ ...rows[i] });
+  return rows;
+}
+
+function plantArms(
+  base: AlsCohort,
+  slope: number,
+  rng: Rng,
+): { rows: Row[]; smd: number } {
+  const rows: Row[] = clone(base.subjects).map((r) => ({
+    ...r,
+    arm:
+      rng.next() < 1 / (1 + Math.exp(-slope * (Number(r.age_at_onset) - 61)))
+        ? "B"
+        : "A",
+  }));
+  const a = rows
+    .filter((r) => r.arm === "A")
+    .map((r) => Number(r.age_at_onset));
+  const b = rows
+    .filter((r) => r.arm === "B")
+    .map((r) => Number(r.age_at_onset));
+  return { rows, smd: Math.abs(smdNumeric(a, b)) };
+}
+
+const LEAK_D = [0.5, 1.0, 1.5, 1.8, 2.2, 3.0];
+const MISSING_RATES = [0.1, 0.2, 0.3, 0.5, 0.7];
+const DUP_RATES = [0.005, 0.01, 0.02, 0.05, 0.1];
+const ARM_SLOPES = [0.02, 0.05, 0.1, 0.2, 0.4];
+const COUNT_GAPS = [0.01, 0.03, 0.06, 0.12, 0.25];
+const EVENT_GAPS = [1, 3, 6, 10, 15];
+const COVERAGE_GAPS = [3, 6, 10, 16, 25];
+const pctLabel = (x: number) => `${round(x * 100, 1)}%`;
+
+export function buildConditions(): Condition[] {
+  const out: Condition[] = [];
+  const plain = (
+    rows: Row[],
+    base: AlsCohort,
+    extra: Partial<Planted> = {},
+  ): Planted => ({
+    subjects: rows,
+    visits: base.visits,
+    claims: null,
+    ...extra,
+  });
+
+  out.push({
+    id: "clean",
+    family: "clean",
+    check: "claim",
+    label: "clean, no listing",
+    level: 0,
+    plant: (b) => plain(clone(b.subjects), b),
+  });
+  out.push({
+    id: "clean_truthful",
+    family: "clean",
+    check: "claim",
+    label: "clean, truthful listing",
+    level: 0,
+    plant: (b, honest) => plain(clone(b.subjects), b, { claims: honest }),
+  });
+  out.push({
+    id: "clean_estimated",
+    family: "clean",
+    check: "claim",
+    label: "clean, listing estimated from another sample",
+    level: 0,
+    plant: (b, _h, estimated) =>
+      plain(clone(b.subjects), b, { claims: estimated }),
+  });
+
+  for (const d of LEAK_D) {
+    out.push({
+      id: `leak_${d}`,
+      family: "leak",
+      check: "label_association",
+      label: `outcome leak, AUC about ${round(aucOfSeparation(d), 2)}`,
+      level: round(aucOfSeparation(d), 2),
+      plant: (b, _h, _e, rng) => plain(plantLeak(b, d, rng), b),
+    });
+  }
+  for (const r of MISSING_RATES) {
+    out.push({
+      id: `missing_${r}`,
+      family: "missing",
+      check: "coverage",
+      label: `FVC extra missing ${pctLabel(r)}`,
+      level: r,
+      plant: (b, _h, _e, rng) => plain(plantMissing(b, r, rng), b),
+    });
+  }
+  for (const r of DUP_RATES) {
+    out.push({
+      id: `dup_${r}`,
+      family: "duplicates",
+      check: "subject_overlap",
+      label: `duplicate subjects ${pctLabel(r)}`,
+      level: r,
+      plant: (b, _h, _e, rng) => plain(plantDuplicates(b, r, rng), b),
+    });
+  }
+  for (const k of ARM_SLOPES) {
+    out.push({
+      id: `arms_${k}`,
+      family: "imbalance",
+      check: "imbalance",
+      label: `arm assigned by age, slope ${k}`,
+      level: k,
+      plant: (b, _h, _e, rng) => {
+        const { rows, smd } = plantArms(b, k, rng);
+        return plain(rows, b, { note: smd });
+      },
+    });
+  }
+  for (const g of COUNT_GAPS) {
+    out.push({
+      id: `claim_subjects_${g}`,
+      family: "claim",
+      check: "claim",
+      label: `claimed subjects ${pctLabel(g)} off`,
+      level: g,
+      plant: (b, h) =>
+        plain(clone(b.subjects), b, {
+          claims: { ...h, subjects: Math.round(h.subjects / (1 - g)) },
+        }),
+    });
+  }
+  for (const g of COUNT_GAPS) {
+    out.push({
+      id: `claim_records_${g}`,
+      family: "claim",
+      check: "claim",
+      label: `claimed records ${pctLabel(g)} off`,
+      level: g,
+      plant: (b, h) =>
+        plain(clone(b.subjects), b, {
+          claims: { ...h, records: Math.round(h.records / (1 - g)) },
+        }),
+    });
+  }
+  for (const g of EVENT_GAPS) {
+    out.push({
+      id: `claim_events_${g}`,
+      family: "claim",
+      check: "claim",
+      label: `claimed event rate ${g} points off`,
+      level: g,
+      plant: (b, h) =>
+        plain(clone(b.subjects), b, {
+          claims: {
+            ...h,
+            eventRatePct: round1(Math.min(100, h.eventRatePct + g)),
+          },
+        }),
+    });
+  }
+  for (const g of COVERAGE_GAPS) {
+    out.push({
+      id: `claim_coverage_${g}`,
+      family: "claim",
+      check: "claim",
+      label: `FVC coverage about ${g} points under the claim`,
+      level: g,
+      plant: (b, h, _e, rng) =>
+        plain(plantMissing(b, g / 100, rng), b, { claims: h }),
+    });
+  }
+  out.push({
+    id: "claim_no_post_index",
+    family: "claim",
+    check: "claim",
+    label: "listing says no post-index feature; a strong one is present",
+    level: 1,
+    plant: (b, h, _e, rng) =>
+      plain(plantLeak(b, 3, rng), b, {
+        claims: h,
+        featureTiming: { last_contact_alsfrs: "followup" },
+      }),
+  });
+  for (const r of [0.005, 0.02, 0.1]) {
+    out.push({
+      id: `claim_unique_${r}`,
+      family: "claim",
+      check: "claim",
+      label: `listing says one row per subject; ${pctLabel(r)} repeat`,
+      level: r,
+      plant: (b, h, _e, rng) =>
+        plain(plantDuplicates(b, r, rng), b, {
+          claims: { ...h, records: b.visits.length },
+        }),
+    });
+  }
+  return out;
+}
+
+export interface RunOutcome {
+  flagged: CheckId[];
+  blocked: boolean;
+  verdict: FitnessReport["verdict"];
+}
+
+/** Same rule the delivery audit uses: only a failed claim finding holds money. */
+export const blocksMoney = (report: FitnessReport): boolean =>
+  report.findings.some((f) => f.id === "claim" && f.severity === "fail");
+
+export function auditPlanted(p: Planted): RunOutcome {
+  const report = runFitnessAudit({
+    datasetId: "eval",
+    stage: "delivery",
+    synthetic: true,
+    study: STUDY,
+    subjects: p.subjects,
+    visits: p.visits as AlsVisit[],
+    featureTiming: p.featureTiming,
+    claims: p.claims,
+    leakImpact: false,
+  });
+  const flagged = CHECK_IDS.filter((id) =>
+    report.findings.some(
+      (f) => f.id === id && (f.severity === "warn" || f.severity === "fail"),
+    ),
+  );
+  return { flagged, blocked: blocksMoney(report), verdict: report.verdict };
+}
+
+export interface CellResult {
+  runs: number;
+  flagged: Record<CheckId, Proportion>;
+  /** Share of runs where money would be held. */
+  blocked: Proportion;
+  /** Share of runs with an overall fail verdict. */
+  verdictFail: Proportion;
+  /** Median of the condition's own note, e.g. the age SMD. */
+  medianNote?: number;
+}
+
+export interface ConditionResult {
+  id: string;
+  family: Condition["family"];
+  check: CheckId;
+  label: string;
+  level: number;
+  bySize: Record<string, CellResult>;
+}
+
+export interface LeakImpactRow {
+  label: string;
+  /** Planted outcome AUC of the column alone, or null for the control. */
+  plantedAuc: number | null;
+  runs: number;
+  meanAucWith: number;
+  meanAucWithout: number;
+  meanGap: number;
+  /** Share of runs whose gap reached the leak line. */
+  shareOverLine: Proportion;
+}
+
+export interface AuditEvalResult {
+  schema: "meddata-audit-eval/1";
+  synthetic: true;
+  limitations: string;
+  config: {
+    seedsPerCondition: number;
+    sizes: number[];
+    baseSeed: number;
+    leakImpactSeeds: number;
+    leakLine: number;
+  };
+  summary: {
+    falseAlarmByCheck: Record<string, Record<CheckId, Proportion>>;
+    falseBlockTruthful: Record<string, Proportion>;
+    falseBlockEstimated: Record<string, Proportion>;
+  };
+  conditions: ConditionResult[];
+  leakImpact: Record<string, LeakImpactRow[]>;
+}
+
+export const LIMITATIONS =
+  "All cohorts are SYNTHETIC, made by lib/synth/als, and the checks were designed against that same generator family. " +
+  "The flaws are injected by this script at graded strengths, one at a time. " +
+  "These numbers describe how the checks behave on that setup. They do not measure performance on real data, " +
+  "real vendors, or flaws that look different from the ones planted here. A pass is a screen, not proof.";
+
+export interface EvalOptions {
+  seeds?: number;
+  sizes?: number[];
+  baseSeed?: number;
+  leakImpactSeeds?: number;
+}
+
+function emptyTally(): Record<CheckId, number> {
+  return Object.fromEntries(CHECK_IDS.map((c) => [c, 0])) as Record<
+    CheckId,
+    number
+  >;
+}
+
+export function runAuditEval(opts: EvalOptions = {}): AuditEvalResult {
+  const seeds = opts.seeds ?? 200;
+  const sizes = opts.sizes ?? [100, 200, 400, 1000];
+  const baseSeed = opts.baseSeed ?? 1000;
+  const leakSeeds = opts.leakImpactSeeds ?? 20;
+  const conditions = buildConditions();
+
+  const tallies = new Map<
+    string,
+    {
+      flagged: Record<CheckId, number>;
+      blocked: number;
+      fail: number;
+      notes: number[];
+    }
+  >();
+  const key = (cid: string, n: number) => `${cid}@${n}`;
+  for (const c of conditions)
+    for (const n of sizes)
+      tallies.set(key(c.id, n), {
+        flagged: emptyTally(),
+        blocked: 0,
+        fail: 0,
+        notes: [],
+      });
+
+  for (const n of sizes) {
+    for (let i = 0; i < seeds; i += 1) {
+      const seed = baseSeed + i;
+      const base = generateAlsCohort({ seed, variant: "clean", subjects: n });
+      const other = generateAlsCohort({
+        seed: seed + 500_000,
+        variant: "clean",
+        subjects: n,
+      });
+      const honest = truthfulClaims(base.subjects, base.visits);
+      const estimated = truthfulClaims(other.subjects, other.visits);
+      conditions.forEach((c, ci) => {
+        const rng = createRng(seed * 7919 + ci * 104_729 + n);
+        const planted = c.plant(base, honest, estimated, rng);
+        const out = auditPlanted(planted);
+        const t = tallies.get(key(c.id, n))!;
+        for (const f of out.flagged) t.flagged[f] += 1;
+        if (out.blocked) t.blocked += 1;
+        if (out.verdict === "fail") t.fail += 1;
+        if (planted.note !== undefined) t.notes.push(planted.note);
+      });
+    }
+  }
+
+  const results: ConditionResult[] = conditions.map((c) => {
+    const bySize: Record<string, CellResult> = {};
+    for (const n of sizes) {
+      const t = tallies.get(key(c.id, n))!;
+      bySize[String(n)] = {
+        runs: seeds,
+        flagged: Object.fromEntries(
+          CHECK_IDS.map((id) => [id, wilson(t.flagged[id], seeds)]),
+        ) as Record<CheckId, Proportion>,
+        blocked: wilson(t.blocked, seeds),
+        verdictFail: wilson(t.fail, seeds),
+        ...(t.notes.length ? { medianNote: round(median(t.notes), 3) } : {}),
+      };
+    }
+    return {
+      id: c.id,
+      family: c.family,
+      check: c.check,
+      label: c.label,
+      level: c.level,
+      bySize,
+    };
+  });
+
+  const byId = (id: string) => results.find((r) => r.id === id)!;
+  const falseAlarmByCheck: Record<string, Record<CheckId, Proportion>> = {};
+  const falseBlockTruthful: Record<string, Proportion> = {};
+  const falseBlockEstimated: Record<string, Proportion> = {};
+  for (const n of sizes) {
+    falseAlarmByCheck[String(n)] = byId("clean").bySize[String(n)].flagged;
+    falseBlockTruthful[String(n)] =
+      byId("clean_truthful").bySize[String(n)].blocked;
+    falseBlockEstimated[String(n)] =
+      byId("clean_estimated").bySize[String(n)].blocked;
+  }
+
+  return {
+    schema: "meddata-audit-eval/1",
+    synthetic: true,
+    limitations: LIMITATIONS,
+    config: {
+      seedsPerCondition: seeds,
+      sizes,
+      baseSeed,
+      leakImpactSeeds: leakSeeds,
+      leakLine: LEAK_GAP,
+    },
+    summary: { falseAlarmByCheck, falseBlockTruthful, falseBlockEstimated },
+    conditions: results,
+    leakImpact: leakImpactSection(sizes, baseSeed, leakSeeds),
+  };
+}
+
+const LEAK_IMPACT_D = [1.5, 2.2, 3.0];
+
+/** AUC gap from the leak_impact model on clean data (a real column flagged as a control) versus leaked data. */
+function leakImpactSection(
+  sizes: number[],
+  baseSeed: number,
+  seeds: number,
+): Record<string, LeakImpactRow[]> {
+  const out: Record<string, LeakImpactRow[]> = {};
+  for (const n of sizes) {
+    const arms: { label: string; d: number | null }[] = [
+      { label: "control: clean data, baseline_alsfrs flagged", d: null },
+      ...LEAK_IMPACT_D.map((d) => ({
+        label: `leaked, column AUC about ${round(aucOfSeparation(d), 2)}`,
+        d,
+      })),
+    ];
+    out[String(n)] = arms.map((a) => {
+      const gaps: number[] = [];
+      const withs: number[] = [];
+      const withouts: number[] = [];
+      for (let i = 0; i < seeds; i += 1) {
+        const seed = baseSeed + i;
+        const base = generateAlsCohort({ seed, variant: "clean", subjects: n });
+        const rng = createRng(seed * 31 + n);
+        const rows =
+          a.d === null ? clone(base.subjects) : plantLeak(base, a.d, rng);
+        const flagged =
+          a.d === null ? "baseline_alsfrs" : "last_contact_alsfrs";
+        const features = Object.keys(rows[0]).filter(
+          (c) => !["subject_key", "died", "survival_months", "arm"].includes(c),
+        );
+        const r = measureLeakImpact({
+          subjects: rows,
+          label: "died",
+          timeColumn: "survival_months",
+          features,
+          flagged: [flagged],
+        });
+        if ("skipped" in r) continue;
+        gaps.push(r.gap);
+        withs.push(r.aucWith);
+        withouts.push(r.aucWithout);
+      }
+      return {
+        label: a.label,
+        plantedAuc: a.d === null ? null : round(aucOfSeparation(a.d), 3),
+        runs: gaps.length,
+        meanAucWith: round(mean(withs), 3),
+        meanAucWithout: round(mean(withouts), 3),
+        meanGap: round(mean(gaps), 3),
+        shareOverLine: wilson(
+          gaps.filter((g) => g >= LEAK_GAP).length,
+          gaps.length,
+        ),
+      };
+    });
+  }
+  return out;
+}
+
+const pad = (s: string, w: number) =>
+  s.length >= w ? s : s + " ".repeat(w - s.length);
+const padL = (s: string, w: number) =>
+  s.length >= w ? s : " ".repeat(w - s.length) + s;
+const pc = (p: Proportion) => String(Math.round(p.rate * 100));
+const ci = (p: Proportion) =>
+  `${pc(p)} [${Math.round(p.lo * 100)}-${Math.round(p.hi * 100)}]`;
+
+/** A compact text table of the result, for the terminal. */
+export function formatAuditTable(r: AuditEvalResult): string {
+  const sizes = r.config.sizes.map(String);
+  const lines: string[] = [];
+  const head = (title: string) =>
+    lines.push("", title, "-".repeat(title.length));
+  const cols = (label: string, cells: string[]) =>
+    lines.push(pad(label, 58) + cells.map((c) => padL(c, 18)).join(""));
+
+  lines.push(
+    `SYNTHETIC audit eval: ${r.config.seedsPerCondition} seeds per condition and size, base seed ${r.config.baseSeed}`,
+  );
+  lines.push(
+    "Rates are percent with 95% Wilson intervals. Not a measure of real-world performance.",
+  );
+
+  head(
+    "False alarm on clean data, by check (percent of clean cohorts flagged)",
+  );
+  cols(
+    "check",
+    sizes.map((n) => `n=${n}`),
+  );
+  for (const id of CHECK_IDS) {
+    if (id === "claim") continue;
+    cols(
+      id,
+      sizes.map((n) => ci(r.summary.falseAlarmByCheck[n][id])),
+    );
+  }
+
+  head("FALSE BLOCK: clean data, money held up by a failed claim");
+  cols(
+    "truthful listing (the headline number)",
+    sizes.map((n) => ci(r.summary.falseBlockTruthful[n])),
+  );
+  cols(
+    "listing estimated from another sample",
+    sizes.map((n) => ci(r.summary.falseBlockEstimated[n])),
+  );
+
+  head(
+    "Sensitivity: percent of planted-flaw cohorts flagged by the check that should catch them",
+  );
+  lines.push(
+    "claim rows show flagged/held, where held means a failed claim finding (money held up)",
+  );
+  cols(
+    "condition (check)",
+    sizes.map((n) => `n=${n}`),
+  );
+  for (const c of r.conditions) {
+    if (c.family === "clean") continue;
+    cols(
+      `${c.label} (${c.check})`,
+      sizes.map((n) => {
+        const cell = c.bySize[n];
+        const f = Math.round(cell.flagged[c.check].rate * 100);
+        const note =
+          cell.medianNote !== undefined ? ` s${cell.medianNote}` : "";
+        return c.family === "claim"
+          ? `${f}/${Math.round(cell.blocked.rate * 100)}`
+          : `${f}${note}`;
+      }),
+    );
+  }
+
+  head(
+    "leak_impact: held-out AUC with and without the flagged column (mean over seeds)",
+  );
+  cols(
+    "case",
+    sizes.map((n) => `n=${n}`),
+  );
+  const labels = r.leakImpact[sizes[0]].map((x) => x.label);
+  labels.forEach((label, i) =>
+    cols(
+      label,
+      sizes.map((n) => {
+        const x = r.leakImpact[n][i];
+        return `${x.meanAucWith.toFixed(2)}/${x.meanAucWithout.toFixed(2)} g${x.meanGap.toFixed(2)}`;
+      }),
+    ),
+  );
+  return lines.join("\n");
+}
+
+/** Round every proportion for a stable file. */
+export function roundedForFile(result: AuditEvalResult): AuditEvalResult {
+  const fix = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(fix);
+    if (v && typeof v === "object") {
+      const o = v as Record<string, unknown>;
+      if ("k" in o && "n" in o && "rate" in o && "lo" in o && "hi" in o)
+        return {
+          k: o.k,
+          n: o.n,
+          rate: round(o.rate as number),
+          lo: round(o.lo as number),
+          hi: round(o.hi as number),
+        };
+      return Object.fromEntries(Object.entries(o).map(([k, x]) => [k, fix(x)]));
+    }
+    return v;
+  };
+  return fix(result) as AuditEvalResult;
+}

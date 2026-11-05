@@ -10,7 +10,12 @@
 // horizon is unknown. Output is aggregates only, never rows.
 import { rankAuc } from "./leakage";
 import { cell, displayCount, isMissing, type Row } from "./common";
-import { fitLogistic, predictProba, stratifiedFolds, type Cell } from "../stats/logistic";
+import {
+  fitLogistic,
+  predictProba,
+  stratifiedFolds,
+  type Cell,
+} from "../stats/logistic";
 import type { Finding } from "./types";
 
 export const MIN_CASES = 20;
@@ -46,7 +51,12 @@ export interface LeakImpact {
   repeats: number;
 }
 
-type Skipped = { skipped: string; cases: number; nonCases: number; censoredDropped: number };
+type Skipped = {
+  skipped: string;
+  cases: number;
+  nonCases: number;
+  censoredDropped: number;
+};
 
 const round2 = (x: number) => Math.round(x * 100) / 100;
 
@@ -71,14 +81,19 @@ function design(rows: readonly Row[], columns: readonly string[]): Cell[][] {
     } else if (vals.every((v) => typeof v === "string")) {
       const levels = [...new Set(vals as string[])].sort();
       if (levels.length > MAX_LEVELS) continue;
-      for (const level of levels.slice(1)) parts.push((r) => (isMissing(cell(r, c)) ? null : cell(r, c) === level ? 1 : 0));
+      for (const level of levels.slice(1))
+        parts.push((r) =>
+          isMissing(cell(r, c)) ? null : cell(r, c) === level ? 1 : 0,
+        );
     }
   }
   return rows.map((r) => parts.map((p) => p(r)));
 }
 
 /** Train with and without the flagged columns on the same folds. Null-safe: returns a skip reason when it cannot run. */
-export function measureLeakImpact(input: LeakImpactInput): LeakImpact | Skipped {
+export function measureLeakImpact(
+  input: LeakImpactInput,
+): LeakImpact | Skipped {
   const horizon = input.horizonMonths ?? 12;
   const k = input.folds ?? 5;
   const repeats = input.repeats ?? 4;
@@ -113,7 +128,11 @@ export function measureLeakImpact(input: LeakImpactInput): LeakImpact | Skipped 
   const Xwith = design(used, withCols);
   const Xwithout = design(used, withoutCols);
   if (Xwithout[0].length === 0)
-    return { ...meta, skipped: "Nothing is left to train on once the flagged columns are removed." };
+    return {
+      ...meta,
+      skipped:
+        "Nothing is left to train on once the flagged columns are removed.",
+    };
 
   const aw: number[] = [];
   const ao: number[] = [];
@@ -145,7 +164,8 @@ export function measureLeakImpact(input: LeakImpactInput): LeakImpact | Skipped 
       diff.push(a - b);
     }
   }
-  if (diff.length === 0) return { ...meta, skipped: "No held-out fold had both outcomes." };
+  if (diff.length === 0)
+    return { ...meta, skipped: "No held-out fold had both outcomes." };
   const mean = (v: number[]) => v.reduce((s, x) => s + x, 0) / v.length;
   const sorted = [...diff].sort((a, b) => a - b);
   return {
@@ -173,7 +193,10 @@ export function checkLeakImpact(input: LeakImpactInput): Finding | null {
       severity: "info",
       title: "Leak size not measured",
       reason: `${r.skipped} The flagged columns (${list}) were not compared.`,
-      metric: { cases: displayCount(r.cases), nonCases: displayCount(r.nonCases) },
+      metric: {
+        cases: displayCount(r.cases),
+        nonCases: displayCount(r.nonCases),
+      },
     };
   }
   const w = round2(r.aucWith);

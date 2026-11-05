@@ -35,6 +35,8 @@ export interface AuditInput {
   landmarkMonth?: number;
   /** What the listing said about the data. Adds claim findings when present. */
   claims?: ListingClaims | null;
+  /** Set false to skip the (slower) leak_impact model fits, e.g. in bulk evals. Default true. */
+  leakImpact?: boolean;
 }
 
 function worse(a: number, warn: number, fail: number): "pass" | "warn" | "fail" {
@@ -180,13 +182,16 @@ export function runFitnessAudit(input: AuditInput): FitnessReport {
         features.includes(f.column),
     )
     .map((f) => f.column as string);
-  const impact = checkLeakImpact({
-    subjects: input.subjects,
-    label,
-    timeColumn,
-    features,
-    flagged,
-  });
+  const impact =
+    input.leakImpact === false
+      ? null
+      : checkLeakImpact({
+          subjects: input.subjects,
+          label,
+          timeColumn,
+          features,
+          flagged,
+        });
   if (impact) findings.push(impact);
 
   if (input.claims) {

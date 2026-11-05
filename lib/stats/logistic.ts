@@ -37,7 +37,8 @@ export interface FitOptions {
   maxIter?: number;
 }
 
-const isMissing = (v: Cell | undefined): boolean => v === null || v === undefined || Number.isNaN(v);
+const isMissing = (v: Cell | undefined): boolean =>
+  v === null || v === undefined || Number.isNaN(v);
 
 /** Seeded split that keeps the class mix in both parts. Returns row indexes. */
 export function stratifiedSplit(
@@ -57,15 +58,26 @@ export function stratifiedSplit(
       const j = Math.floor(rng.next() * (i + 1));
       [idx[i], idx[j]] = [idx[j], idx[i]];
     }
-    const nTest = idx.length < 2 ? 0 : Math.min(idx.length - 1, Math.max(1, Math.round(idx.length * testFraction)));
+    const nTest =
+      idx.length < 2
+        ? 0
+        : Math.min(
+            idx.length - 1,
+            Math.max(1, Math.round(idx.length * testFraction)),
+          );
     test.push(...idx.slice(0, nTest));
     train.push(...idx.slice(nTest));
   }
-  return { train: train.sort((a, b) => a - b), test: test.sort((a, b) => a - b) };
+  return {
+    train: train.sort((a, b) => a - b),
+    test: test.sort((a, b) => a - b),
+  };
 }
 
 /** Learn imputation and scaling from these rows only. */
-export function fitPreprocessor(rows: readonly (readonly Cell[])[]): Preprocessor {
+export function fitPreprocessor(
+  rows: readonly (readonly Cell[])[],
+): Preprocessor {
   const p = rows[0]?.length ?? 0;
   const means: number[] = [];
   const indicatorFor: number[] = [];
@@ -101,25 +113,35 @@ export function fitPreprocessor(rows: readonly (readonly Cell[])[]): Preprocesso
   return { means, indicatorFor, centers, sds };
 }
 
-function expand(row: readonly Cell[], p: Pick<Preprocessor, "means" | "indicatorFor">): number[] {
+function expand(
+  row: readonly Cell[],
+  p: Pick<Preprocessor, "means" | "indicatorFor">,
+): number[] {
   const out = row.map((v, c) => (isMissing(v) ? p.means[c] : (v as number)));
   for (const c of p.indicatorFor) out.push(isMissing(row[c]) ? 1 : 0);
   return out;
 }
 
 /** Impute with TRAIN means, add TRAIN-decided missing indicators, standardize with TRAIN stats. */
-export function transform(prep: Preprocessor, rows: readonly (readonly Cell[])[]): number[][] {
-  return rows.map((r) => expand(r, prep).map((v, c) => (v - prep.centers[c]) / prep.sds[c]));
+export function transform(
+  prep: Preprocessor,
+  rows: readonly (readonly Cell[])[],
+): number[][] {
+  return rows.map((r) =>
+    expand(r, prep).map((v, c) => (v - prep.centers[c]) / prep.sds[c]),
+  );
 }
 
-const sigmoid = (z: number): number => (z >= 0 ? 1 / (1 + Math.exp(-z)) : Math.exp(z) / (1 + Math.exp(z)));
+const sigmoid = (z: number): number =>
+  z >= 0 ? 1 / (1 + Math.exp(-z)) : Math.exp(z) / (1 + Math.exp(z));
 
 /** Solve A x = b in place by Gaussian elimination with partial pivoting. */
 function solve(a: number[][], b: number[]): number[] {
   const n = b.length;
   for (let i = 0; i < n; i += 1) {
     let piv = i;
-    for (let r = i + 1; r < n; r += 1) if (Math.abs(a[r][i]) > Math.abs(a[piv][i])) piv = r;
+    for (let r = i + 1; r < n; r += 1)
+      if (Math.abs(a[r][i]) > Math.abs(a[piv][i])) piv = r;
     [a[i], a[piv]] = [a[piv], a[i]];
     [b[i], b[piv]] = [b[piv], b[i]];
     const d = a[i][i] || 1e-12;
@@ -143,8 +165,13 @@ function solve(a: number[][], b: number[]): number[] {
  * Fit on already standardized columns. The intercept is not penalised.
  * Throws if there are no rows or the lengths disagree.
  */
-export function fitStandardized(X: readonly (readonly number[])[], y: readonly number[], opts: FitOptions = {}) {
-  if (X.length === 0 || X.length !== y.length) throw new Error("fitStandardized needs matching, non-empty X and y");
+export function fitStandardized(
+  X: readonly (readonly number[])[],
+  y: readonly number[],
+  opts: FitOptions = {},
+) {
+  if (X.length === 0 || X.length !== y.length)
+    throw new Error("fitStandardized needs matching, non-empty X and y");
   const l2 = opts.l2 ?? 1;
   const maxIter = opts.maxIter ?? 50;
   const p = X[0].length;
@@ -153,7 +180,9 @@ export function fitStandardized(X: readonly (readonly number[])[], y: readonly n
   for (let it = 0; it < maxIter; it += 1) {
     iterations = it + 1;
     const g = new Array<number>(p + 1).fill(0);
-    const H = Array.from({ length: p + 1 }, () => new Array<number>(p + 1).fill(0));
+    const H = Array.from({ length: p + 1 }, () =>
+      new Array<number>(p + 1).fill(0),
+    );
     for (let i = 0; i < X.length; i += 1) {
       let z = w[0];
       for (let c = 0; c < p; c += 1) z += w[c + 1] * X[i][c];
@@ -201,7 +230,10 @@ export function fitLogistic(
 }
 
 /** Probability of label 1 for raw rows. */
-export function predictProba(model: LogisticModel, rows: readonly (readonly Cell[])[]): number[] {
+export function predictProba(
+  model: LogisticModel,
+  rows: readonly (readonly Cell[])[],
+): number[] {
   return transform(model.prep, rows).map((r) => {
     let z = model.intercept;
     for (let c = 0; c < r.length; c += 1) z += model.coef[c] * r[c];
@@ -211,14 +243,19 @@ export function predictProba(model: LogisticModel, rows: readonly (readonly Cell
 
 /** Mean squared gap between probability and outcome. Lower is better; 0.25 is a coin flip at 50/50. */
 export function brierScore(p: readonly number[], y: readonly number[]): number {
-  if (p.length === 0 || p.length !== y.length) throw new Error("brierScore needs matching, non-empty inputs");
+  if (p.length === 0 || p.length !== y.length)
+    throw new Error("brierScore needs matching, non-empty inputs");
   let s = 0;
   for (let i = 0; i < p.length; i += 1) s += (p[i] - y[i]) ** 2;
   return s / p.length;
 }
 
 /** Seeded stratified k-fold. Returns, per fold, the row indexes held out. Every row lands in exactly one fold. */
-export function stratifiedFolds(labels: readonly number[], k: number, seed: number): number[][] {
+export function stratifiedFolds(
+  labels: readonly number[],
+  k: number,
+  seed: number,
+): number[][] {
   const rng = createRng(seed);
   const folds: number[][] = Array.from({ length: k }, () => []);
   let next = 0;
@@ -265,5 +302,11 @@ export function holdoutEvaluate(
     model,
     test.map((i) => rows[i]),
   );
-  return { auc: rankAuc(p, yt), brier: brierScore(p, yt), model, trainRows: train.length, testRows: test.length };
+  return {
+    auc: rankAuc(p, yt),
+    brier: brierScore(p, yt),
+    model,
+    trainRows: train.length,
+    testRows: test.length,
+  };
 }
