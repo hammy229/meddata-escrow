@@ -108,21 +108,22 @@ export async function createSession(accountId: string): Promise<string> {
 }
 export async function sessionAccount(token?: string): Promise<Account | null> {
   if (!token || !/^[a-f0-9]{64}$/.test(token)) return null;
-  return (
-    (await withDb(
-      async (db) =>
-        (await db
-          .prepare(
-            `SELECT ${columns
-              .split(", ")
-              .map((c) => `a.${c}`)
-              .join(
-                ", ",
-              )} FROM accounts a JOIN sessions s ON s.account_id = a.id WHERE s.token_hash = ? AND s.expires_at > ?`,
-          )
-          .get(digest(token), Date.now())) as unknown as Account | undefined,
-    )) ?? null
+  const row = await withDb(
+    async (db) =>
+      (await db
+        .prepare(
+          `SELECT ${columns
+            .split(", ")
+            .map((c) => `a.${c}`)
+            .join(
+              ", ",
+            )} FROM accounts a JOIN sessions s ON s.account_id = a.id WHERE s.token_hash = ? AND s.expires_at > ?`,
+        )
+        .get(digest(token), Date.now())) as unknown as Account | undefined,
   );
+  // node:sqlite rows have a null prototype, which React refuses to pass to a
+  // client component, so /setup crashed for every new account.
+  return row ? { ...row } : null;
 }
 export async function deleteSession(token: string): Promise<void> {
   await withDb(
