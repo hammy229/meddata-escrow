@@ -19,6 +19,8 @@ import {
   type OrderRow,
 } from "../db/store";
 import { runFitnessAudit } from "../fitness/audit";
+import { verdictOf } from "../fitness/common";
+import { checkDrift } from "../fitness/drift";
 import { fingerprintRows } from "../fitness/fingerprint";
 import { fixtureCohort, fixtureSpec, listingClaims } from "../fitness/source";
 import type { DeliveryAudit } from "../fitness/types";
@@ -54,6 +56,12 @@ export function auditDelivery(order: {
       featureTiming: cohort.featureTiming,
       claims,
     });
+    // Drift from the sample the buyer checked. Warn only; it never blocks money.
+    const sample = fixtureCohort(order.dataset_id, "sample");
+    if (sample && report.verdict !== "not_applicable") {
+      report.findings.push(...checkDrift(sample.subjects, cohort.subjects, { ignore: ["subject_key"] }));
+      report.verdict = verdictOf(report.findings);
+    }
     const fingerprint = fingerprintRows({
       subjects: cohort.subjects,
       visits: cohort.visits,

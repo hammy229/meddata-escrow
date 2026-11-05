@@ -75,6 +75,28 @@ test("the summary carries only the verdict and whether it blocks", () => {
   assert.deepEqual(auditSummary(a), { verdict: "fail", blocking: true });
 });
 
+test("drift: the curated listing's flawed delivery differs from its clean sample", () => {
+  const a = auditDelivery({ id: "o", dataset_id: CURATED })!;
+  const drift = a.report!.findings.filter((f) => f.id === "drift");
+  assert.ok(drift.length > 0 && drift.every((f) => f.severity === "warn"));
+  assert.ok(drift.some((f) => f.column === "last_contact_alsfrs" && /added/.test(f.title)));
+  assert.ok(drift.some((f) => f.column === "baseline_fvc_pct" && /missingness/.test(f.title)));
+});
+
+test("drift: a clean listing whose sample is its delivery does not drift, and drift never blocks", () => {
+  const clean = auditDelivery({ id: "o", dataset_id: CLEAN })!;
+  const drift = clean.report!.findings.filter((f) => f.id === "drift");
+  assert.deepEqual(drift.map((f) => f.severity), ["pass"]);
+  assert.equal(clean.verdict, "pass");
+  // Drift alone is never a claim breach, so it cannot be the reason money is held.
+  const curated = auditDelivery({ id: "o", dataset_id: CURATED })!;
+  const withoutDrift = curated.report!.findings.filter((f) => f.id !== "drift");
+  assert.equal(
+    curated.blocking,
+    withoutDrift.some((f) => f.id === "claim" && f.severity === "fail"),
+  );
+});
+
 test("the audit output carries no subject keys", () => {
   const a = auditDelivery({ id: "o", dataset_id: CURATED })!;
   const text = JSON.stringify(a);

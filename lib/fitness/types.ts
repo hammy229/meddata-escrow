@@ -2,7 +2,7 @@
 // from node: and must not hold runtime values.
 
 export type Severity = "pass" | "warn" | "fail" | "info";
-export interface Finding { id: "coverage"|"epv"|"subject_overlap"|"temporal_leak"|"label_association"|"imbalance"|"claim"|"leak_impact";
+export interface Finding { id: "coverage"|"epv"|"subject_overlap"|"temporal_leak"|"label_association"|"imbalance"|"claim"|"leak_impact"|"drift";
   severity: Severity; column?: string; title: string; reason: string; metric?: Record<string, number|string>; }
 export interface FitnessReport { datasetId: string; stage: "sample"|"delivery"; synthetic: boolean;
   verdict: "pass"|"warn"|"fail"|"not_applicable"; findings: Finding[]; disclaimer: string; methodVersion: 1; }
