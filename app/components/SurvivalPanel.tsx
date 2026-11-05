@@ -83,8 +83,8 @@ export default function SurvivalPanel({
       </div>
       <p className="mt-2 text-sm text-muted">
         Kaplan-Meier curves on a 3 month grid. No event dates or rows leave the
-        vendor. Groups under 11 people are left out. Each run is billed at{" "}
-        {usd(PER_QUERY_FEE_CENTS)} like any other answer.
+        vendor. Groups under 11 people are hidden, with the next smallest group.
+        Each run is billed at {usd(PER_QUERY_FEE_CENTS)} like any other answer.
       </p>
 
       <fieldset className="mt-4">
