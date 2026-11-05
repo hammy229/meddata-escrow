@@ -67,10 +67,23 @@ async function withMockDb(
 
 const ctx0: StoryCtx = {};
 
-test("the story has the seven narrated steps in order", () => {
+test("the story has the twelve narrated steps in order", () => {
   assert.deepEqual(
     STEPS.map((s) => s.id),
-    ["reset", "match", "sample", "hold", "deliver", "query", "release"],
+    [
+      "reset",
+      "match",
+      "sample",
+      "hold",
+      "deliver",
+      "query",
+      "release",
+      "curated_buy",
+      "audit_fail",
+      "arbiter",
+      "clean_pass",
+      "survival",
+    ],
   );
   for (const s of STEPS) {
     assert.ok(s.title && s.caption, `${s.id} has copy`);
@@ -126,6 +139,51 @@ test("the full story plays through the real APIs to a paid-out order", async () 
     assert.ok(seen.release.some((f) => f === "State=PAID_OUT"));
     const total = seen.release.find((f) => f.startsWith("Total charged="));
     assert.ok(total, "release shows the total");
+  });
+});
+
+test("the audit beats fail the curated delivery, hold the money, then show the arm gap fade", async () => {
+  await withMockDb("mock", async () => {
+    let ctx = ctx0;
+    const out: Record<string, Awaited<ReturnType<typeof runStep>>> = {};
+    for (const step of STEPS) {
+      out[step.id] = await runStep(step.id, ctx, inProcessFetch);
+      assert.equal(out[step.id].halt, undefined, step.id);
+      ctx = out[step.id].ctx;
+    }
+    const facts = (id: string) =>
+      out[id].facts.map((f) => `${f.label}=${f.value}`);
+
+    // Sample looked clean, delivery did not.
+    assert.ok(facts("curated_buy").some((f) => /^Sample screen=pass/.test(f)));
+    assert.ok(facts("audit_fail").some((f) => f.startsWith("Audit=fail")));
+    assert.ok(facts("audit_fail").some((f) => f.startsWith("Broken claim=")));
+    assert.ok(
+      facts("audit_fail").some((f) =>
+        f.startsWith("Release attempt=Refused (409)"),
+      ),
+    );
+    assert.ok(facts("audit_fail").includes("State=DISPUTED"));
+    // The arbiter advises and moves nothing.
+    assert.ok(facts("arbiter").some((f) => f.startsWith("Money moved=none")));
+    assert.ok(facts("arbiter").some((f) => f.startsWith("Advice=")));
+    // The clean listing passes and is paid out.
+    assert.ok(
+      facts("clean_pass").some((f) => f.startsWith("Delivery audit=pass")),
+    );
+    assert.ok(facts("clean_pass").includes("State=PAID_OUT"));
+    // The held order was settled by a person, then charted.
+    const a = out.survival.analysis!;
+    assert.equal(a.synthetic, true);
+    assert.ok(a.logRank.raw.pValue! < 0.001);
+    assert.ok(a.logRank.adjusted!.pValue > 0.05);
+    const { order } = await (
+      await inProcessFetch(`/api/orders?id=${ctx.curatedOrderId}`)
+    ).json();
+    assert.equal(order.status, "CAPTURED");
+    for (const step of STEPS.slice(7))
+      for (const fact of out[step.id].facts)
+        assert.doesNotMatch(fact.value, /[–—]|tamper-proof/);
   });
 });
 

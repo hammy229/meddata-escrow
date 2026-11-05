@@ -5,9 +5,26 @@
 //
 // Needs PAYPAL_MODE=mock, because the first step resets the database.
 import { suggestQuestions } from "../../lib/query/suggestions";
+import type { SurvivalAnalysis } from "../../lib/query/survival-analysis";
 
 export type StepId =
-  "reset" | "match" | "sample" | "hold" | "deliver" | "query" | "release";
+  | "reset"
+  | "match"
+  | "sample"
+  | "hold"
+  | "deliver"
+  | "query"
+  | "release"
+  | "curated_buy"
+  | "audit_fail"
+  | "arbiter"
+  | "clean_pass"
+  | "survival";
+
+/** The ALS listings the second half of the story uses. All SYNTHETIC. */
+export const CURATED_ID = "ds_als_survival_curated_v1";
+export const CLEAN_ID = "ds_als_survival_motorneuron_v1";
+const ALS_STUDY = "Predict survival from baseline FVC and age at onset";
 
 export interface StepDef {
   id: StepId;
@@ -58,6 +75,36 @@ export const STEPS: StepDef[] = [
     caption:
       "The buyer is satisfied, so PayPal captures the payment and the vendor is paid, minus the platform fee.",
   },
+  {
+    id: "curated_buy",
+    title: "Buy a curated listing",
+    caption:
+      "A second study, on synthetic ALS data. The sample is screened first and looks clean, so the buyer approves and the payment is held.",
+  },
+  {
+    id: "audit_fail",
+    title: "The delivery fails its audit",
+    caption:
+      "The vendor delivers. The delivered rows are checked against what the listing claimed. They break claims, so the payment stays held and a dispute opens for a person.",
+  },
+  {
+    id: "arbiter",
+    title: "An arbiter sees the evidence",
+    caption:
+      "The arbiter reads the audit findings and advises. It never moves money. A person decides.",
+  },
+  {
+    id: "clean_pass",
+    title: "A clean listing passes",
+    caption:
+      "A different listing, bought the same way. Its delivered rows match its claims, so the audit passes and the normal release goes ahead.",
+  },
+  {
+    id: "survival",
+    title: "Does the arm gap hold up?",
+    caption:
+      "Back on the held order, the buyer reads the evidence and keeps the data on purpose. Then one survival question: the arms look different, until age is held fixed.",
+  },
 ];
 
 /** The study the walkthrough asks about. */
@@ -70,6 +117,8 @@ export interface StoryCtx {
   datasetTitle?: string;
   priceCents?: number;
   orderId?: string;
+  /** The held order from the curated ALS listing. */
+  curatedOrderId?: string;
 }
 
 export interface Fact {
@@ -84,6 +133,8 @@ export interface StepOutcome {
   /** Set when the story ends early for an honest reason (not an error). */
   halt?: string;
   link?: { href: string; label: string };
+  /** A survival answer for the page to chart. Synthetic data. */
+  analysis?: SurvivalAnalysis;
 }
 
 export type Fetcher = (input: string, init?: RequestInit) => Promise<Response>;
@@ -138,6 +189,68 @@ async function call(
     );
   }
   return data;
+}
+
+/** Like call, but a refusal is a result the story expects to show, not an error. */
+async function tryCall(
+  f: Fetcher,
+  label: string,
+  method: "GET" | "POST" | "PATCH",
+  url: string,
+  body?: unknown,
+): Promise<{ status: number; data: Json }> {
+  let res: Response;
+  try {
+    res = await f(url, {
+      method,
+      cache: "no-store",
+      ...(body !== undefined && {
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    });
+  } catch {
+    throw new StoryError(`${label}: could not reach the server.`);
+  }
+  return { status: res.status, data: await res.json().catch(() => ({})) };
+}
+
+/** Screen a listing's sample, buy it and hold the payment. */
+async function buyAlsListing(
+  f: Fetcher,
+  datasetId: string,
+): Promise<{ orderId: string; verdict: string; checks: number; held: number }> {
+  const screen = await call(f, "Fitness screen", "POST", "/api/match", {
+    fitnessCheck: datasetId,
+    description: ALS_STUDY,
+  });
+  const report = screen.fitnessCheck;
+  if (!report)
+    throw new StoryError(`Fitness screen: ${datasetId} has no rows to screen.`);
+  if (report.verdict === "fail")
+    throw new StoryError(
+      `Fitness screen: the sample of ${datasetId} failed, so the story will not buy it.`,
+    );
+  const created = await call(f, "Create order", "POST", "/api/orders", {
+    datasetId,
+  });
+  const orderId: string = created.orderId;
+  await call(f, "Approve and authorize", "PATCH", "/api/orders", {
+    orderId,
+    action: "authorize",
+  });
+  const read = await call(
+    f,
+    "Read order",
+    "GET",
+    `/api/orders?id=${encodeURIComponent(orderId)}`,
+  );
+  return {
+    orderId,
+    verdict: String(report.verdict),
+    checks: Array.isArray(report.findings) ? report.findings.length : 0,
+    held: read.order.amount_cents,
+  };
 }
 
 function need<T>(value: T | undefined, what: string): T {
@@ -362,6 +475,213 @@ export async function runStep(
           { label: "Total charged", value: usd(r.totalCents) },
         ],
         link: { href: "/insights", label: "Open your account insights" },
+      };
+    }
+
+    case "curated_buy": {
+      const bought = await buyAlsListing(f, CURATED_ID);
+      return {
+        ctx: { ...ctx, curatedOrderId: bought.orderId },
+        facts: [
+          { label: "Listing", value: `${CURATED_ID} (SYNTHETIC)` },
+          {
+            label: "Sample screen",
+            value: `${bought.verdict}, ${bought.checks} checks. A screen, not proof.`,
+          },
+          { label: "State", value: "AUTHORIZED", tone: "held" },
+          { label: "Held in escrow", value: usd(bought.held), tone: "held" },
+        ],
+      };
+    }
+
+    case "audit_fail": {
+      const orderId = need(ctx.curatedOrderId, "the curated order");
+      const delivered = await call(f, "Deliver", "PATCH", "/api/orders", {
+        orderId,
+        action: "deliver",
+      });
+      if (!delivered.audit?.blocking)
+        throw new StoryError(
+          "Deliver: the curated listing was expected to fail its audit and did not.",
+        );
+      const audit = await call(
+        f,
+        "Read audit",
+        "GET",
+        `/api/orders?id=${encodeURIComponent(orderId)}&audit=1`,
+      );
+      const broken: { title: string; reason: string }[] = (
+        audit.audit?.report?.findings ?? []
+      ).filter(
+        (x: { id?: string; severity?: string }) =>
+          x.id === "claim" && x.severity === "fail",
+      );
+      // A release is refused while the audit holds the payment.
+      const release = await tryCall(
+        f,
+        "Release attempt",
+        "PATCH",
+        "/api/orders",
+        {
+          orderId,
+          action: "capture",
+        },
+      );
+      if (release.status < 400)
+        throw new StoryError(
+          "Release attempt: the payment was released while the audit blocked it.",
+        );
+      const read = await call(
+        f,
+        "Read order",
+        "GET",
+        `/api/orders?id=${encodeURIComponent(orderId)}`,
+      );
+      return {
+        ctx,
+        facts: [
+          {
+            label: "Audit",
+            value: `${delivered.audit.verdict}, claims broken, payment held`,
+          },
+          ...broken.slice(0, 2).map((b) => ({
+            label: "Broken claim",
+            value: `${b.title}. ${b.reason}`,
+          })),
+          {
+            label: "Release attempt",
+            value: `Refused (${release.status}): ${release.data?.error ?? "not allowed"}`,
+          },
+          { label: "State", value: read.order.status, tone: "held" as const },
+          {
+            label: "Still held",
+            value: usd(read.order.amount_cents),
+            tone: "held" as const,
+          },
+        ],
+      };
+    }
+
+    case "arbiter": {
+      const orderId = need(ctx.curatedOrderId, "the curated order");
+      const data = await call(
+        f,
+        "Arbiter",
+        "GET",
+        `/api/orders?id=${encodeURIComponent(orderId)}&arbitrate=1`,
+      );
+      const rec = data.recommendation;
+      if (!rec) throw new StoryError("Arbiter: no recommendation came back.");
+      const evidence: string[] = Array.isArray(rec.evidence)
+        ? rec.evidence
+        : [];
+      return {
+        ctx,
+        facts: [
+          {
+            label: "Advice",
+            value: `${rec.outcome} (confidence ${Number(rec.confidence).toFixed(2)})`,
+          },
+          { label: "Why", value: String(rec.rationale) },
+          ...evidence
+            .filter((e) =>
+              /delivery audit|below the listing|post-index|claim/i.test(e),
+            )
+            .slice(0, 3)
+            .map((e) => ({ label: "Evidence", value: e })),
+          { label: "Money moved", value: "none. The arbiter only advises." },
+          { label: "State", value: data.order.status, tone: "held" as const },
+        ],
+      };
+    }
+
+    case "clean_pass": {
+      const bought = await buyAlsListing(f, CLEAN_ID);
+      const delivered = await call(f, "Deliver", "PATCH", "/api/orders", {
+        orderId: bought.orderId,
+        action: "deliver",
+      });
+      if (delivered.audit?.blocking)
+        throw new StoryError("Deliver: the clean listing failed its audit.");
+      await call(f, "Capture", "PATCH", "/api/orders", {
+        orderId: bought.orderId,
+        action: "capture",
+      });
+      await call(f, "Payout", "PATCH", "/api/orders", {
+        orderId: bought.orderId,
+        action: "payout",
+      });
+      const read = await call(
+        f,
+        "Receipt",
+        "GET",
+        `/api/orders?id=${encodeURIComponent(bought.orderId)}&receipt=1`,
+      );
+      return {
+        ctx,
+        facts: [
+          { label: "Listing", value: `${CLEAN_ID} (SYNTHETIC)` },
+          {
+            label: "Sample screen",
+            value: `${bought.verdict}, ${bought.checks} checks`,
+          },
+          {
+            label: "Delivery audit",
+            value: `${delivered.audit?.verdict ?? "none"}, nothing holds payment`,
+          },
+          {
+            label: "State",
+            value: read.receipt.status,
+            tone: "released" as const,
+          },
+          {
+            label: "Vendor paid",
+            value: usd(read.receipt.vendorPayoutCents),
+            tone: "released" as const,
+          },
+        ],
+      };
+    }
+
+    case "survival": {
+      const orderId = need(ctx.curatedOrderId, "the curated order");
+      // Dropping the dispute is how a buyer keeps flagged data. A person chooses.
+      await call(f, "Keep the data", "PATCH", "/api/orders", {
+        orderId,
+        action: "resolve",
+        resolution: "capture",
+        note: "Keeping the data on purpose to check the arm gap.",
+      });
+      const data = await call(f, "Survival", "POST", "/api/query", {
+        orderId,
+        datasetId: CURATED_ID,
+        analysis: { type: "survival", groupBy: "arm" },
+      });
+      const a: SurvivalAnalysis | undefined = data.analysis;
+      if (!a?.logRank?.adjusted)
+        throw new StoryError("Survival: no age-adjusted result came back.");
+      const p = (v: number | null) =>
+        v === null ? "not available" : v < 0.001 ? "below 0.001" : v.toFixed(3);
+      return {
+        ctx,
+        analysis: a,
+        facts: [
+          {
+            label: "Decision",
+            value: "The buyer keeps the data. A person chose, not the audit.",
+          },
+          {
+            label: "Raw arm gap",
+            value: `log-rank p ${p(a.logRank.raw.pValue)}`,
+          },
+          {
+            label: "Within age bands",
+            value: `log-rank p ${p(a.logRank.adjusted.pValue)}`,
+          },
+          { label: "Reading", value: a.interpretation },
+          { label: "Data", value: a.label },
+          { label: "Metered", value: usd(data.usage?.chargeCents ?? 0) },
+        ],
       };
     }
   }

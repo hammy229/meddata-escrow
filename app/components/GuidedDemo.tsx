@@ -16,6 +16,7 @@ import {
   type StoryCtx,
 } from "../demo/story";
 import { AlertTriangle } from "./icons";
+import SurvivalChart, { PValues } from "./SurvivalChart";
 
 const GAP_MS = 2600;
 
@@ -24,6 +25,7 @@ type Mode = "idle" | "auto" | "paused" | "done" | "halted" | "error";
 interface Done {
   facts: Fact[];
   link?: StepOutcome["link"];
+  analysis?: StepOutcome["analysis"];
 }
 
 const apiFetch = (url: string, init?: RequestInit) =>
@@ -74,7 +76,11 @@ export default function GuidedDemo() {
       ctxRef.current = out.ctx;
       setResults((r) => ({
         ...r,
-        [step.id]: { facts: out.facts, link: out.link },
+        [step.id]: {
+          facts: out.facts,
+          link: out.link,
+          analysis: out.analysis,
+        },
       }));
       setNext(index + 1);
       if (out.halt) {
@@ -249,9 +255,12 @@ export default function GuidedDemo() {
                 One order, from question to payout.
               </p>
               <p className="mt-3 max-w-xl text-sm font-light text-muted">
-                Start resets the demo data, then plays seven steps one after
-                another. Each step calls the live API and shows what it
-                returned. Pause at any point, or step through by hand.
+                Start resets the demo data, then plays twelve steps one after
+                another. The first seven buy, deliver, query and pay for one
+                dataset. The last five show a delivery failing its audit, the
+                money staying held, and a survival chart on synthetic ALS data.
+                Each step calls the live API and shows what it returned. Pause
+                at any point, or step through by hand.
               </p>
             </div>
           ) : (
@@ -292,6 +301,13 @@ export default function GuidedDemo() {
                 </dl>
               )}
 
+              {shownDone?.analysis && (
+                <div className="mt-8 max-w-2xl space-y-6">
+                  <PValues analysis={shownDone.analysis} />
+                  <SurvivalChart analysis={shownDone.analysis} />
+                </div>
+              )}
+
               {shownDone?.link && (
                 <Link
                   href={shownDone.link.href}
@@ -305,8 +321,10 @@ export default function GuidedDemo() {
 
           {mode === "done" && (
             <p className="mt-8 max-w-xl border-t border-rule pt-4 text-sm font-light">
-              The order is paid out. The vendor was paid only after delivery,
-              and the buyer was charged only for what arrived.{" "}
+              The first order was paid out only after delivery. The curated
+              delivery broke its listing, so its payment was held until a
+              person decided, and the clean listing passed and was paid. The
+              ALS data is synthetic, and the audit is a screen, not proof.{" "}
               <Link href="/insights" className="underline">
                 Open Insights
               </Link>{" "}

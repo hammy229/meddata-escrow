@@ -9,7 +9,7 @@ import { ArrowLeft } from "../components/icons";
 export const metadata: Metadata = {
   title: "Guided demo",
   description:
-    "A narrated walkthrough of one order: match, sample check, escrow hold, delivery, query and release.",
+    "A narrated walkthrough: match, sample check, escrow hold, delivery, query and release, then a delivery that fails its audit and a survival chart on synthetic data.",
 };
 
 export default function DemoPage() {
@@ -29,8 +29,8 @@ export default function DemoPage() {
             Guided demo
           </h1>
           <p className="mt-3 max-w-2xl font-light text-muted">
-            Watch one order travel the whole escrow arc. Payment is held when
-            the buyer approves and released only after delivery.
+            Watch an order travel the whole escrow arc, then a delivery fail its audit. Payment is held when
+            the buyer approves and released only after delivery that holds up.
           </p>
         </div>
         <GuidedDemo />
