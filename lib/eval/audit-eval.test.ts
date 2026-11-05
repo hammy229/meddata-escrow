@@ -79,6 +79,18 @@ describe("audit eval", () => {
     assert.match(withFresh.tuning, /tuned on base seed 1000/);
   });
 
+  it("measures drift: few false alarms on same-process data, detects a large shift", () => {
+    const d = result.drift!;
+    assert.ok(
+      d.falseAlarm["200"].rate <= 0.34,
+      String(d.falseAlarm["200"].rate),
+    );
+    const age = d.conditions.find((c) => c.id === "drift_age_10")!;
+    assert.equal(age.bySize["200"].rate, 1);
+    const sex = d.conditions.find((c) => c.id === "drift_sex_0.5")!;
+    assert.ok(sex.bySize["200"].rate >= 0.8);
+  });
+
   it("prints a table and a stable rounded file form", () => {
     const text = formatAuditTable(result);
     assert.match(text, /FALSE BLOCK/);

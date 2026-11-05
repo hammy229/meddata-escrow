@@ -12,6 +12,7 @@
 // Limits are written into the result under `limitations`.
 import { smdNumeric } from "../fitness/balance";
 import { runFitnessAudit } from "../fitness/audit";
+import { checkDrift } from "../fitness/drift";
 import { LEAK_GAP, measureLeakImpact } from "../fitness/leak-impact";
 import type { FitnessReport, ListingClaims } from "../fitness/types";
 import { generateAlsCohort, type AlsCohort, type AlsVisit } from "../synth/als";
@@ -393,8 +394,23 @@ export interface AuditEvalResult {
   tuning: string;
   conditions: ConditionResult[];
   leakImpact: Record<string, LeakImpactRow[]>;
+  /** Sample vs delivery drift check: false alarms on same-process data, detection of graded shifts. */
+  drift?: DriftEval;
   /** Clean and imbalance conditions re-run on seeds that were not used when the imbalance rule was tuned. */
   freshSeeds?: AuditEvalResult;
+}
+
+export interface DriftEval {
+  /** Share of identical-process sample/delivery pairs where any column was flagged. */
+  falseAlarm: Record<string, Proportion>;
+  conditions: {
+    id: string;
+    label: string;
+    column: string;
+    level: number;
+    /** Share of pairs where the shifted column was flagged. */
+    bySize: Record<string, Proportion>;
+  }[];
 }
 
 export const TUNING_NOTE =
@@ -416,7 +432,7 @@ export interface EvalOptions {
   baseSeed?: number;
   leakImpactSeeds?: number;
   /** Only run these families (clean is always needed for the summary). */
-  families?: Condition["family"][];
+  families?: (Condition["family"] | "drift")[];
   /** Also re-run clean and imbalance on seeds never used for tuning. Default true. */
   fresh?: boolean;
 }
@@ -537,6 +553,9 @@ export function runAuditEval(opts: EvalOptions = {}): AuditEvalResult {
     summary: { falseAlarmByCheck, falseBlockTruthful, falseBlockEstimated },
     conditions: results,
     tuning: TUNING_NOTE,
+    ...(!opts.families || opts.families.includes("drift")
+      ? { drift: driftSection(sizes, seeds, baseSeed) }
+      : {}),
     leakImpact:
       leakSeeds > 0 ? leakImpactSection(sizes, baseSeed, leakSeeds) : {},
     ...(opts.fresh === false
@@ -551,6 +570,102 @@ export function runAuditEval(opts: EvalOptions = {}): AuditEvalResult {
             fresh: false,
           }),
         }),
+  };
+}
+
+interface DriftCase {
+  id: string;
+  label: string;
+  column: string;
+  level: number;
+  shift(rows: Row[], rng: Rng): Row[];
+}
+
+const DRIFT_CASES: DriftCase[] = [
+  ...[1, 3, 6, 10].map((k) => ({
+    id: `drift_age_${k}`,
+    label: `age at onset shifted up ${k} years`,
+    column: "age_at_onset",
+    level: k,
+    shift: (rows: Row[]) =>
+      rows.map((r) => ({ ...r, age_at_onset: Number(r.age_at_onset) + k })),
+  })),
+  ...[0.05, 0.15, 0.3, 0.5].map((q) => ({
+    id: `drift_fvc_missing_${q}`,
+    label: `FVC missing in ${pctLabel(q)} more rows`,
+    column: "baseline_fvc_pct",
+    level: q,
+    shift: (rows: Row[], rng: Rng) =>
+      rows.map((r) => (rng.chance(q) ? { ...r, baseline_fvc_pct: null } : r)),
+  })),
+  ...[0.1, 0.25, 0.5].map((f) => ({
+    id: `drift_sex_${f}`,
+    label: `${pctLabel(f)} of women recorded as men`,
+    column: "sex",
+    level: f,
+    shift: (rows: Row[], rng: Rng) =>
+      rows.map((r) =>
+        r.sex === "F" && rng.chance(f) ? { ...r, sex: "M" } : r,
+      ),
+  })),
+];
+
+/**
+ * Drift check on SYNTHETIC pairs. The sample is one clean cohort and the
+ * delivery is an independent clean cohort of the same size from the same
+ * process, optionally shifted. Nothing here was used to set the drift floor,
+ * which comes from the chi-square null, not from this eval.
+ */
+function driftSection(
+  sizes: number[],
+  seeds: number,
+  baseSeed: number,
+): DriftEval {
+  const falseK: Record<string, number> = {};
+  const hitK: Record<string, number> = {};
+  for (const n of sizes) {
+    falseK[String(n)] = 0;
+    for (const c of DRIFT_CASES) hitK[`${c.id}@${n}`] = 0;
+    for (let i = 0; i < seeds; i += 1) {
+      const seed = baseSeed + i;
+      const sample = clone(
+        generateAlsCohort({ seed, variant: "clean", subjects: n }).subjects,
+      );
+      const delivery = clone(
+        generateAlsCohort({
+          seed: seed + 500_000,
+          variant: "clean",
+          subjects: n,
+        }).subjects,
+      );
+      const flaggedCols = (rows: Row[]) =>
+        new Set(
+          checkDrift(sample, rows, { ignore: ["subject_key"] })
+            .filter((f) => f.severity === "warn" && f.column)
+            .map((f) => f.column),
+        );
+      if (flaggedCols(delivery).size > 0) falseK[String(n)] += 1;
+      DRIFT_CASES.forEach((c, ci) => {
+        const rng = createRng(seed * 6007 + ci * 15_485_863 + n);
+        if (flaggedCols(c.shift(delivery, rng)).has(c.column))
+          hitK[`${c.id}@${n}`] += 1;
+      });
+    }
+  }
+  const falseAlarm: Record<string, Proportion> = {};
+  for (const n of sizes)
+    falseAlarm[String(n)] = wilson(falseK[String(n)], seeds);
+  return {
+    falseAlarm,
+    conditions: DRIFT_CASES.map((c) => ({
+      id: c.id,
+      label: c.label,
+      column: c.column,
+      level: c.level,
+      bySize: Object.fromEntries(
+        sizes.map((n) => [String(n), wilson(hitK[`${c.id}@${n}`], seeds)]),
+      ),
+    })),
   };
 }
 
@@ -727,6 +842,24 @@ export function formatAuditTable(r: AuditEvalResult): string {
           (n) =>
             `${Math.round(c.bySize[n].flagged.imbalance.rate * 100)} s${c.bySize[n].medianNote}`,
         ),
+      );
+  }
+  if (r.drift) {
+    head(
+      "Drift check: sample vs delivery from the same process (percent flagged)",
+    );
+    cols(
+      "",
+      sizes.map((n) => `n=${n}`),
+    );
+    cols(
+      "false alarm on identical-process data (any column)",
+      sizes.map((n) => ci(r.drift!.falseAlarm[n])),
+    );
+    for (const c of r.drift.conditions)
+      cols(
+        `${c.label} (${c.column})`,
+        sizes.map((n) => ci(c.bySize[n])),
       );
   }
   return lines.join("\n");
