@@ -61,9 +61,9 @@ export async function withTimeout<T>(
       reject(new LlmTimeoutError(timeoutMs));
     }, timeoutMs);
   });
-  const pending = call(controller.signal);
-  pending.catch(() => {}); // a late failure after the timeout is not news
   try {
+    const pending = call(controller.signal);
+    pending.catch(() => {}); // a late failure after the timeout is not news
     return await Promise.race([pending, timedOut]);
   } finally {
     clearTimeout(timer);
