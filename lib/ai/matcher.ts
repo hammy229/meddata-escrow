@@ -5,13 +5,14 @@
 // validated here: unknown ids are dropped, duplicates collapsed, and any
 // dataset Claude skipped is appended with score 0 and a keyword rationale, so
 // the result always covers the whole catalog exactly once. When the LLM is off
-// or the call fails, the deterministic BM25 keyword scorer (see ./matcher-bm25) is used
+// or the call fails, the deterministic BM25 keyword scorer with a small medical synonym map
+// (see ./matcher-bm25 and ./matcher-synonyms) is used
 // instead, so the flow never depends on AWS.
 import catalogData from "../../data/catalog.json";
 import * as z from "zod/v4";
 
 import { llmEnabled, structured, type LlmClient } from "../llm/client";
-import { bm25Rank } from "./matcher-bm25";
+import { synonymRank } from "./matcher-synonyms";
 import type { AiOptions } from "./options";
 
 export interface DatasetMatch {
@@ -40,7 +41,7 @@ function keywordMatch(
   studyDescription: string,
   catalog: CatalogEntry[],
 ): DatasetMatch[] {
-  return bm25Rank(studyDescription, catalog);
+  return synonymRank(studyDescription, catalog);
 }
 
 const Ranking = z.object({

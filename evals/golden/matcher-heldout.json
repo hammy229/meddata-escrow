@@ -1,0 +1,24 @@
+{
+  "description": "Held-out queries, same label scale as matcher.json. Written AFTER lib/ai/matcher-synonyms.ts was frozen, so the synonym map was not shaped by them. Score it once; do not add a synonym because a query here failed (if you must, the set is no longer held out and the report should say so).",
+  "catalogSize": 9,
+  "queries": [
+    { "id": "h01", "kind": "paraphrase", "query": "sudden cardiac events in middle-aged adults", "relevance": { "ds_cardio_synthea_v1": 2, "ds_heart_failure_readmissions_v1": 1 } },
+    { "id": "h02", "kind": "paraphrase", "query": "people with weakened hearts readmitted within thirty days", "relevance": { "ds_heart_failure_readmissions_v1": 2, "ds_cardio_synthea_v1": 1 } },
+    { "id": "h03", "kind": "paraphrase", "query": "youngsters with asthma attacks", "relevance": { "ds_asthma_pediatric_pilot_v1": 2 } },
+    { "id": "h04", "kind": "paraphrase", "query": "ongoing breathlessness and airflow limitation in older adults", "relevance": { "ds_copd_exacerbations_v1": 2, "ds_asthma_pediatric_pilot_v1": 1 } },
+    { "id": "h05", "kind": "paraphrase", "query": "managing sugar levels in adults who take metformin", "relevance": { "ds_diabetes_synthea_v1": 2 } },
+    { "id": "h06", "kind": "paraphrase", "query": "antihypertensive therapy and systolic readings", "relevance": { "ds_hypertension_registry_v1": 2 } },
+    { "id": "h07", "kind": "paraphrase", "query": "survival time after diagnosis for ALS patients with declining lung capacity", "relevance": { "ds_als_survival_axonpoint_v1": 2, "ds_als_survival_motorneuron_v1": 2, "ds_als_survival_curated_v1": 2 } },
+    { "id": "h08", "kind": "paraphrase", "query": "degenerative nerve disorder causing paralysis", "relevance": { "ds_als_survival_axonpoint_v1": 2, "ds_als_survival_motorneuron_v1": 2, "ds_als_survival_curated_v1": 2 } },
+    { "id": "h09", "kind": "paraphrase", "query": "stroke and myocardial infarction outcomes", "relevance": { "ds_cardio_synthea_v1": 2, "ds_heart_failure_readmissions_v1": 1, "ds_hypertension_registry_v1": 1 } },
+    { "id": "h10", "kind": "paraphrase", "query": "paediatric wheeze and trigger avoidance", "relevance": { "ds_asthma_pediatric_pilot_v1": 2 } },
+    { "id": "h11", "kind": "paraphrase", "query": "chronic lung disease exacerbation frequency", "relevance": { "ds_copd_exacerbations_v1": 2, "ds_asthma_pediatric_pilot_v1": 1 } },
+    { "id": "h12", "kind": "paraphrase", "query": "diabetics A1c monitoring", "relevance": { "ds_diabetes_synthea_v1": 2 } },
+    { "id": "h13", "kind": "paraphrase", "query": "who gets sent back to the ward after discharge", "relevance": { "ds_heart_failure_readmissions_v1": 2, "ds_copd_exacerbations_v1": 1 } },
+    { "id": "h14", "kind": "paraphrase", "query": "blood pressure medication", "relevance": { "ds_hypertension_registry_v1": 2, "ds_cardio_synthea_v1": 1 } },
+    { "id": "h15", "kind": "none", "query": "prostate cancer screening biopsy", "relevance": {} },
+    { "id": "h16", "kind": "none", "query": "retinal imaging for glaucoma", "relevance": {} },
+    { "id": "h17", "kind": "none", "query": "pediatric appendicitis ultrasound", "relevance": {} },
+    { "id": "h18", "kind": "none", "query": "hospital readmissions after hip fracture surgery", "relevance": {} }
+  ]
+}

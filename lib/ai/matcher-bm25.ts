@@ -81,7 +81,7 @@ export function searchTerms(text: string): string[] {
   return rawWords(text).map(stem);
 }
 
-function rawWords(text: string): string[] {
+export function rawWords(text: string): string[] {
   return (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
     (t) => t.length >= 3 && !STOP_WORDS.has(t),
   );
@@ -95,6 +95,33 @@ function counts(terms: string[]): Map<string, number> {
 
 const FIELDS = ["title", "tags", "description"] as const;
 
+/** One thing the study asks for: a stemmed term, how much it counts, and how to show it. */
+export interface QueryItem {
+  stem: string;
+  /** 1 for a word the researcher wrote; a synonym concept spreads 1 over its terms. */
+  weight: number;
+  /** What the rationale says when this item matched. */
+  label: string;
+}
+
+/** The plain query: one item per distinct stemmed word. */
+export function queryItems(query: string): QueryItem[] {
+  return mergeItems(
+    rawWords(query).map((w) => ({ stem: stem(w), weight: 1, label: w })),
+  );
+}
+
+/** Items with the same stem become one; weights add, the first label stays. */
+export function mergeItems(items: QueryItem[]): QueryItem[] {
+  const byStem = new Map<string, QueryItem>();
+  for (const it of items) {
+    const seen = byStem.get(it.stem);
+    if (seen) seen.weight += it.weight;
+    else byStem.set(it.stem, { ...it });
+  }
+  return [...byStem.values()];
+}
+
 /**
  * Rank the whole catalog for a study description, best first. Ties keep
  * catalog order. Always returns one match per listing.
@@ -104,13 +131,15 @@ export function bm25Rank(
   catalog: CatalogEntry[],
   opts: Bm25Options = DEFAULT_BM25,
 ): DatasetMatch[] {
-  const surface = new Map<string, string>(); // stem -> first word that produced it
-  for (const w of rawWords(query)) {
-    const s = stem(w);
-    if (!surface.has(s)) surface.set(s, w);
-  }
-  const queryTerms = [...surface.keys()];
+  return bm25RankItems(queryItems(query), catalog, opts);
+}
 
+/** bm25Rank for an already-built list of query items (see ./matcher-synonyms). */
+export function bm25RankItems(
+  items: QueryItem[],
+  catalog: CatalogEntry[],
+  opts: Bm25Options = DEFAULT_BM25,
+): DatasetMatch[] {
   const docs = catalog.map((d) => {
     const fields = {
       title: counts(searchTerms(d.title)),
@@ -133,21 +162,22 @@ export function bm25Rank(
   ) as Record<(typeof FIELDS)[number], number>;
 
   const idf = new Map<string, number>();
-  for (const t of queryTerms) {
+  for (const { stem: t } of items) {
     const df = docs.filter((d) =>
       FIELDS.some((f) => d.fields[f].has(t)),
     ).length;
     idf.set(t, Math.log(1 + (n - df + 0.5) / (df + 0.5)));
   }
   const ceiling =
-    (opts.k1 + 1) * queryTerms.reduce((acc, t) => acc + idf.get(t)!, 0);
+    (opts.k1 + 1) *
+    items.reduce((acc, it) => acc + it.weight * idf.get(it.stem)!, 0);
 
   return catalog
     .map((entry, i): DatasetMatch => {
       const { fields, lengths } = docs[i];
       let raw = 0;
       const matched: string[] = [];
-      for (const t of queryTerms) {
+      for (const { stem: t, weight, label } of items) {
         let tf = 0;
         for (const f of FIELDS) {
           const count = fields[f].get(t) ?? 0;
@@ -157,8 +187,8 @@ export function bm25Rank(
           tf += (opts.weights[f] * count) / norm;
         }
         if (tf === 0) continue;
-        matched.push(surface.get(t)!);
-        raw += (idf.get(t)! * tf * (opts.k1 + 1)) / (opts.k1 + tf);
+        if (!matched.includes(label)) matched.push(label);
+        raw += (weight * idf.get(t)! * tf * (opts.k1 + 1)) / (opts.k1 + tf);
       }
       const score = ceiling > 0 ? (100 * raw) / ceiling : 0;
       return {

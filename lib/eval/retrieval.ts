@@ -10,9 +10,11 @@
 // not evaluated. A Claude call that fails is counted as an error, never
 // replaced by the keyword fallback (that would score BM25 under Claude's name).
 import golden from "../../evals/golden/matcher.json";
+import heldout from "../../evals/golden/matcher-heldout.json";
 import { llmEnabled, type LlmClient } from "../llm/client";
 import { llmMatch, loadCatalog, type CatalogEntry } from "../ai/matcher";
 import { bm25Rank } from "../ai/matcher-bm25";
+import { synonymRank } from "../ai/matcher-synonyms";
 import {
   aggregate,
   hitAtK,
@@ -33,6 +35,13 @@ export interface GoldenQuery {
 
 export function loadGolden(): { description: string; queries: GoldenQuery[] } {
   return structuredClone(golden) as unknown as {
+    description: string;
+    queries: GoldenQuery[];
+  };
+}
+
+export function loadHeldout(): { description: string; queries: GoldenQuery[] } {
+  return structuredClone(heldout) as unknown as {
     description: string;
     queries: GoldenQuery[];
   };
@@ -207,6 +216,14 @@ export const bm25Ranker: Ranker = {
   rank: async (query, catalog) => bm25Rank(query, catalog),
 };
 
+export const synonymRanker: Ranker = {
+  name: "bm25_synonyms",
+  description:
+    "BM25 after translating known medical phrases to catalog words (lib/ai/matcher-synonyms.ts)",
+  scoreScale: "percent",
+  rank: async (query, catalog) => synonymRank(query, catalog),
+};
+
 export function claudeRanker(client?: LlmClient): Ranker {
   return {
     name: "claude",
@@ -231,6 +248,15 @@ export interface RetrievalReport {
   /** True only if Claude ranked every golden query with no errors. */
   claudeEvaluated: boolean;
   results: RankerResult[];
+  /**
+   * Queries written after the synonym map was frozen. Offline rankers only
+   * (Claude is not re-run on them).
+   */
+  heldout: {
+    path: string;
+    queries: number;
+    results: RankerResult[];
+  };
 }
 
 export interface RunRetrievalOptions {
@@ -249,6 +275,7 @@ export async function runRetrieval(
   const rankers: Ranker[] = [
     overlapRanker,
     bm25Ranker,
+    synonymRanker,
     ...(opts.extraRankers ?? []),
   ];
   const skipped: RetrievalReport["rankersSkipped"] = [];
@@ -278,11 +305,17 @@ export async function runRetrieval(
     }
   }
 
+  const held = loadHeldout().queries;
+  const heldResults: RankerResult[] = [];
+  for (const ranker of rankers.filter((r) => r.name !== "claude"))
+    heldResults.push(await evaluateRanker(ranker, held, catalog));
+
   return {
     generatedAt: new Date().toISOString(),
     caveats: [
       `The catalog holds only ${catalog.length} listings and the relevance labels are the author's own judgment, so these numbers are a regression check, not a benchmark.`,
       "The golden set was written before any ranker was scored on it and its labels have not been edited to raise a score.",
+      "The synonym map was written after the first eval showed paraphrase misses, so its gain on the main golden set is in-sample. The held-out set was written after the map was frozen; trust that number more.",
       "Metrics are means over the answerable queries; with this few queries a difference of a few points is noise.",
       "No-answer queries have no relevant listing; falseRelevantRate is how often the top result still has score > 0 (or above a cut-off in the curve).",
     ],
@@ -297,5 +330,10 @@ export async function runRetrieval(
     rankersSkipped: skipped,
     claudeEvaluated,
     results,
+    heldout: {
+      path: "evals/golden/matcher-heldout.json",
+      queries: held.length,
+      results: heldResults,
+    },
   };
 }

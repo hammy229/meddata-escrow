@@ -130,7 +130,11 @@ test("a ranker that throws is counted, not hidden", async () => {
 
 test("the report runs the offline rankers and says Claude was skipped", async () => {
   const report = await runRetrieval({ env: {} });
-  assert.deepEqual(report.rankersRun, ["overlap_baseline", "bm25"]);
+  assert.deepEqual(report.rankersRun, [
+    "overlap_baseline",
+    "bm25",
+    "bm25_synonyms",
+  ]);
   assert.equal(report.claudeEvaluated, false);
   assert.equal(report.rankersSkipped.length, 1);
   assert.equal(report.rankersSkipped[0].name, "claude");
@@ -138,7 +142,8 @@ test("the report runs the offline rankers and says Claude was skipped", async ()
   assert.equal(report.catalogSize, 9);
   assert.match(report.caveats.join(" "), /9 listings/);
   assert.match(report.caveats.join(" "), /regression check, not a benchmark/);
-  assert.equal(report.results.length, 2);
+  assert.equal(report.results.length, 3);
+  assert.equal(report.heldout.results.length, 3);
 });
 
 test("with the LLM enabled, Claude is evaluated through the injected client", async () => {
@@ -154,7 +159,12 @@ test("with the LLM enabled, Claude is evaluated through the injected client", as
     client,
   });
   assert.equal(report.claudeEvaluated, true);
-  assert.deepEqual(report.rankersRun, ["overlap_baseline", "bm25", "claude"]);
+  assert.deepEqual(report.rankersRun, [
+    "overlap_baseline",
+    "bm25",
+    "bm25_synonyms",
+    "claude",
+  ]);
   assert.equal(calls.length, loadGolden().queries.length);
   assert.equal(report.rankersSkipped.length, 0);
 });
@@ -188,6 +198,20 @@ test("BM25 floors on the golden set", async () => {
   assert.ok(m.mrr! >= 0.75, `mrr ${m.mrr}`); // observed 0.778
   assert.ok(m.recallAt3! >= 0.75, `recall@3 ${m.recallAt3}`); // 0.774
   assert.ok(m.ndcgAt3! >= 0.7, `ndcg@3 ${m.ndcgAt3}`); // 0.736
+});
+
+test("synonyms help on the held-out queries, not just the main set", async () => {
+  const { results, heldout } = await runRetrieval({ env: {} });
+  const get = (rs: typeof results, n: string) =>
+    rs.find((r) => r.ranker === n)!.metrics;
+  // held-out observed: overlap 0.664, bm25 0.775, bm25_synonyms 0.846
+  assert.ok(get(heldout.results, "bm25_synonyms").mrr! >= 0.8);
+  assert.ok(
+    get(heldout.results, "bm25_synonyms").mrr! >
+      get(heldout.results, "bm25").mrr!,
+  );
+  // main set observed 0.930 (in-sample, see matcher-synonyms.ts)
+  assert.ok(get(results, "bm25_synonyms").mrr! >= 0.88);
 });
 
 test("evals/results/retrieval.json matches what the code produces now", async () => {
