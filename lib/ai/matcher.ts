@@ -5,12 +5,13 @@
 // validated here: unknown ids are dropped, duplicates collapsed, and any
 // dataset Claude skipped is appended with score 0 and a keyword rationale, so
 // the result always covers the whole catalog exactly once. When the LLM is off
-// or the call fails, the deterministic keyword/tag overlap scorer is used
+// or the call fails, the deterministic BM25 keyword scorer (see ./matcher-bm25) is used
 // instead, so the flow never depends on AWS.
 import catalogData from "../../data/catalog.json";
 import * as z from "zod/v4";
 
 import { llmEnabled, structured, type LlmClient } from "../llm/client";
+import { bm25Rank } from "./matcher-bm25";
 import type { AiOptions } from "./options";
 
 export interface DatasetMatch {
@@ -35,64 +36,11 @@ export function loadCatalog(): CatalogEntry[] {
   return structuredClone(catalogData) as CatalogEntry[];
 }
 
-// Common English filler that appears in both studies and dataset blurbs
-// ("for", "with") and would otherwise count as a matching term.
-const STOP_WORDS = new Set([
-  "and",
-  "are",
-  "but",
-  "for",
-  "from",
-  "has",
-  "have",
-  "into",
-  "its",
-  "not",
-  "our",
-  "that",
-  "the",
-  "their",
-  "this",
-  "was",
-  "were",
-  "what",
-  "which",
-  "who",
-  "will",
-  "with",
-  "you",
-  "your",
-]);
-
-// Lowercase word tokens of length >= 3 (drops noise like "2", "of", "a"),
-// minus filler words.
-function tokens(text: string): string[] {
-  return (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).filter(
-    (t) => t.length >= 3 && !STOP_WORDS.has(t),
-  );
-}
-
 function keywordMatch(
   studyDescription: string,
   catalog: CatalogEntry[],
 ): DatasetMatch[] {
-  const query = new Set(tokens(studyDescription));
-  return catalog
-    .map((d): DatasetMatch => {
-      const haystack = new Set(
-        tokens(`${d.title} ${d.description} ${d.tags.join(" ")}`),
-      );
-      const matched = [...query].filter((t) => haystack.has(t));
-      return {
-        datasetId: d.id,
-        score: matched.length,
-        rationale: matched.length
-          ? `Matched on: ${matched.join(", ")}`
-          : "No direct keyword overlap",
-        source: "keyword",
-      };
-    })
-    .sort((a, b) => b.score - a.score);
+  return bm25Rank(studyDescription, catalog);
 }
 
 const Ranking = z.object({
@@ -152,8 +100,11 @@ async function llmMatch(
     });
   }
   const missing = catalog.filter((d) => !seen.has(d.id));
-  for (const m of keywordMatch(studyDescription, missing)) {
-    out.push({ ...m, score: 0 });
+  // Score against the whole catalog (BM25 needs corpus statistics), then
+  // keep only what the model skipped.
+  const skipped = new Set(missing.map((d) => d.id));
+  for (const m of keywordMatch(studyDescription, catalog)) {
+    if (skipped.has(m.datasetId)) out.push({ ...m, score: 0 });
   }
   return out.sort((a, b) => b.score - a.score);
 }

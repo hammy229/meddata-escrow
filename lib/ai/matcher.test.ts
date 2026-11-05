@@ -155,7 +155,9 @@ test("the flawed ALS listing is the cheapest and the two planted-flaw listings a
   const price = (id: string) => rawCatalog.find((x) => x.id === id)!.priceCents;
   assert.ok(price(ALS_FLAWED) < price(ALS_CLEAN));
   assert.ok(price(ALS_FLAWED) < price(ALS_CURATED));
-  const tagged = rawCatalog.filter((d) => d.tags.includes("planted-flaw")).map((d) => d.id);
+  const tagged = rawCatalog
+    .filter((d) => d.tags.includes("planted-flaw"))
+    .map((d) => d.id);
   assert.deepEqual(tagged, [ALS_FLAWED, ALS_CURATED]);
 });
 
@@ -169,15 +171,30 @@ test("two new demo vendors host the three ALS listings", () => {
 test("ALS descriptions avoid words that would shift the existing rankings", () => {
   for (const id of ALS_IDS) {
     const d = rawCatalog.find((x) => x.id === id)!;
-    const words = new Set(`${d.title} ${d.description} ${d.tags.join(" ")}`.toLowerCase().match(/[a-z0-9]+/g));
-    for (const banned of ["disease", "patient", "cohort", "risk", "heart", "blood", "chronic"]) {
+    const words = new Set(
+      `${d.title} ${d.description} ${d.tags.join(" ")}`
+        .toLowerCase()
+        .match(/[a-z0-9]+/g),
+    );
+    for (const banned of [
+      "disease",
+      "patient",
+      "cohort",
+      "risk",
+      "heart",
+      "blood",
+      "chronic",
+    ]) {
       assert.ok(!words.has(banned), `${id} uses "${banned}"`);
     }
   }
 });
 
 test("an ALS study ranks the flawed listing first (ties go to catalog order)", async () => {
-  const ranked = await matchDatasets("ALS survival with ALSFRS-R and FVC visits", { useLlm: false });
+  const ranked = await matchDatasets(
+    "ALS survival with ALSFRS-R and FVC visits",
+    { useLlm: false },
+  );
   assert.deepEqual(
     ranked.slice(0, 3).map((m) => m.datasetId),
     ALS_IDS,
@@ -191,6 +208,28 @@ test("existing studies still rank the same top dataset with the ALS listings pre
   assert.equal(asthma[0].datasetId, "ds_asthma_pediatric_pilot_v1");
   const hf = await matchDatasets("heart failure readmissions after discharge");
   assert.equal(hf[0].datasetId, "ds_heart_failure_readmissions_v1");
-  const copd = await matchDatasets("chronic obstructive pulmonary disease exacerbations");
+  const copd = await matchDatasets(
+    "chronic obstructive pulmonary disease exacerbations",
+  );
   assert.equal(copd[0].datasetId, "ds_copd_exacerbations_v1");
+});
+
+// --- BM25 offline scoring ---
+
+test("offline scores are numbers in [0, 100] and plurals match singulars", async () => {
+  const ranked = await matchDatasets("inhalers for children with triggers", {
+    useLlm: false,
+  });
+  assert.equal(ranked[0].datasetId, "ds_asthma_pediatric_pilot_v1");
+  assert.match(ranked[0].rationale, /^Matched on: .*inhalers/);
+  for (const m of ranked) {
+    assert.ok(Number.isFinite(m.score) && m.score >= 0 && m.score <= 100);
+  }
+});
+
+test("a study of words the catalog never uses scores 0 everywhere", async () => {
+  const ranked = await matchDatasets("zebra xylophone quasar", {
+    useLlm: false,
+  });
+  assert.ok(ranked.every((m) => m.score === 0));
 });
