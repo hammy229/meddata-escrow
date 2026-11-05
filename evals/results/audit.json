@@ -13793,6 +13793,94 @@
     }
   ],
   "tuning": "The imbalance check was changed after a first run of this eval (commit 078aab0) showed it flagged most small clean cohorts: the standardized difference must now also exceed 2.58 standard errors (SMD_NOISE_Z). That rule was tuned on base seed 1000, the seeds of the main tables, so the main imbalance numbers are in-sample. The freshSeeds block re-runs clean and imbalance on base seed 900000, which was not used for tuning. Every other threshold is unchanged from before the eval.",
+  "selection": {
+    "note": "The screens pick flagged columns on all rows, outside the cross-validation. Real-screen arm: at the screens' own thresholds a pure-noise column was not flagged (screenFlaggedNoise), so chance selection does not reach the leak model. Worst-case arm: forcing the best-looking of K noise columns into the leak model gave a mean gap near zero (bestOfK), though a few small-n runs crossed the leak line. On this evidence selection bias is small, and no in-fold re-screening was added. It only covers noise columns; a real column near the 0.9 threshold could still be picked partly by luck. Synthetic data only.",
+    "noiseColumns": 10,
+    "screenFlaggedNoise": {
+      "100": {
+        "k": 0,
+        "n": 200,
+        "rate": 0,
+        "lo": 0,
+        "hi": 0.0188
+      },
+      "200": {
+        "k": 0,
+        "n": 200,
+        "rate": 0,
+        "lo": 0,
+        "hi": 0.0188
+      },
+      "400": {
+        "k": 0,
+        "n": 200,
+        "rate": 0,
+        "lo": 0,
+        "hi": 0.0188
+      },
+      "1000": {
+        "k": 0,
+        "n": 200,
+        "rate": 0,
+        "lo": 0,
+        "hi": 0.0188
+      }
+    },
+    "bestOfK": {
+      "100": {
+        "k": 50,
+        "runs": 20,
+        "meanSelectedAuc": 0.648,
+        "meanGap": 0.008,
+        "shareOverLine": {
+          "k": 2,
+          "n": 20,
+          "rate": 0.1,
+          "lo": 0.0279,
+          "hi": 0.301
+        }
+      },
+      "200": {
+        "k": 50,
+        "runs": 20,
+        "meanSelectedAuc": 0.607,
+        "meanGap": 0.002,
+        "shareOverLine": {
+          "k": 0,
+          "n": 20,
+          "rate": 0,
+          "lo": 0,
+          "hi": 0.1611
+        }
+      },
+      "400": {
+        "k": 50,
+        "runs": 20,
+        "meanSelectedAuc": 0.573,
+        "meanGap": -0.003,
+        "shareOverLine": {
+          "k": 0,
+          "n": 20,
+          "rate": 0,
+          "lo": 0,
+          "hi": 0.1611
+        }
+      },
+      "1000": {
+        "k": 50,
+        "runs": 20,
+        "meanSelectedAuc": 0.549,
+        "meanGap": 0,
+        "shareOverLine": {
+          "k": 0,
+          "n": 20,
+          "rate": 0,
+          "lo": 0,
+          "hi": 0.1611
+        }
+      }
+    }
+  },
   "drift": {
     "falseAlarm": {
       "100": {

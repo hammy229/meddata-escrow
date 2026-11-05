@@ -13,6 +13,7 @@
 import { smdNumeric } from "../fitness/balance";
 import { runFitnessAudit } from "../fitness/audit";
 import { checkDrift } from "../fitness/drift";
+import { rankAuc } from "../fitness/leakage";
 import { LEAK_GAP, measureLeakImpact } from "../fitness/leak-impact";
 import type { FitnessReport, ListingClaims } from "../fitness/types";
 import { generateAlsCohort, type AlsCohort, type AlsVisit } from "../synth/als";
@@ -394,10 +395,30 @@ export interface AuditEvalResult {
   tuning: string;
   conditions: ConditionResult[];
   leakImpact: Record<string, LeakImpactRow[]>;
+  /** Does the leak gap hold up when the flagged column is picked by the real screen? */
+  selection?: SelectionEval;
   /** Sample vs delivery drift check: false alarms on same-process data, detection of graded shifts. */
   drift?: DriftEval;
   /** Clean and imbalance conditions re-run on seeds that were not used when the imbalance rule was tuned. */
   freshSeeds?: AuditEvalResult;
+}
+
+export interface SelectionEval {
+  note: string;
+  noiseColumns: number;
+  /** Share of cohorts where the real screen flagged any pure-noise column. */
+  screenFlaggedNoise: Record<string, Proportion>;
+  /** Forced: the best-looking of K noise columns (picked on all rows) fed to the leak model. */
+  bestOfK: Record<
+    string,
+    {
+      k: number;
+      runs: number;
+      meanSelectedAuc: number;
+      meanGap: number;
+      shareOverLine: Proportion;
+    }
+  >;
 }
 
 export interface DriftEval {
@@ -553,6 +574,9 @@ export function runAuditEval(opts: EvalOptions = {}): AuditEvalResult {
     summary: { falseAlarmByCheck, falseBlockTruthful, falseBlockEstimated },
     conditions: results,
     tuning: TUNING_NOTE,
+    ...(leakSeeds > 0
+      ? { selection: selectionSection(sizes, seeds, baseSeed, leakSeeds) }
+      : {}),
     ...(!opts.families || opts.families.includes("drift")
       ? { drift: driftSection(sizes, seeds, baseSeed) }
       : {}),
@@ -666,6 +690,132 @@ function driftSection(
         sizes.map((n) => [String(n), wilson(hitK[`${c.id}@${n}`], seeds)]),
       ),
     })),
+  };
+}
+
+const SELECTION_NOTE =
+  "The screens pick flagged columns on all rows, outside the cross-validation. " +
+  "Real-screen arm: at the screens' own thresholds a pure-noise column was not flagged (screenFlaggedNoise), so chance selection does not reach the leak model. " +
+  "Worst-case arm: forcing the best-looking of K noise columns into the leak model gave a mean gap near zero (bestOfK), though a few small-n runs crossed the leak line. " +
+  "On this evidence selection bias is small, and no in-fold re-screening was added. " +
+  "It only covers noise columns; a real column near the 0.9 threshold could still be picked partly by luck. Synthetic data only.";
+const NOISE_COLUMNS = 10;
+const BEST_OF_K = 50;
+const EXCLUDED = ["subject_key", "died", "survival_months", "arm"];
+
+function addNoise(rows: Row[], count: number, rng: Rng): Row[] {
+  return rows.map((r) => {
+    const out: Row = { ...r };
+    for (let j = 0; j < count; j += 1)
+      out[`noise_${j}`] = round(rng.normal(0, 1), 3);
+    return out;
+  });
+}
+
+/**
+ * Selection check. The leak model is told which columns the screens flagged,
+ * and the screens look at all rows, outside the cross-validation. So a column
+ * picked by chance could look better than it is. Two arms, both SYNTHETIC:
+ *  - the real screen, end to end, on clean data plus pure-noise columns
+ *  - the worst case: forcibly take the best-looking of K noise columns
+ */
+function selectionSection(
+  sizes: number[],
+  seeds: number,
+  baseSeed: number,
+  leakSeeds: number,
+): SelectionEval {
+  const screenFlaggedNoise: Record<string, Proportion> = {};
+  const bestOfK: SelectionEval["bestOfK"] = {};
+  for (const n of sizes) {
+    let flagged = 0;
+    for (let i = 0; i < seeds; i += 1) {
+      const seed = baseSeed + i;
+      const base = generateAlsCohort({ seed, variant: "clean", subjects: n });
+      const rows = addNoise(
+        clone(base.subjects),
+        NOISE_COLUMNS,
+        createRng(seed * 13 + n),
+      );
+      const report = runFitnessAudit({
+        datasetId: "eval",
+        stage: "delivery",
+        synthetic: true,
+        study: STUDY,
+        subjects: rows,
+        visits: base.visits as AlsVisit[],
+        leakImpact: false,
+      });
+      const noiseFlag = report.findings.some(
+        (f) =>
+          (f.id === "label_association" || f.id === "temporal_leak") &&
+          (f.severity === "warn" || f.severity === "fail") &&
+          f.column?.startsWith("noise_"),
+      );
+      if (noiseFlag) flagged += 1;
+    }
+    screenFlaggedNoise[String(n)] = wilson(flagged, seeds);
+
+    const gaps: number[] = [];
+    const aucs: number[] = [];
+    for (let i = 0; i < leakSeeds; i += 1) {
+      const seed = baseSeed + i;
+      const base = generateAlsCohort({ seed, variant: "clean", subjects: n });
+      const rows = addNoise(
+        clone(base.subjects),
+        BEST_OF_K,
+        createRng(seed * 17 + n),
+      );
+      const y = rows.map((r) => Number(r.died));
+      let best = "noise_0";
+      let bestAuc = 0.5;
+      for (let j = 0; j < BEST_OF_K; j += 1) {
+        const a =
+          rankAuc(
+            rows.map((r) => Number(r[`noise_${j}`])),
+            y,
+          ) ?? 0.5;
+        if (Math.abs(a - 0.5) > Math.abs(bestAuc - 0.5)) {
+          best = `noise_${j}`;
+          bestAuc = a;
+        }
+      }
+      const features = [
+        ...Object.keys(base.subjects[0]).filter((c) => !EXCLUDED.includes(c)),
+        best,
+      ];
+      const keep = rows.map((r) => {
+        const o: Row = {};
+        for (const c of [...features, "died", "survival_months"]) o[c] = r[c];
+        return o;
+      });
+      const r = measureLeakImpact({
+        subjects: keep,
+        label: "died",
+        timeColumn: "survival_months",
+        features,
+        flagged: [best],
+      });
+      if ("skipped" in r) continue;
+      gaps.push(r.gap);
+      aucs.push(Math.max(bestAuc, 1 - bestAuc));
+    }
+    bestOfK[String(n)] = {
+      k: BEST_OF_K,
+      runs: gaps.length,
+      meanSelectedAuc: round(mean(aucs), 3),
+      meanGap: round(mean(gaps), 3),
+      shareOverLine: wilson(
+        gaps.filter((g) => g >= LEAK_GAP).length,
+        gaps.length,
+      ),
+    };
+  }
+  return {
+    note: SELECTION_NOTE,
+    noiseColumns: NOISE_COLUMNS,
+    screenFlaggedNoise,
+    bestOfK,
   };
 }
 
@@ -843,6 +993,30 @@ export function formatAuditTable(r: AuditEvalResult): string {
             `${Math.round(c.bySize[n].flagged.imbalance.rate * 100)} s${c.bySize[n].medianNote}`,
         ),
       );
+  }
+  if (r.selection) {
+    const sel = r.selection;
+    head("Selection check: does a chance-picked column inflate the leak gap?");
+    cols(
+      "",
+      sizes.map((n) => `n=${n}`),
+    );
+    cols(
+      `real screen flags any of ${sel.noiseColumns} noise columns (%)`,
+      sizes.map((n) => ci(sel.screenFlaggedNoise[n])),
+    );
+    cols(
+      `best of ${BEST_OF_K} noise columns: its AUC vs outcome`,
+      sizes.map((n) => sel.bestOfK[n].meanSelectedAuc.toFixed(3)),
+    );
+    cols(
+      "  mean leak_impact gap if it were flagged",
+      sizes.map((n) => sel.bestOfK[n].meanGap.toFixed(3)),
+    );
+    cols(
+      "  share of runs with gap over the leak line (%)",
+      sizes.map((n) => ci(sel.bestOfK[n].shareOverLine)),
+    );
   }
   if (r.drift) {
     head(

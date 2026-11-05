@@ -91,6 +91,14 @@ describe("audit eval", () => {
     assert.ok(sex.bySize["200"].rate >= 0.8);
   });
 
+  it("runs the real screen with noise columns present and records the selection result", () => {
+    const sel = result.selection!;
+    assert.equal(sel.noiseColumns, 10);
+    assert.equal(sel.screenFlaggedNoise["200"].k, 0);
+    assert.ok(Math.abs(sel.bestOfK["200"].meanGap) < 0.1);
+    assert.match(sel.note, /in-fold re-screening/);
+  });
+
   it("prints a table and a stable rounded file form", () => {
     const text = formatAuditTable(result);
     assert.match(text, /FALSE BLOCK/);
