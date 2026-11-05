@@ -59,7 +59,9 @@ export default function SurvivalPanel({
       }
       setAnalysis(data.analysis as SurvivalAnalysis);
       const cents =
-        typeof data.usage?.chargeCents === "number" ? data.usage.chargeCents : null;
+        typeof data.usage?.chargeCents === "number"
+          ? data.usage.chargeCents
+          : null;
       setCharge(cents);
       if (cents !== null) onAnswered?.(cents);
     } catch {
@@ -72,7 +74,9 @@ export default function SurvivalPanel({
   return (
     <div className="mt-8 border-t border-rule pt-6">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h3 className="font-serif text-[1.3rem] font-normal">Survival curves</h3>
+        <h3 className="font-serif text-[1.3rem] font-normal">
+          Survival curves
+        </h3>
         <span className="rounded-[3px] border border-ink/30 px-1.5 py-0.5 font-mono text-[0.65rem] tracking-[0.14em]">
           SYNTHETIC
         </span>
@@ -109,8 +113,8 @@ export default function SurvivalPanel({
         </div>
         {groupBy === "arm" && (
           <p className="mt-2 text-xs text-muted">
-            Arm also gets a test within age bands, to show whether a gap is
-            only a difference in age.
+            Arm also gets a test within age bands, to show whether a gap is only
+            a difference in age.
           </p>
         )}
       </fieldset>
@@ -139,7 +143,9 @@ export default function SurvivalPanel({
           <PValues analysis={analysis} />
           <SurvivalChart analysis={analysis} />
           {charge !== null && (
-            <p className="text-xs text-muted">Billed {usd(charge)} to this order.</p>
+            <p className="text-xs text-muted">
+              Billed {usd(charge)} to this order.
+            </p>
           )}
         </div>
       )}

@@ -1028,7 +1028,10 @@ test(
       (await deadlineOf(make({ verdict: "pass", blocking: 0 })))?.action,
       "release",
     );
-    assert.equal(await deadlineOf(make({ verdict: "fail", blocking: 1 })), null);
+    assert.equal(
+      await deadlineOf(make({ verdict: "fail", blocking: 1 })),
+      null,
+    );
     assert.equal(
       await deadlineOf(make({ verdict: "inconclusive", blocking: 0 })),
       null,
@@ -1097,7 +1100,10 @@ test(
     // Aggregate counts such as "rows":400 are fine; row values are not.
     for (const text of bodies) {
       assert.ok(!text.includes('"subject_key"'));
-      assert.doesNotMatch(text, /"(survival_months|baseline_alsfrs|age_at_onset)":\s*[\d"]/);
+      assert.doesNotMatch(
+        text,
+        /"(survival_months|baseline_alsfrs|age_at_onset)":\s*[\d"]/,
+      );
     }
   }),
 );

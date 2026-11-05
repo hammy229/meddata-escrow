@@ -25,7 +25,10 @@ export const GROUP_BYS = ["arm", "sex", "onset_site", "age_band"] as const;
 export type GroupBy = (typeof GROUP_BYS)[number];
 
 /** Every 3 months out to 3 years. */
-export const GRID_MONTHS: readonly number[] = Array.from({ length: 13 }, (_, i) => i * 3);
+export const GRID_MONTHS: readonly number[] = Array.from(
+  { length: 13 },
+  (_, i) => i * 3,
+);
 
 const ROUND_TO = 5;
 // Age bands read youngest first; every other grouping sorts by name.
@@ -74,8 +77,7 @@ export interface SurvivalAnalysis {
 }
 
 export type ParsedAnalysis =
-  | { ok: true; groupBy: GroupBy }
-  | { ok: false; error: string };
+  { ok: true; groupBy: GroupBy } | { ok: false; error: string };
 
 /** Accept only { type: "survival", groupBy: <allowlist> }. Any other key is refused. */
 export function parseAnalysis(input: unknown): ParsedAnalysis {
@@ -90,7 +92,10 @@ export function parseAnalysis(input: unknown): ParsedAnalysis {
     };
   if (o.type !== "survival")
     return { ok: false, error: 'analysis.type must be "survival"' };
-  if (typeof o.groupBy !== "string" || !GROUP_BYS.includes(o.groupBy as GroupBy))
+  if (
+    typeof o.groupBy !== "string" ||
+    !GROUP_BYS.includes(o.groupBy as GroupBy)
+  )
     return {
       ok: false,
       error: `analysis.groupBy must be one of: ${GROUP_BYS.join(", ")}`,
@@ -155,7 +160,10 @@ function interpret(
   return `No clear difference between the arms, raw (p ${fmtP(raw)}) or within age bands (p ${fmtP(adjusted)}).${tail}`;
 }
 
-export function survivalAnalysis(cohort: AlsCohort, by: GroupBy): SurvivalOutcome {
+export function survivalAnalysis(
+  cohort: AlsCohort,
+  by: GroupBy,
+): SurvivalOutcome {
   const buckets = new Map<string, AlsSubject[]>();
   for (const s of cohort.subjects) {
     const k = keyOf(s, by);
@@ -188,10 +196,14 @@ export function survivalAnalysis(cohort: AlsCohort, by: GroupBy): SurvivalOutcom
   let raw: PValue | null = null;
   let adjusted: PValue | null = null;
   if (shown.length >= 2) {
-    const r = logRank(shown.map((k) => buckets.get(k)!.map((s) => obsOf(s, false))));
+    const r = logRank(
+      shown.map((k) => buckets.get(k)!.map((s) => obsOf(s, false))),
+    );
     raw = { chiSquare: r.chiSquare, df: r.df, pValue: r.pValue };
     if (by === "arm") {
-      const a = logRank(shown.map((k) => buckets.get(k)!.map((s) => obsOf(s, true))));
+      const a = logRank(
+        shown.map((k) => buckets.get(k)!.map((s) => obsOf(s, true))),
+      );
       adjusted = { chiSquare: a.chiSquare, df: a.df, pValue: a.pValue };
     }
   }
@@ -208,12 +220,23 @@ export function survivalAnalysis(cohort: AlsCohort, by: GroupBy): SurvivalOutcom
       groups,
       withheldGroups,
       logRank: {
-        raw: raw ? { pValue: round4(raw.pValue), df: raw.df } : { pValue: null, df: null },
+        raw: raw
+          ? { pValue: round4(raw.pValue), df: raw.df }
+          : { pValue: null, df: null },
         adjusted: adjusted
-          ? { stratifiedBy: "age_band", pValue: round4(adjusted.pValue), df: adjusted.df }
+          ? {
+              stratifiedBy: "age_band",
+              pValue: round4(adjusted.pValue),
+              df: adjusted.df,
+            }
           : null,
       },
-      interpretation: interpret(by, shown.length, raw?.pValue ?? null, adjusted?.pValue ?? null),
+      interpretation: interpret(
+        by,
+        shown.length,
+        raw?.pValue ?? null,
+        adjusted?.pValue ?? null,
+      ),
     },
   };
 }

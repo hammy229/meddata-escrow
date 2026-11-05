@@ -6,7 +6,11 @@
 // (POST /api/match { fitnessCheck }) and the stored delivery audit
 // (GET /api/orders?id=&audit=1). It is a screen, not proof, and says so.
 import { useEffect, useState, type ReactNode } from "react";
-import type { DeliveryAudit, Finding, FitnessReport } from "../../lib/fitness/types";
+import type {
+  DeliveryAudit,
+  Finding,
+  FitnessReport,
+} from "../../lib/fitness/types";
 import { AlertTriangle, Check } from "./icons";
 
 const ORDER: Record<string, number> = { fail: 0, warn: 1, info: 2, pass: 3 };
@@ -149,9 +153,9 @@ export function SampleFitnessCard({ report }: { report: FitnessReport }) {
   return (
     <FitnessAuditCard heading="Fitness screen of the sample" report={report}>
       <p className="mt-1 text-sm text-muted">
-        This screens the sample rows for study problems such as missing
-        columns, leaks and uneven groups. Listing claims are checked when the
-        data is delivered.
+        This screens the sample rows for study problems such as missing columns,
+        leaks and uneven groups. Listing claims are checked when the data is
+        delivered.
       </p>
     </FitnessAuditCard>
   );

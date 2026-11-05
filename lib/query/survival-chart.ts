@@ -71,7 +71,8 @@ export const DASHES: readonly (string | undefined)[] = [
   "4 2 1 2",
 ];
 
-export type MarkerShape = "circle" | "square" | "triangle" | "diamond" | "cross";
+export type MarkerShape =
+  "circle" | "square" | "triangle" | "diamond" | "cross";
 export const MARKERS: readonly MarkerShape[] = [
   "circle",
   "square",
@@ -101,6 +102,7 @@ export function groupByLabel(groupBy: string): string {
 export function groupLabel(groupBy: string, group: string): string {
   if (groupBy === "arm") return `Arm ${group}`;
   if (groupBy === "age_band") return `Age ${group}`;
-  if (groupBy === "sex") return group === "F" ? "Female" : group === "M" ? "Male" : group;
+  if (groupBy === "sex")
+    return group === "F" ? "Female" : group === "M" ? "Male" : group;
   return group.charAt(0).toUpperCase() + group.slice(1);
 }

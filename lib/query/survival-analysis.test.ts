@@ -14,7 +14,10 @@ import {
 const FLAWED = "ds_als_survival_axonpoint_v1";
 const CLEAN = "ds_als_survival_motorneuron_v1";
 
-function run(id: string, groupBy: (typeof GROUP_BYS)[number]): SurvivalAnalysis {
+function run(
+  id: string,
+  groupBy: (typeof GROUP_BYS)[number],
+): SurvivalAnalysis {
   const out = survivalAnalysis(fixtureCohort(id, "delivery")!, groupBy);
   assert.equal(out.kind, "ok");
   return (out as { kind: "ok"; analysis: SurvivalAnalysis }).analysis;
@@ -94,7 +97,12 @@ test("the arm gap in the flawed cohort goes away within age bands", () => {
   assert.ok(a.logRank.adjusted!.pValue > 0.05);
   assert.match(a.interpretation, /age band/);
   assert.match(a.interpretation, /does not show cause/);
-  assert.equal(/\b(proof|prove[sn]?|causes?d?)\b/i.test(a.interpretation.replace(/does not show cause/, "")), false);
+  assert.equal(
+    /\b(proof|prove[sn]?|causes?d?)\b/i.test(
+      a.interpretation.replace(/does not show cause/, ""),
+    ),
+    false,
+  );
 });
 
 test("a clean cohort says there is no gap to explain", () => {
@@ -110,20 +118,29 @@ test("only the arm grouping gets an adjusted test", () => {
 
 test("a group under the cell floor is dropped, not shown", () => {
   const subs = [
-    ...Array.from({ length: 30 }, (_, i) => subject(i, { arm: "A", survival_months: 5 + i })),
-    ...Array.from({ length: MIN_CELL_SIZE - 1 }, (_, i) => subject(100 + i, { arm: "B" })),
+    ...Array.from({ length: 30 }, (_, i) =>
+      subject(i, { arm: "A", survival_months: 5 + i }),
+    ),
+    ...Array.from({ length: MIN_CELL_SIZE - 1 }, (_, i) =>
+      subject(100 + i, { arm: "B" }),
+    ),
   ];
   const out = survivalAnalysis(cohort(subs), "arm");
   assert.equal(out.kind, "ok");
   const a = (out as { kind: "ok"; analysis: SurvivalAnalysis }).analysis;
-  assert.deepEqual(a.groups.map((g) => g.group), ["A"]);
+  assert.deepEqual(
+    a.groups.map((g) => g.group),
+    ["A"],
+  );
   assert.equal(a.withheldGroups, 1);
   assert.equal(a.logRank.raw.pValue, null);
   assert.equal(a.logRank.adjusted, null);
 });
 
 test("when every group is under the floor the answer is refused", () => {
-  const subs = Array.from({ length: MIN_CELL_SIZE - 1 }, (_, i) => subject(i, {}));
+  const subs = Array.from({ length: MIN_CELL_SIZE - 1 }, (_, i) =>
+    subject(i, {}),
+  );
   const out = survivalAnalysis(cohort(subs), "arm");
   assert.equal(out.kind, "refused");
 });
@@ -132,8 +149,12 @@ test("a curve stops once fewer than the floor are still at risk", () => {
   // 20 people; 12 die by month 10, 8 followed to month 30. After month 10 the
   // at-risk count is 8, under the floor, so the curve ends there.
   const subs = [
-    ...Array.from({ length: 12 }, (_, i) => subject(i, { survival_months: 1 + (i % 9) })),
-    ...Array.from({ length: 8 }, (_, i) => subject(50 + i, { survival_months: 30, died: 0 })),
+    ...Array.from({ length: 12 }, (_, i) =>
+      subject(i, { survival_months: 1 + (i % 9) }),
+    ),
+    ...Array.from({ length: 8 }, (_, i) =>
+      subject(50 + i, { survival_months: 30, died: 0 }),
+    ),
   ];
   const out = survivalAnalysis(cohort(subs), "arm");
   const a = (out as { kind: "ok"; analysis: SurvivalAnalysis }).analysis;
@@ -146,22 +167,42 @@ test("a curve stops once fewer than the floor are still at risk", () => {
 });
 
 test("a median is only given when the curve reaches it, on the grid", () => {
-  const dies = Array.from({ length: 40 }, (_, i) => subject(i, { survival_months: 4 + i * 0.5 }));
-  const a = (survivalAnalysis(cohort(dies), "arm") as { kind: "ok"; analysis: SurvivalAnalysis }).analysis;
+  const dies = Array.from({ length: 40 }, (_, i) =>
+    subject(i, { survival_months: 4 + i * 0.5 }),
+  );
+  const a = (
+    survivalAnalysis(cohort(dies), "arm") as {
+      kind: "ok";
+      analysis: SurvivalAnalysis;
+    }
+  ).analysis;
   const m = a.groups[0].medianMonths;
   assert.ok(m !== null && m % 3 === 0);
 
-  const alive = Array.from({ length: 20 }, (_, i) => subject(i, { survival_months: 20, died: 0 }));
-  const b = (survivalAnalysis(cohort(alive), "arm") as { kind: "ok"; analysis: SurvivalAnalysis }).analysis;
+  const alive = Array.from({ length: 20 }, (_, i) =>
+    subject(i, { survival_months: 20, died: 0 }),
+  );
+  const b = (
+    survivalAnalysis(cohort(alive), "arm") as {
+      kind: "ok";
+      analysis: SurvivalAnalysis;
+    }
+  ).analysis;
   assert.equal(b.groups[0].medianMonths, null);
 });
 
 test("at-risk counts are rounded so one person cannot be read", () => {
   const mk = (n: number) =>
-    (survivalAnalysis(
-      cohort(Array.from({ length: n }, (_, i) => subject(i, { survival_months: 30, died: 0 }))),
-      "arm",
-    ) as { kind: "ok"; analysis: SurvivalAnalysis }).analysis.groups[0].curve[0].atRisk;
+    (
+      survivalAnalysis(
+        cohort(
+          Array.from({ length: n }, (_, i) =>
+            subject(i, { survival_months: 30, died: 0 }),
+          ),
+        ),
+        "arm",
+      ) as { kind: "ok"; analysis: SurvivalAnalysis }
+    ).analysis.groups[0].curve[0].atRisk;
   assert.equal(mk(31), mk(32));
   assert.equal(mk(31) % 5, 0);
 });

@@ -7,7 +7,10 @@
 // numbers for anyone who cannot read the picture. Colours are the page tokens,
 // so the chart follows light and dark mode.
 import { useId } from "react";
-import type { SurvivalAnalysis, SurvivalGroup } from "../../lib/query/survival-analysis";
+import type {
+  SurvivalAnalysis,
+  SurvivalGroup,
+} from "../../lib/query/survival-analysis";
 import {
   dashFor,
   formatP,
@@ -51,7 +54,9 @@ function Marker({
   const common = { fill: "var(--background)", stroke, strokeWidth: 1.5 };
   switch (shape) {
     case "square":
-      return <rect x={cx - s} y={cy - s} width={s * 2} height={s * 2} {...common} />;
+      return (
+        <rect x={cx - s} y={cy - s} width={s * 2} height={s * 2} {...common} />
+      );
     case "triangle":
       return (
         <polygon
@@ -84,7 +89,13 @@ function Marker({
 function Swatch({ i }: { i: number }) {
   const stroke = STROKES[i % STROKES.length];
   return (
-    <svg width="34" height="12" viewBox="0 0 34 12" aria-hidden="true" className="shrink-0">
+    <svg
+      width="34"
+      height="12"
+      viewBox="0 0 34 12"
+      aria-hidden="true"
+      className="shrink-0"
+    >
       <line
         x1="1"
         x2="33"
@@ -107,7 +118,11 @@ function medianText(g: SurvivalGroup): string {
 
 const pct = (s: number) => `${Math.round(s * 100)}%`;
 
-export default function SurvivalChart({ analysis }: { analysis: SurvivalAnalysis }) {
+export default function SurvivalChart({
+  analysis,
+}: {
+  analysis: SurvivalAnalysis;
+}) {
   const uid = useId();
   const titleId = `${uid}-t`;
   const descId = `${uid}-d`;
@@ -122,7 +137,8 @@ export default function SurvivalChart({ analysis }: { analysis: SurvivalAnalysis
   });
   const labelYs = spreadLabels(endYs, 15, M.top + 6, M.top + PLOT_H - 2);
   const tableMonths = X_TICKS.filter((m) => analysis.grid.includes(m));
-  const find = (g: SurvivalGroup, m: number) => g.curve.find((p) => p.month === m);
+  const find = (g: SurvivalGroup, m: number) =>
+    g.curve.find((p) => p.month === m);
   const truncated = groups.filter((g) => g.truncatedAtMonth !== null);
 
   return (
@@ -259,7 +275,10 @@ export default function SurvivalChart({ analysis }: { analysis: SurvivalAnalysis
         })}
       </svg>
 
-      <ul className="flex flex-wrap gap-x-5 gap-y-2 text-sm sm:hidden" aria-label="Key">
+      <ul
+        className="flex flex-wrap gap-x-5 gap-y-2 text-sm sm:hidden"
+        aria-label="Key"
+      >
         {groups.map((g, i) => (
           <li key={g.group} className="flex items-center gap-2">
             <Swatch i={i} />
@@ -292,7 +311,11 @@ export default function SurvivalChart({ analysis }: { analysis: SurvivalAnalysis
                   Group
                 </th>
                 {tableMonths.map((m) => (
-                  <th key={m} scope="col" className="px-2 py-1.5 text-right font-normal">
+                  <th
+                    key={m}
+                    scope="col"
+                    className="px-2 py-1.5 text-right font-normal"
+                  >
                     {m}
                   </th>
                 ))}
@@ -308,7 +331,10 @@ export default function SurvivalChart({ analysis }: { analysis: SurvivalAnalysis
                     </span>
                   </th>
                   {tableMonths.map((m) => (
-                    <td key={m} className="px-2 py-1.5 text-right font-mono text-xs">
+                    <td
+                      key={m}
+                      className="px-2 py-1.5 text-right font-mono text-xs"
+                    >
                       {find(g, m)?.atRisk ?? "-"}
                     </td>
                   ))}
@@ -327,7 +353,9 @@ export default function SurvivalChart({ analysis }: { analysis: SurvivalAnalysis
         <p className="text-xs text-muted">
           {truncated.length > 0 &&
             `A curve stops when fewer than 11 people are still at risk${
-              truncated.length === groups.length ? "" : ` (${truncated.map(label).join(", ")})`
+              truncated.length === groups.length
+                ? ""
+                : ` (${truncated.map(label).join(", ")})`
             }. `}
           {analysis.withheldGroups > 0 &&
             `${analysis.withheldGroups} group${analysis.withheldGroups === 1 ? " was" : "s were"} left out because it had fewer than 11 people.`}
@@ -347,7 +375,11 @@ export default function SurvivalChart({ analysis }: { analysis: SurvivalAnalysis
                   Group
                 </th>
                 {analysis.grid.map((m) => (
-                  <th key={m} scope="col" className="px-2 py-1.5 text-right font-normal">
+                  <th
+                    key={m}
+                    scope="col"
+                    className="px-2 py-1.5 text-right font-normal"
+                  >
                     {m}
                   </th>
                 ))}
@@ -360,7 +392,10 @@ export default function SurvivalChart({ analysis }: { analysis: SurvivalAnalysis
                     {label(g)}
                   </th>
                   {analysis.grid.map((m) => (
-                    <td key={m} className="px-2 py-1.5 text-right font-mono text-xs">
+                    <td
+                      key={m}
+                      className="px-2 py-1.5 text-right font-mono text-xs"
+                    >
                       {find(g, m) ? pct(find(g, m)!.survival) : "-"}
                     </td>
                   ))}
@@ -395,7 +430,9 @@ export function PValues({ analysis }: { analysis: SurvivalAnalysis }) {
           </div>
         )}
       </dl>
-      <p className="font-serif text-lg leading-snug">{analysis.interpretation}</p>
+      <p className="font-serif text-lg leading-snug">
+        {analysis.interpretation}
+      </p>
     </div>
   );
 }

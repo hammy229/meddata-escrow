@@ -120,7 +120,10 @@ test("fitnessCheck returns the sample-stage report for a fixture listing", async
   assert.ok(["pass", "warn", "fail"].includes(fitnessCheck.verdict));
   assert.ok(fitnessCheck.findings.length > 0);
   assert.match(fitnessCheck.disclaimer, /screen, not proof/);
-  assert.equal(/subject_key":"s|survival_months":\d/.test(JSON.stringify(fitnessCheck)), false);
+  assert.equal(
+    /subject_key":"s|survival_months":\d/.test(JSON.stringify(fitnessCheck)),
+    false,
+  );
 });
 
 test("fitnessCheck passes the clean sample of the curated listing", async () => {
@@ -140,7 +143,11 @@ test("fitnessCheck errors mirror sampleCheck", async () => {
   assert.equal((await POST(req({ fitnessCheck: "ds_nope" }))).status, 404);
   assert.equal((await POST(req({ fitnessCheck: 7 }))).status, 422);
   assert.equal(
-    (await POST(req({ fitnessCheck: "ds_als_survival_curated_v1", description: 5 }))).status,
+    (
+      await POST(
+        req({ fitnessCheck: "ds_als_survival_curated_v1", description: 5 }),
+      )
+    ).status,
     422,
   );
 });

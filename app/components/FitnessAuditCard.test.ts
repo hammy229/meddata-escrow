@@ -13,7 +13,12 @@ const report = {
   disclaimer: "This is a screen, not proof.",
   methodVersion: 1,
   findings: [
-    { id: "coverage", severity: "pass", title: "Coverage fine", reason: "All there." },
+    {
+      id: "coverage",
+      severity: "pass",
+      title: "Coverage fine",
+      reason: "All there.",
+    },
     {
       // An id the component has never heard of must still render.
       id: "brand_new_check",
@@ -38,7 +43,9 @@ test("a finding with an unknown id renders from title, reason and metric", () =>
   assert.match(html, /SYNTHETIC/);
   assert.match(html, /screen, not proof/);
   // Problems come before passes.
-  assert.ok(html.indexOf("Something new broke") < html.indexOf("Coverage fine"));
+  assert.ok(
+    html.indexOf("Something new broke") < html.indexOf("Coverage fine"),
+  );
 });
 
 test("heldReason is plain and differs by side", () => {
@@ -53,7 +60,10 @@ test("heldReason is plain and differs by side", () => {
     heldReason({ verdict: "warn", blocking: false }, "vendor")!,
     /Warnings do not hold payment/,
   );
-  assert.equal(heldReason({ verdict: "pass", blocking: false }, "vendor"), null);
+  assert.equal(
+    heldReason({ verdict: "pass", blocking: false }, "vendor"),
+    null,
+  );
   for (const r of ["researcher", "vendor"] as const)
     assert.equal(/proof|tamper/i.test(heldReason(blocked, r)!), false);
 });
