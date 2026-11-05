@@ -48,10 +48,16 @@ What this taught us:
 - **There is a known blind spot.** A leak weaker than AUC 0.90 is not flagged.
   That is the warn line, chosen on purpose, and the table shows exactly what it
   costs.
-- **There is an open decision.** The second row is a vendor who quotes an event
-  rate from a different cut of the data. At small sizes that often gets money
-  held. We left it strict because a listing is a promise about what gets
-  delivered, but a statistical tolerance would be fair too.
+- **We kept the claim check strict on purpose.** The second row is a vendor whose
+  whole listing was computed on a different cut of the data. At n=100 the event
+  rate misses its 5 point line in 47% of runs and the record count misses its 10%
+  line in 24%, sometimes both. A tolerance for sampling noise would cut event rate
+  holds at n=100 from 42% to 5%, but it would move the line from 5 points to 13.6.
+  A vendor could then overstate the event rate by 13 points and get paid
+  automatically, and more events make a dataset look more useful. A hold only
+  sends the order to a person, and an honest vendor avoids it by listing numbers
+  from the rows they will deliver. The 42% and 5% come from a one-off run on seeds
+  900000 and up, which CI does not check.
 
 ### What a leak does to a model
 
