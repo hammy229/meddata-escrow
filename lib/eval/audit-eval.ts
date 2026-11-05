@@ -1042,23 +1042,123 @@ export function formatAuditTable(r: AuditEvalResult): string {
   return lines.join("\n");
 }
 
-/** Round every proportion for a stable file. */
-export function roundedForFile(result: AuditEvalResult): AuditEvalResult {
-  const fix = (v: unknown): unknown => {
-    if (Array.isArray(v)) return v.map(fix);
-    if (v && typeof v === "object") {
-      const o = v as Record<string, unknown>;
-      if ("k" in o && "n" in o && "rate" in o && "lo" in o && "hi" in o)
-        return {
-          k: o.k,
-          n: o.n,
-          rate: round(o.rate as number),
-          lo: round(o.lo as number),
-          hi: round(o.hi as number),
-        };
-      return Object.fromEntries(Object.entries(o).map(([k, x]) => [k, fix(x)]));
-    }
-    return v;
+type Packed = [k: number, n: number, lo: number, hi: number];
+const pack = (p: Proportion): Packed => [
+  p.k,
+  p.n,
+  round(p.lo, 3),
+  round(p.hi, 3),
+];
+const mapValues = <T, U>(
+  o: Record<string, T>,
+  f: (v: T, k: string) => U,
+): Record<string, U> =>
+  Object.fromEntries(Object.entries(o).map(([k, v]) => [k, f(v, k)]));
+
+function packConditions(list: ConditionResult[]) {
+  return list.map((c) => ({
+    id: c.id,
+    family: c.family,
+    check: c.check,
+    label: c.label,
+    level: c.level,
+    // The check that should catch the flaw; blocked is the share where money is held.
+    bySize: mapValues(c.bySize, (cell) => ({
+      flagged: pack(cell.flagged[c.check]),
+      blocked: pack(cell.blocked),
+      ...(c.family === "clean" ? { verdictFail: pack(cell.verdictFail) } : {}),
+      ...(cell.medianNote !== undefined ? { medianNote: cell.medianNote } : {}),
+    })),
+  }));
+}
+
+/**
+ * The committed form of a result: every proportion is [k, n, wilsonLow, wilsonHigh]
+ * (rate is k/n), each condition keeps only the check that should catch it, and
+ * repeated fields are dropped. Nothing the summary needs is lost.
+ */
+export function compactForFile(r: AuditEvalResult): Record<string, unknown> {
+  return {
+    schema: r.schema,
+    synthetic: r.synthetic,
+    format:
+      "proportions are [k, n, wilson95Low, wilson95High]; the rate is k/n",
+    limitations: r.limitations,
+    tuning: r.tuning,
+    config: r.config,
+    summary: {
+      falseAlarmByCheck: mapValues(r.summary.falseAlarmByCheck, (v) =>
+        mapValues(v, pack),
+      ),
+      falseBlockTruthful: mapValues(r.summary.falseBlockTruthful, pack),
+      falseBlockEstimated: mapValues(r.summary.falseBlockEstimated, pack),
+    },
+    conditions: packConditions(r.conditions),
+    leakImpact: mapValues(r.leakImpact, (rows) =>
+      rows.map((x) => ({ ...x, shareOverLine: pack(x.shareOverLine) })),
+    ),
+    ...(r.selection
+      ? {
+          selection: {
+            note: r.selection.note,
+            noiseColumns: r.selection.noiseColumns,
+            screenFlaggedNoise: mapValues(r.selection.screenFlaggedNoise, pack),
+            bestOfK: mapValues(r.selection.bestOfK, (b) => ({
+              ...b,
+              shareOverLine: pack(b.shareOverLine),
+            })),
+          },
+        }
+      : {}),
+    ...(r.drift
+      ? {
+          drift: {
+            falseAlarm: mapValues(r.drift.falseAlarm, pack),
+            conditions: r.drift.conditions.map((c) => ({
+              ...c,
+              bySize: mapValues(c.bySize, pack),
+            })),
+          },
+        }
+      : {}),
+    ...(r.freshSeeds
+      ? {
+          freshSeeds: {
+            baseSeed: r.freshSeeds.config.baseSeed,
+            falseAlarmImbalance: mapValues(
+              r.freshSeeds.summary.falseAlarmByCheck,
+              (v) => pack(v.imbalance),
+            ),
+            conditions: packConditions(
+              r.freshSeeds.conditions.filter((c) => c.family === "imbalance"),
+            ),
+          },
+        }
+      : {}),
   };
-  return fix(result) as AuditEvalResult;
+}
+
+/** JSON with two-space indent where anything short enough stays on one line, so a table row is a line. */
+export function toCompactJson(
+  value: unknown,
+  maxInline = 460,
+  indent = 0,
+): string {
+  const flat = JSON.stringify(value);
+  if (
+    flat === undefined ||
+    flat.length <= maxInline ||
+    typeof value !== "object" ||
+    value === null
+  )
+    return flat;
+  const pad = "  ".repeat(indent + 1);
+  const end = "  ".repeat(indent);
+  if (Array.isArray(value))
+    return `[\n${value.map((v) => pad + toCompactJson(v, maxInline, indent + 1)).join(",\n")}\n${end}]`;
+  const entries = Object.entries(value).map(
+    ([k, v]) =>
+      `${pad}${JSON.stringify(k)}: ${toCompactJson(v, maxInline, indent + 1)}`,
+  );
+  return `{\n${entries.join(",\n")}\n${end}}`;
 }

@@ -8,7 +8,8 @@ import {
   blocksMoney,
   buildConditions,
   formatAuditTable,
-  roundedForFile,
+  compactForFile,
+  toCompactJson,
   runAuditEval,
   truthfulClaims,
 } from "./audit-eval";
@@ -99,13 +100,38 @@ describe("audit eval", () => {
     assert.match(sel.note, /in-fold re-screening/);
   });
 
-  it("prints a table and a stable rounded file form", () => {
+  it("prints a table", () => {
     const text = formatAuditTable(result);
     assert.match(text, /FALSE BLOCK/);
     assert.match(text, /SYNTHETIC/);
-    const rounded = roundedForFile(result);
-    const p = rounded.summary.falseBlockTruthful["100"];
-    assert.equal(p.rate, Math.round(p.rate * 1e4) / 1e4);
+  });
+
+  it("writes a compact file that keeps what the summary needs", () => {
+    const text = toCompactJson(compactForFile(result));
+    const back = JSON.parse(text);
+    assert.equal(back.synthetic, true);
+    assert.match(back.limitations, /SYNTHETIC/);
+    const p = back.summary.falseBlockTruthful["100"];
+    const full = result.summary.falseBlockTruthful["100"];
+    assert.deepEqual(p.slice(0, 2), [full.k, full.n]);
+    assert.ok(p[2] <= p[0] / p[1] && p[0] / p[1] <= p[3]);
+    assert.ok(back.summary.falseAlarmByCheck["100"].imbalance);
+    assert.ok(back.drift.falseAlarm["100"]);
+    assert.ok(back.selection.screenFlaggedNoise["100"]);
+    assert.equal(back.conditions.length, result.conditions.length);
+    // A condition row is one short line, not a screenful.
+    assert.ok(text.split("\n").length < result.conditions.length * 3);
+    assert.deepEqual(
+      compactForFile(result),
+      JSON.parse(JSON.stringify(compactForFile(result))),
+    );
+  });
+
+  it("toCompactJson keeps short values on one line and round trips", () => {
+    const v = { a: [1, 2, 3], b: { c: "x".repeat(300), d: [4, 5] } };
+    const text = toCompactJson(v, 50);
+    assert.deepEqual(JSON.parse(text), v);
+    assert.match(text, /"a": \[1,2,3\]/);
   });
 });
 

@@ -5,7 +5,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
   formatAuditTable,
-  roundedForFile,
+  compactForFile,
+  toCompactJson,
   runAuditEval,
 } from "../../lib/eval/audit-eval";
 
@@ -18,12 +19,12 @@ if (!Number.isInteger(seeds) || seeds < 1)
   throw new Error("--seeds must be a positive integer");
 
 const started = Date.now();
-const result = roundedForFile(runAuditEval({ seeds }));
+const result = runAuditEval({ seeds });
 console.log(formatAuditTable(result));
 console.log(`\nran in ${((Date.now() - started) / 1000).toFixed(1)}s`);
 
 if (!process.argv.includes("--no-write")) {
   mkdirSync(dirname(out), { recursive: true });
-  writeFileSync(out, `${JSON.stringify(result, null, 2)}\n`);
+  writeFileSync(out, `${toCompactJson(compactForFile(result))}\n`);
   console.log(`wrote ${out}`);
 }
