@@ -125,7 +125,7 @@ export async function llmMatch(
   // keep only what the model skipped.
   const skipped = new Set(missing.map((d) => d.id));
   for (const m of keywordMatch(studyDescription, catalog)) {
-    if (skipped.has(m.datasetId)) out.push({ ...m, score: 0 });
+    if (skipped.has(m.datasetId)) out.push({ ...m, score: 0, relevant: false });
   }
   return out.sort((a, b) => b.score - a.score);
 }
