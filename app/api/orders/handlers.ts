@@ -5,6 +5,7 @@ import { generateDua } from "../../../lib/escrow/dua";
 import { listingClaims } from "../../../lib/fitness/source";
 import { getVendor } from "../../../lib/db/store";
 import { listDatasets } from "../../../lib/db/store";
+import { userNote } from "../../../lib/escrow/audit-note";
 import { ESCROW_STATES } from "../../../lib/escrow/state-machine";
 import { vendorPayoutCents, platformFeeCents } from "../../../lib/escrow/fees";
 import type { Account } from "../../../lib/auth/store";
@@ -301,7 +302,7 @@ export async function PATCH(request: Request, account?: Account) {
         orderId: body?.orderId,
         captureCents: body?.captureCents,
         actor: account?.role === "vendor" ? "vendor" : "researcher",
-        note: body?.note,
+        note: userNote(body?.note),
       });
       return Response.json({
         escrowState: order.status,
@@ -315,7 +316,7 @@ export async function PATCH(request: Request, account?: Account) {
       resolution: body?.resolution,
       captureCents: body?.captureCents,
       actor: account?.role,
-      note: body?.note,
+      note: userNote(body?.note),
       requestId: body?.requestId,
     });
     return Response.json(advanceBody(result));

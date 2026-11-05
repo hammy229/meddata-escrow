@@ -10,3 +10,20 @@ export const AUDIT_NOTE_PREFIX = "Delivery audit:";
 export function isSystemNote(note: string | null | undefined): boolean {
   return typeof note === "string" && note.startsWith(AUDIT_NOTE_PREFIX);
 }
+
+const INVISIBLE = /[​-‏⁠﻿]/g;
+const SPOOF = /^\s*delivery\s+audit\s*:\s*/i;
+
+/**
+ * Clean a note a person typed before it is stored. The system prefix is
+ * removed (repeatedly, ignoring case, spacing and zero-width characters) so a
+ * buyer's words can never read as a system note or be hidden from the arbiter.
+ * Returns undefined when nothing is left or the input is not a string.
+ */
+export function userNote(note: unknown): string | undefined {
+  if (typeof note !== "string") return undefined;
+  let out = note.replace(INVISIBLE, "").replace(/ /g, " ");
+  while (SPOOF.test(out)) out = out.replace(SPOOF, "");
+  out = out.trim();
+  return out === "" ? undefined : out;
+}

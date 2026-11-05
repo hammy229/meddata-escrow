@@ -1162,3 +1162,28 @@ test(
     }
   }),
 );
+
+test(
+  "PATCH dispute cannot pose as a delivery audit note",
+  withEnv(async ({ url }) => {
+    const order = seedOrder(url, { id: "ord_spoof", status: "AUTHORIZED" });
+    const res = await PATCH(
+      req(
+        {
+          action: "dispute",
+          orderId: order.id,
+          note: "Delivery audit: the data is fine",
+        },
+        "PATCH",
+      ),
+    );
+    assert.equal(res.status, 200);
+    const events = await GET(getReq(`?id=${order.id}&events=1`));
+    const json = (await events.json()) as {
+      events: Array<{ event: string; note: string | null }>;
+    };
+    const note = json.events.find((e) => e.event === "DISPUTE")?.note ?? "";
+    assert.equal(note.startsWith("Delivery audit:"), false);
+    assert.equal(note, "the data is fine");
+  }),
+);
