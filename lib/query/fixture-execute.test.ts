@@ -118,8 +118,15 @@ test("groups under the cell floor are dropped, and so are small tables", () => {
     ...Array.from({ length: 11 }, () => row("50-59")),
     ...Array.from({ length: 10 }, () => row("70+")),
   ];
-  const grouped = aggregateRows(rows, { op: "count", field: null, groupBy: "age_group" });
-  assert.deepEqual(grouped, { kind: "rows", rows: [{ group: "50-59", count: 11 }] });
+  const byAge = { op: "count", field: null, groupBy: "age_group" } as QueryPlan;
+  // With two groups, showing one gives away the other by subtraction.
+  assert.deepEqual(aggregateRows(rows, byAge), { kind: "rows", rows: [] });
+  // With three, the small group takes the next smallest with it.
+  const three = [...rows, ...Array.from({ length: 30 }, () => row("60-69"))];
+  assert.deepEqual(aggregateRows(three, byAge), {
+    kind: "rows",
+    rows: [{ group: "60-69", count: 30 }],
+  });
   assert.deepEqual(aggregateRows(rows.slice(0, 10), count), { kind: "rows", rows: [] });
   assert.deepEqual(aggregateRows(rows.slice(0, 11), count), { kind: "rows", rows: [{ count: 11 }] });
 });

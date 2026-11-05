@@ -4,7 +4,8 @@
 // filters, so two requests cannot be subtracted to isolate a person. What
 // leaves is a Kaplan-Meier curve on a coarse grid, never an event time or a
 // row:
-//   - a group with fewer than MIN_CELL_SIZE people is withheld;
+//   - a group with fewer than MIN_CELL_SIZE people is withheld, along with the
+//     next smallest group so subtraction cannot reveal it (see ./suppression);
 //   - a curve stops at the last grid point that still has MIN_CELL_SIZE people
 //     at risk;
 //   - at-risk counts are rounded to the nearest 5;
@@ -20,6 +21,7 @@ import {
   survivalAt,
   type SurvivalObs,
 } from "../stats/survival";
+import { withheldCells } from "./suppression";
 
 export const GROUP_BYS = ["arm", "sex", "onset_site", "age_band"] as const;
 export type GroupBy = (typeof GROUP_BYS)[number];
@@ -174,7 +176,11 @@ export function survivalAnalysis(
   const keys = [...buckets.keys()].sort(
     (a, b) => AGE_ORDER.indexOf(a) - AGE_ORDER.indexOf(b) || a.localeCompare(b),
   );
-  const shown = keys.filter((k) => buckets.get(k)!.length >= MIN_CELL_SIZE);
+  const hidden = withheldCells(
+    new Map([...buckets].map(([k, list]) => [k, list.length])),
+    MIN_CELL_SIZE,
+  );
+  const shown = keys.filter((k) => !hidden.has(k));
   const withheldGroups = keys.length - shown.length;
   if (shown.length === 0)
     return {

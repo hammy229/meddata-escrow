@@ -890,7 +890,7 @@ const privacyScenarios: Scenario[] = [
     category: "privacy",
     title: "Recover a suppressed cell by subtraction",
     attack:
-      "Ask for the total count, then the count by age group. The grouped answer silently drops the 5-person band; total minus the published bands is the dropped cell.",
+      "Ask for the total count, then the count by age group, and subtract the published bands from the total to recover the 5-person band.",
     run: async () => {
       const total = await pipeline(SAFE_Q, "ds_x", { table: SMALL_TABLE });
       const grouped = await pipeline(
@@ -909,10 +909,13 @@ const privacyScenarios: Scenario[] = [
       const n = Number(total.rows[0].count);
       const shown = grouped.rows.reduce((s, r) => s + Number(r.count), 0);
       const recovered = n - shown;
+      const violated = recovered > 0 && recovered < MIN_CELL_SIZE;
       return {
-        violated: recovered > 0 && recovered < MIN_CELL_SIZE,
-        evidence: `total ${n} minus published bands ${shown} = ${recovered}: the suppressed cell size`,
-        guard: null,
+        violated,
+        evidence: violated
+          ? `total ${n} minus published bands ${shown} = ${recovered}: the suppressed cell size`
+          : `total ${n} minus published bands ${shown} = ${recovered}: only a sum of at least ${MIN_CELL_SIZE} people can be recovered`,
+        guard: violated ? null : "complementary suppression (withheldCells)",
       };
     },
   },

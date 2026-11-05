@@ -116,7 +116,7 @@ test("only the arm grouping gets an adjusted test", () => {
   assert.equal(run(FLAWED, "age_band").logRank.adjusted, null);
 });
 
-test("a group under the cell floor is dropped, not shown", () => {
+test("with two groups, a small one hides both, so subtraction reveals nothing", () => {
   const subs = [
     ...Array.from({ length: 30 }, (_, i) =>
       subject(i, { arm: "A", survival_months: 5 + i }),
@@ -125,16 +125,28 @@ test("a group under the cell floor is dropped, not shown", () => {
       subject(100 + i, { arm: "B" }),
     ),
   ];
-  const out = survivalAnalysis(cohort(subs), "arm");
+  assert.equal(survivalAnalysis(cohort(subs), "arm").kind, "refused");
+});
+
+test("a small group takes the next smallest with it and the rest are shown", () => {
+  const band = (n: number, age_band: AlsSubject["age_band"], start: number) =>
+    Array.from({ length: n }, (_, i) =>
+      subject(start + i, { age_band, survival_months: 5 + i }),
+    );
+  const subs = [
+    ...band(MIN_CELL_SIZE - 1, "<50", 0),
+    ...band(20, "50-59", 100),
+    ...band(40, "60-69", 200),
+    ...band(50, "70+", 300),
+  ];
+  const out = survivalAnalysis(cohort(subs), "age_band");
   assert.equal(out.kind, "ok");
   const a = (out as { kind: "ok"; analysis: SurvivalAnalysis }).analysis;
   assert.deepEqual(
     a.groups.map((g) => g.group),
-    ["A"],
+    ["60-69", "70+"],
   );
-  assert.equal(a.withheldGroups, 1);
-  assert.equal(a.logRank.raw.pValue, null);
-  assert.equal(a.logRank.adjusted, null);
+  assert.equal(a.withheldGroups, 2);
 });
 
 test("when every group is under the floor the answer is refused", () => {

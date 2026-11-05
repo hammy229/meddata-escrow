@@ -15,6 +15,7 @@ import { MIN_CELL_SIZE } from "../ai/privacy-guard";
 import type { QueryPlan } from "../ai/nl2query";
 import { fixtureCohort } from "../fitness/source";
 import type { AggregateRow } from "./mock-execute";
+import { withheldCells } from "./suppression";
 
 export type FixtureOutcome =
   | { kind: "none" }
@@ -112,11 +113,19 @@ export function aggregateRows(rows: RecordRow[], plan: QueryPlan): FixtureOutcom
     buckets.set("", rows);
   }
 
+  const peopleIn = new Map(
+    [...buckets].map(([key, cell]) => [key, onePerPerson(cell)]),
+  );
+  const hidden = withheldCells(
+    new Map([...peopleIn].map(([key, p]) => [key, p.length])),
+    MIN_CELL_SIZE,
+  );
+
   const out: AggregateRow[] = [];
   for (const key of [...buckets.keys()].sort()) {
+    if (hidden.has(key)) continue;
     const cell = buckets.get(key)!;
-    const people = onePerPerson(cell);
-    if (people.length < MIN_CELL_SIZE) continue;
+    const people = peopleIn.get(key)!;
     const base: AggregateRow = groupCol ? { group: key } : {};
     if (plan.op === "count") {
       out.push({ ...base, count: people.length });

@@ -57,7 +57,7 @@ test("source addresses and identifiers are restricted", () => {
   );
   assert.match(
     aggregateSql(credentials, { op: "avg", field: "age", groupBy: "sex" }).sql,
-    /HAVING COUNT\(\*\) >= 11/,
+    /COUNT\(\*\) AS "_cell_count"/,
   );
 });
 
@@ -84,7 +84,7 @@ test("live source queries execute read-only aggregates with real PostgreSQL supp
   });
   try {
     await pg.exec(
-      "CREATE TABLE public.research_records (dataset_id text, sex text, age numeric); INSERT INTO public.research_records SELECT 'cohort', CASE WHEN n <= 20 THEN 'female' ELSE 'male' END, 40 FROM generate_series(1,25) n; CREATE ROLE research_reader NOSUPERUSER NOBYPASSRLS; GRANT USAGE ON SCHEMA public TO research_reader; GRANT SELECT ON public.research_records TO research_reader;",
+      "CREATE TABLE public.research_records (dataset_id text, sex text, age numeric); INSERT INTO public.research_records SELECT 'cohort', CASE WHEN n <= 20 THEN 'female' ELSE 'male' END, 40 FROM generate_series(1,25) n; INSERT INTO public.research_records SELECT 'three', CASE WHEN n <= 5 THEN 'small' WHEN n <= 25 THEN 'middle' ELSE 'large' END, 40 FROM generate_series(1,65) n; CREATE ROLE research_reader NOSUPERUSER NOBYPASSRLS; GRANT USAGE ON SCHEMA public TO research_reader; GRANT SELECT ON public.research_records TO research_reader;",
     );
     assert.deepEqual((await inspectSource(credentials, factory)).fields, [
       "sex",
@@ -97,7 +97,18 @@ test("live source queries execute read-only aggregates with real PostgreSQL supp
         { op: "count", field: null, groupBy: "sex" },
         factory,
       ),
-      [{ group: "female", count: 20 }],
+      // Showing female would give away male by subtraction from the total.
+      [],
+    );
+    assert.deepEqual(
+      await executeSource(
+        credentials,
+        "three",
+        { op: "count", field: null, groupBy: "sex" },
+        factory,
+      ),
+      // small is under the floor, and middle is hidden so it cannot be subtracted.
+      [{ group: "large", count: 40 }],
     );
     assert.deepEqual(
       await executeSource(
@@ -106,7 +117,7 @@ test("live source queries execute read-only aggregates with real PostgreSQL supp
         { op: "avg", field: "age", groupBy: "sex" },
         factory,
       ),
-      [{ group: "female", avg_age: 40 }],
+      [],
     );
     assert.deepEqual(
       await executeSource(

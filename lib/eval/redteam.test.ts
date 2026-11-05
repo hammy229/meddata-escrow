@@ -10,7 +10,7 @@ import { runRedteam, SCENARIOS } from "./redteam";
 // One run shared by all tests: the scenarios take several seconds.
 const once = runRedteam();
 
-const KNOWN_NOT_BLOCKED = new Set(["privacy.differencing_small_table"]);
+const KNOWN_NOT_BLOCKED = new Set<string>();
 
 test("the hostile model does not get past the guardrails", async () => {
   const report = await once;

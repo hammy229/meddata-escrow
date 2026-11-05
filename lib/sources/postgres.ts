@@ -9,6 +9,7 @@ import {
   NUMERIC_FIELDS,
 } from "../ai/nl2query";
 import { MIN_CELL_SIZE } from "../ai/privacy-guard";
+import { withheldCells } from "../query/suppression";
 import type { AggregateRow } from "../query/mock-execute";
 
 export interface SourceCredentials {
@@ -203,8 +204,10 @@ export function aggregateSql(credentials: SourceCredentials, raw: QueryPlan) {
   const alias =
     plan.op === "count" ? "count" : `${plan.op}_${plan.field ?? "value"}`;
   // Only the bounded plan is compiled; no caller-provided SQL reaches PostgreSQL.
+  // Small cells come back so executeSource can see them and hide a second group
+  // (see lib/query/suppression). They never leave executeSource.
   return {
-    sql: `SELECT ${group ? `${group} AS "group", ` : ""}${aggregate} AS "${alias}", COUNT(*) AS "_cell_count" FROM ${relation} WHERE dataset_id = $1${group ? ` GROUP BY ${group}` : ""} HAVING COUNT(*) >= ${MIN_CELL_SIZE} LIMIT 201`,
+    sql: `SELECT ${group ? `${group} AS "group", ` : ""}${aggregate} AS "${alias}", COUNT(*) AS "_cell_count" FROM ${relation} WHERE dataset_id = $1${group ? ` GROUP BY ${group}` : ""} LIMIT 201`,
     alias,
   };
 }
@@ -223,10 +226,14 @@ export async function executeSource(
         throw new Error(
           "Too many result groups. Use a coarser research grouping",
         );
-      return rows.map((row) => {
-        const { _cell_count, ...values } = row;
-        if (Number(_cell_count) < MIN_CELL_SIZE)
-          throw new Error("Result suppressed");
+      const hidden = withheldCells(
+        new Map(rows.map((r, i) => [String(i), Number(r._cell_count)])),
+        MIN_CELL_SIZE,
+      );
+      const visible = rows.filter((_, i) => !hidden.has(String(i)));
+      return visible.map((row) => {
+        const { _cell_count: _count, ...values } = row;
+        void _count;
         const result: AggregateRow = {};
         for (const [key, value] of Object.entries(values)) {
           if (key === "group") {
