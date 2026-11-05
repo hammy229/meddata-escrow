@@ -516,6 +516,18 @@ export async function runStep(
         (x: { id?: string; severity?: string }) =>
           x.id === "claim" && x.severity === "fail",
       );
+      // What the rest of the audit found. Evidence only: neither holds money.
+      const evidence: { label: string; id: string }[] = [
+        { label: "Leak check", id: "leak_impact" },
+        { label: "Sample vs delivery", id: "drift" },
+      ];
+      const evidenceFacts = evidence.flatMap(({ label, id }) => {
+        const hit = (audit.audit?.report?.findings ?? []).find(
+          (x: { id?: string; severity?: string }) =>
+            x.id === id && x.severity !== "pass",
+        );
+        return hit ? [{ label, value: hit.title as string }] : [];
+      });
       // A release is refused while the audit holds the payment.
       const release = await tryCall(
         f,
@@ -548,6 +560,7 @@ export async function runStep(
             label: "Broken claim",
             value: `${b.title}. ${b.reason}`,
           })),
+          ...evidenceFacts,
           {
             label: "Release attempt",
             value: `Refused (${release.status}): ${release.data?.error ?? "not allowed"}`,

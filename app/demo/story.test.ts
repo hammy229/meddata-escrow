@@ -160,6 +160,12 @@ test("the audit beats fail the curated delivery, hold the money, then show the a
     assert.ok(facts("audit_fail").some((f) => f.startsWith("Broken claim=")));
     assert.ok(
       facts("audit_fail").some((f) =>
+        /^Leak check=last_contact_alsfrs lifts a model from AUC/.test(f),
+      ),
+    );
+    assert.ok(facts("audit_fail").some((f) => f.startsWith("Sample vs delivery=")));
+    assert.ok(
+      facts("audit_fail").some((f) =>
         f.startsWith("Release attempt=Refused (409)"),
       ),
     );
