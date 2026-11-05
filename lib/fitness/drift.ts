@@ -59,26 +59,83 @@ function shares(values: readonly number[], edges: readonly number[]): number[] {
   return counts.map((c) => c / Math.max(1, values.length));
 }
 
+/**
+ * 99th percentile of a chi-square with `df` degrees of freedom, by the
+ * Wilson-Hilferty approximation (good to about 1% for df >= 2).
+ */
+export function chiSquare99(df: number): number {
+  const z = 2.3263;
+  const c = 2 / (9 * df);
+  return df * (1 - c + z * Math.sqrt(c)) ** 3;
+}
+
+/**
+ * PSI is biased upward at small n: on identical distributions its mean is about
+ * (bins - 1) * (1/n + 1/m), and PSI * nm/(n+m) is roughly chi-square with
+ * bins - 1 degrees of freedom. A PSI only counts as drift when it clears the
+ * 99th percentile of that null, as well as the conventional band.
+ */
+export function psiNoiseFloor(df: number, n: number, m: number): number {
+  return chiSquare99(df) * (1 / n + 1 / m);
+}
+
+/** Fewer bins for fewer rows, so each bin keeps about 10 or more expected rows. */
+export function binsFor(n: number, m: number): number {
+  return Math.min(BINS, Math.max(3, Math.floor(Math.min(n, m) / 10)));
+}
+
+export interface PsiResult {
+  psi: number;
+  /** Bins (or categories) minus one. */
+  df: number;
+  /** What PSI must exceed to be told apart from chance at these sizes. */
+  noiseFloor: number;
+}
+
 /** PSI of a numeric column, with bins cut from the SAMPLE's quantiles. Null if either side has no values. */
+export function numericDrift(
+  sample: readonly number[],
+  delivery: readonly number[],
+): PsiResult | null {
+  if (sample.length === 0 || delivery.length === 0) return null;
+  const edges = quantileEdges(sample, binsFor(sample.length, delivery.length));
+  const df = Math.max(1, edges.length);
+  return {
+    psi: psi(shares(sample, edges), shares(delivery, edges)),
+    df,
+    noiseFloor: psiNoiseFloor(df, sample.length, delivery.length),
+  };
+}
+
 export function numericPsi(
   sample: readonly number[],
   delivery: readonly number[],
 ): number | null {
-  if (sample.length === 0 || delivery.length === 0) return null;
-  const edges = quantileEdges(sample, BINS);
-  return psi(shares(sample, edges), shares(delivery, edges));
+  return numericDrift(sample, delivery)?.psi ?? null;
 }
 
 /** PSI of a categorical column over the union of categories seen on either side. */
-export function categoricalPsi(
+export function categoricalDrift(
   sample: readonly string[],
   delivery: readonly string[],
-): number | null {
+): PsiResult | null {
   if (sample.length === 0 || delivery.length === 0) return null;
   const levels = [...new Set([...sample, ...delivery])].sort();
   const share = (v: readonly string[]) =>
     levels.map((l) => v.filter((x) => x === l).length / v.length);
-  return psi(share(sample), share(delivery));
+  const df = Math.max(1, levels.length - 1);
+  return {
+    psi: psi(share(sample), share(delivery)),
+    df,
+    noiseFloor: psiNoiseFloor(df, sample.length, delivery.length),
+  };
+}
+
+export function categoricalPsi(
+  sample: readonly string[],
+  delivery: readonly string[],
+): number | null {
+  return categoricalDrift(sample, delivery)?.psi ?? null;
 }
 
 const r3 = (x: number) => Math.round(x * 1000) / 1000;
@@ -141,7 +198,14 @@ export function checkDrift(
     const sMissing = sv.filter(isMissing).length / sv.length;
     const dMissing = dv.filter(isMissing).length / dv.length;
     const shift = Math.abs(dMissing - sMissing) * 100;
-    if (shift >= MISSING_SHIFT_PTS) {
+    const pooled =
+      (sv.filter(isMissing).length + dv.filter(isMissing).length) /
+      (sv.length + dv.length);
+    const noise =
+      2.58 *
+      Math.sqrt(pooled * (1 - pooled) * (1 / sv.length + 1 / dv.length)) *
+      100;
+    if (shift >= MISSING_SHIFT_PTS && shift >= noise) {
       findings.push({
         id: "drift",
         severity: "warn",
@@ -159,22 +223,25 @@ export function checkDrift(
     const dp = dv.filter((v) => !isMissing(v));
     const kind = kindOf(sp);
     if (kind === null || kindOf(dp) !== kind) continue;
-    let value: number | null;
-    if (kind === "numeric") value = numericPsi(sp.map(Number), dp.map(Number));
+    let got: PsiResult | null;
+    if (kind === "numeric") got = numericDrift(sp.map(Number), dp.map(Number));
     else {
       const levels = new Set([...sp, ...dp] as string[]);
       if (levels.size > MAX_CATEGORIES) continue;
-      value = categoricalPsi(sp as string[], dp as string[]);
+      got = categoricalDrift(sp as string[], dp as string[]);
     }
-    if (value === null || value < PSI_WARN) continue;
+    if (got === null) continue;
+    const value = got.psi;
+    // The band alone fires on chance at small n; also clear the noise floor.
+    if (value < PSI_WARN || value < got.noiseFloor) continue;
     const large = value >= PSI_LARGE;
     findings.push({
       id: "drift",
       severity: "warn",
       column: c,
       title: `${c} ${large ? "shifted a lot" : "shifted"} between sample and delivery`,
-      reason: `PSI of ${c} is ${r3(value)} (${large ? `large, over ${PSI_LARGE}` : `moderate, ${PSI_WARN} to ${PSI_LARGE}`}). The delivered values are spread differently from the sample.`,
-      metric: { psi: r3(value), kind },
+      reason: `PSI of ${c} is ${r3(value)} (${large ? `large, over ${PSI_LARGE}` : `moderate, ${PSI_WARN} to ${PSI_LARGE}`}). The delivered values are spread differently from the sample, by more than chance at these sizes (${r3(got.noiseFloor)}).`,
+      metric: { psi: r3(value), noiseFloor: r3(got.noiseFloor), kind },
     });
   }
 
