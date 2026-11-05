@@ -106,6 +106,45 @@ test("sampleCheck that is not a string -> 422", async () => {
   assert.equal(res.status, 422);
 });
 
+test("fitnessCheck returns the sample-stage report for a fixture listing", async () => {
+  const res = await POST(
+    req({
+      fitnessCheck: "ds_als_survival_axonpoint_v1",
+      description: "Predict survival from baseline FVC and age at onset",
+    }),
+  );
+  assert.equal(res.status, 200);
+  const { fitnessCheck } = await res.json();
+  assert.equal(fitnessCheck.stage, "sample");
+  assert.equal(fitnessCheck.synthetic, true);
+  assert.ok(["pass", "warn", "fail"].includes(fitnessCheck.verdict));
+  assert.ok(fitnessCheck.findings.length > 0);
+  assert.match(fitnessCheck.disclaimer, /screen, not proof/);
+  assert.equal(/subject_key":"s|survival_months":\d/.test(JSON.stringify(fitnessCheck)), false);
+});
+
+test("fitnessCheck passes the clean sample of the curated listing", async () => {
+  const res = await POST(req({ fitnessCheck: "ds_als_survival_curated_v1" }));
+  assert.equal(res.status, 200);
+  const { fitnessCheck } = await res.json();
+  assert.notEqual(fitnessCheck.verdict, "fail");
+});
+
+test("fitnessCheck is null for a listing with no fixture", async () => {
+  const res = await POST(req({ fitnessCheck: "ds_diabetes_synthea_v1" }));
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).fitnessCheck, null);
+});
+
+test("fitnessCheck errors mirror sampleCheck", async () => {
+  assert.equal((await POST(req({ fitnessCheck: "ds_nope" }))).status, 404);
+  assert.equal((await POST(req({ fitnessCheck: 7 }))).status, 422);
+  assert.equal(
+    (await POST(req({ fitnessCheck: "ds_als_survival_curated_v1", description: 5 }))).status,
+    422,
+  );
+});
+
 test("empty description -> 422 with { error }", async () => {
   const res = await POST(req({ description: "   " }));
   assert.equal(res.status, 422);

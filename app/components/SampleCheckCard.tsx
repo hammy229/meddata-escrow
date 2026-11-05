@@ -40,7 +40,7 @@ export default function SampleCheckCard({
           ) : (
             <AlertTriangle className="h-4 w-4" />
           )}
-          Sample check {check.passed ? "passed" : "failed"}
+          Generic sample check {check.passed ? "passed" : "failed"}
         </span>
         <span className="font-mono text-sm tabular-nums text-zinc-700 dark:text-zinc-300">
           {check.score}

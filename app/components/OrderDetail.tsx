@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import type { AuthWindow } from "../../lib/escrow/auth-window";
 import { platformFeeCents, vendorPayoutCents } from "../../lib/escrow/fees";
 import OrderTimeline from "./OrderTimeline";
+import { DeliveryAuditPanel } from "./FitnessAuditCard";
 
 // Mirrors the OrdersLedger row (raw DB row from GET /api/orders).
 export interface DetailOrder {
@@ -167,6 +168,14 @@ export default function OrderDetail({
           {deadlineLine && <p className="mt-2 text-sm">{deadlineLine}</p>}
         </section>
       )}
+
+      <div className="mt-6">
+        <DeliveryAuditPanel
+          orderId={order.id}
+          role="vendor"
+          status={order.status}
+        />
+      </div>
 
       <section className="mt-6 border-t border-rule pt-4">
         <h4 className="mb-4 font-serif text-lg font-normal">Audit trail</h4>

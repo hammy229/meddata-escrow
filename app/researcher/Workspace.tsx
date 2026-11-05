@@ -26,6 +26,11 @@ import SampleCheckCard, {
   type SampleCheck,
 } from "../components/SampleCheckCard";
 import QuerySpend from "../components/QuerySpend";
+import {
+  DeliveryAuditPanel,
+  SampleFitnessCard,
+} from "../components/FitnessAuditCard";
+import type { FitnessReport } from "../../lib/fitness/types";
 import { escrowRequest } from "../../lib/ui/escrow-response";
 import { suggestQuestions } from "../../lib/query/suggestions";
 import { MAX_COMPARE } from "../../lib/ui/compare";
@@ -115,6 +120,10 @@ export default function ResearcherWorkspace({
   const [sampleCheck, setSampleCheck] = useState<
     (SampleCheck & { datasetId: string }) | null
   >(null);
+  // The fitness screen of the same sample, when the listing has rows to screen.
+  const [fitness, setFitness] = useState<
+    (FitnessReport & { askedFor: string }) | null
+  >(null);
   const [checking, setChecking] = useState(false);
   const [checkError, setCheckError] = useState<string | null>(null);
 
@@ -155,6 +164,7 @@ export default function ResearcherWorkspace({
 
   function resetEscrow() {
     setSampleCheck(null);
+    setFitness(null);
     setCheckError(null);
     setEscrow(null);
     setVoided(false);
@@ -376,6 +386,22 @@ export default function ResearcherWorkspace({
     const datasetId = selected.datasetId;
     setChecking(true);
     setCheckError(null);
+    setFitness(null);
+    // The fitness screen is extra. If it fails the generic check still shows.
+    const fitnessAsk = fetch("/api/match", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        fitnessCheck: datasetId,
+        description: description.trim() || undefined,
+      }),
+    })
+      .then((r) => r.json().catch(() => null))
+      .then((d) => {
+        if (d?.fitnessCheck && Array.isArray(d.fitnessCheck.findings))
+          setFitness({ ...d.fitnessCheck, askedFor: datasetId });
+      })
+      .catch(() => {});
     try {
       const res = await fetch("/api/match", {
         method: "POST",
@@ -401,6 +427,7 @@ export default function ResearcherWorkspace({
     } catch {
       setCheckError("Could not reach the sample check service.");
     } finally {
+      await fitnessAsk;
       setChecking(false);
     }
   }
@@ -703,6 +730,11 @@ export default function ResearcherWorkspace({
       ? sampleCheck
       : null;
 
+  const fitnessNow =
+    fitness && selected && fitness.askedFor === selected.datasetId
+      ? fitness
+      : null;
+
   const delivered =
     escrow === "DELIVERED" || escrow === "CAPTURED" || escrow === "PAID_OUT";
 
@@ -969,6 +1001,20 @@ export default function ResearcherWorkspace({
                 <SampleCheckCard
                   check={check}
                   warnBeforeBuy={escrow === "MATCHED"}
+                />
+              </div>
+            )}
+            {check && fitnessNow && (
+              <div className="mt-4">
+                <SampleFitnessCard report={fitnessNow} />
+              </div>
+            )}
+            {orderId && (delivered || disputed) && !voided && (
+              <div className="mt-4">
+                <DeliveryAuditPanel
+                  orderId={orderId}
+                  role="researcher"
+                  status={disputed ? "DISPUTED" : escrow}
                 />
               </div>
             )}

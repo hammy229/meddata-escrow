@@ -22,6 +22,7 @@ import type { ColDef } from "ag-grid-community";
 import type { AgGridReact, CustomCellRendererProps } from "ag-grid-react";
 import DataGrid from "./DataGrid";
 import DisputePanel from "./DisputePanel";
+import { DeliveryAuditPanel } from "./FitnessAuditCard";
 import OrderTimeline from "./OrderTimeline";
 import {
   needsAction,
@@ -482,6 +483,13 @@ export default function IncomingOrders() {
             <p className="mt-6 font-mono text-xs break-all text-muted">
               Dispute on {o.id}
             </p>
+            <div className="mt-3">
+              <DeliveryAuditPanel
+                orderId={o.id}
+                role="vendor"
+                status={o.status}
+              />
+            </div>
             <DisputePanel
               orderId={o.id}
               role="vendor"
