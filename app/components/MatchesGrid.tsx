@@ -152,7 +152,7 @@ export default function MatchesGrid({
           typeof p.value === "number" ? usd(p.value) : "",
       },
     ];
-  }, [matches, source]);
+  }, [source]);
 
   return (
     <div>
