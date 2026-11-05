@@ -129,11 +129,20 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [released, refunded, needsReview, failed]
+                required: [released, refunded, needsReview, blocked, failed]
                 properties:
                   released: { type: array, items: { type: string } }
                   refunded: { type: array, items: { type: string } }
                   needsReview: { type: array, items: { type: string } }
+                  blocked:
+                    type: array
+                    description: Orders the delivery audit kept from being released automatically.
+                    items:
+                      type: object
+                      required: [orderId, reason]
+                      properties:
+                        orderId: { type: string }
+                        reason: { type: string }
                   failed:
                     type: array
                     items:
@@ -246,6 +255,11 @@ paths:
         The body may instead be `{ "sampleCheck": datasetId, "description"? }` to
         run the pre-purchase sample quality check on one dataset. The check can
         only tighten: the model's verdict is AND-ed with deterministic rules.
+
+        Or `{ "fitnessCheck": datasetId, "description"? }` to run the fitness
+        audit on the sample of a SYNTHETIC fixture listing. It returns
+        `{ "fitnessCheck": null }` when the listing has no rows to screen. The
+        audit is a screen, not proof.
       requestBody:
         required: true
         content:
@@ -254,6 +268,7 @@ paths:
               oneOf:
                 - $ref: "#/components/schemas/MatchRequest"
                 - $ref: "#/components/schemas/SampleCheckRequest"
+                - $ref: "#/components/schemas/FitnessCheckRequest"
             examples:
               match:
                 value:
@@ -272,6 +287,7 @@ paths:
                 oneOf:
                   - $ref: "#/components/schemas/MatchResponse"
                   - $ref: "#/components/schemas/SampleCheckResponse"
+                  - $ref: "#/components/schemas/FitnessCheckResponse"
               examples:
                 matches:
                   value:
@@ -354,6 +370,10 @@ paths:
         - name: events
           in: query
           description: With `id`, also return the order's audit events (any value).
+          schema: { type: string, examples: ["1"] }
+        - name: audit
+          in: query
+          description: With `id`, return only `{ audit }`, the order's stored delivery audit, or null if the listing was not audited (any value).
           schema: { type: string, examples: ["1"] }
         - name: summary
           in: query
@@ -742,6 +762,13 @@ paths:
         our own ledger (not PayPal). If one more query would take the order past
         its `queryCapCents`, the answer is `402` before any privacy check runs,
         and nothing is metered.
+
+        Send `analysis` instead of `question` for a Kaplan-Meier survival answer
+        on a SYNTHETIC fixture listing. It is metered the same way. Grouping comes
+        from a fixed list and filters are refused with `422`. Curves sit on a
+        3-month grid and at-risk counts are rounded to the nearest 5. A group
+        under the floor is withheld along with the next smallest group, so
+        subtraction cannot reveal it.
       requestBody:
         required: true
         content:
@@ -754,6 +781,11 @@ paths:
                   orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
                   datasetId: ds_cardio_synthea_v1
                   question: average age by sex
+              survivalByArm:
+                value:
+                  orderId: ord_3f9c2a1e-7b4d-4c1a-9e2f-0a1b2c3d4e5f
+                  datasetId: ds_als_survival_axonpoint_v1
+                  analysis: { type: survival, groupBy: arm }
       responses:
         "200":
           description: Aggregate answer, with the usage row it was billed as.
@@ -2068,6 +2100,56 @@ components:
             minLength: 1,
             description: Plain-English study description.,
           }
+    FitnessCheckRequest:
+      type: object
+      required: [fitnessCheck]
+      properties:
+        fitnessCheck: { type: string, description: Dataset id. }
+        description: { type: string }
+    FitnessFinding:
+      type: object
+      required: [id, severity, title, reason]
+      properties:
+        id:
+          type: string
+          description: Which check produced this, for example claim, leak_impact or drift. New ids can appear.
+        severity: { type: string, enum: [pass, warn, fail, info] }
+        column: { type: string }
+        title: { type: string }
+        reason: { type: string }
+        metric:
+          type: object
+          additionalProperties: { type: [string, number] }
+    FitnessReport:
+      type: object
+      required:
+        [
+          datasetId,
+          stage,
+          synthetic,
+          verdict,
+          findings,
+          disclaimer,
+          methodVersion,
+        ]
+      properties:
+        datasetId: { type: string }
+        stage: { type: string, enum: [sample, delivery] }
+        synthetic: { type: boolean }
+        verdict: { type: string, enum: [pass, warn, fail, not_applicable] }
+        findings:
+          type: array
+          items: { $ref: "#/components/schemas/FitnessFinding" }
+        disclaimer: { type: string }
+        methodVersion: { type: integer }
+    FitnessCheckResponse:
+      type: object
+      required: [fitnessCheck]
+      properties:
+        fitnessCheck:
+          oneOf:
+            - $ref: "#/components/schemas/FitnessReport"
+            - type: "null"
     SampleCheckRequest:
       type: object
       required: [sampleCheck]
@@ -2114,6 +2196,9 @@ components:
           type: [integer, "null"]
           description: Records in the dataset, from the catalog; null if not listed.
         source: { type: string, enum: [llm, keyword] }
+        relevant:
+          type: boolean
+          description: Offline matches only. False when the score is too weak to act on, and the agent will not buy on it.
     MatchResponse:
       type: object
       required: [matches, source]
@@ -2432,6 +2517,17 @@ components:
       required: [escrowState]
       properties:
         escrowState: { $ref: "#/components/schemas/EscrowState" }
+        audit:
+          type: object
+          description: Present after `deliver` on a listing that makes claims. Only a failed claim sets `blocking`, which moves the order to DISPUTED.
+          required: [verdict, blocking]
+          properties:
+            verdict:
+              {
+                type: string,
+                enum: [pass, warn, fail, inconclusive, not_applicable],
+              }
+            blocking: { type: boolean }
         authorizationId:
           { type: string, description: Present after `authorize`. }
         captureId:
@@ -2465,15 +2561,23 @@ components:
           description: The order's query spend cap (cents).
     QueryRequest:
       type: object
-      required: [orderId, datasetId, question]
+      required: [orderId, datasetId]
+      description: Send either `question` or `analysis`.
       properties:
         orderId: { type: string }
         datasetId: { type: string }
         question: { type: string, minLength: 1, maxLength: 500 }
+        analysis:
+          type: object
+          additionalProperties: false
+          required: [type, groupBy]
+          properties:
+            type: { type: string, enum: [survival] }
+            groupBy: { type: string, enum: [arm, sex, onset_site, age_band] }
     QueryResponse:
       type: object
-      required:
-        [datasetId, question, compiled, result, execution, summary, usage]
+      required: [datasetId, question, execution, summary, usage]
+      description: A question answer has `compiled` and `result`. A survival answer has `analysis`.
       properties:
         datasetId: { type: string }
         question: { type: string }
@@ -2496,10 +2600,58 @@ components:
             rows do not contain.
         execution:
           type: string
-          enum: [postgres, mock]
+          enum: [postgres, mock, fixture]
           description:
             Where the aggregate ran. `postgres` is the vendor's live connected
-            database; `mock` is the bundled synthetic data.
+            database, `mock` is the bundled synthetic data, and `fixture` is a
+            seeded SYNTHETIC cohort.
+        analysis:
+          type: object
+          description: The survival answer. Curves, medians and p-values only, never rows or exact event times.
+          required:
+            [
+              type,
+              groupBy,
+              synthetic,
+              label,
+              unit,
+              grid,
+              groups,
+              withheldGroups,
+              logRank,
+              interpretation,
+            ]
+          properties:
+            type: { type: string, enum: [survival] }
+            groupBy: { type: string }
+            synthetic: { type: boolean }
+            label: { type: string }
+            unit: { type: string, enum: [months] }
+            grid: { type: array, items: { type: integer } }
+            groups:
+              type: array
+              items:
+                type: object
+                required: [group, curve, medianMonths, truncatedAtMonth]
+                properties:
+                  group: { type: string }
+                  curve:
+                    type: array
+                    items:
+                      type: object
+                      required: [month, survival, atRisk]
+                      properties:
+                        month: { type: integer }
+                        survival: { type: number }
+                        atRisk: { type: integer }
+                  medianMonths: { type: [integer, "null"] }
+                  truncatedAtMonth: { type: [integer, "null"] }
+            withheldGroups: { type: integer }
+            logRank:
+              type: object
+              description: Raw, and for the arm grouping also stratified by age band.
+              additionalProperties: true
+            interpretation: { type: string }
         usage:
           type: object
           required: [usageId, chargeCents]

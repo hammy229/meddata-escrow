@@ -711,7 +711,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "match"]
             },
-            "description": "Returns catalog datasets ranked by relevance to a plain-English study\ndescription, each enriched with its catalog title, its listed price and\nits record count. The price is the one stored in the database, which is\nwhat an order charges, so a vendor's repricing shows up here at once.\n\nWhen `LLM_PROVIDER=bedrock`, Claude on Amazon Bedrock ranks the catalog;\notherwise (or if the model call fails) a deterministic keyword matcher\ndoes. `source` says which (`llm` | `keyword`), per response and per match.\n\nThe body may instead be `{ \"sampleCheck\": datasetId, \"description\"? }` to\nrun the pre-purchase sample quality check on one dataset. The check can\nonly tighten: the model's verdict is AND-ed with deterministic rules.\n",
+            "description": "Returns catalog datasets ranked by relevance to a plain-English study\ndescription, each enriched with its catalog title, its listed price and\nits record count. The price is the one stored in the database, which is\nwhat an order charges, so a vendor's repricing shows up here at once.\n\nWhen `LLM_PROVIDER=bedrock`, Claude on Amazon Bedrock ranks the catalog;\notherwise (or if the model call fails) a deterministic keyword matcher\ndoes. `source` says which (`llm` | `keyword`), per response and per match.\n\nThe body may instead be `{ \"sampleCheck\": datasetId, \"description\"? }` to\nrun the pre-purchase sample quality check on one dataset. The check can\nonly tighten: the model's verdict is AND-ed with deterministic rules.\n\nOr `{ \"fitnessCheck\": datasetId, \"description\"? }` to run the fitness\naudit on the sample of a SYNTHETIC fixture listing. It returns\n`{ \"fitnessCheck\": null }` when the listing has no rows to screen. The\naudit is a screen, not proof.\n",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"description\": \"Heart disease cohort with cardiology encounters\"\n}",
@@ -790,6 +790,12 @@
                   "value": "1",
                   "disabled": true,
                   "description": "With `id`, also return the order's audit events (any value)."
+                },
+                {
+                  "key": "audit",
+                  "value": "1",
+                  "disabled": true,
+                  "description": "With `id`, return only `{ audit }`, the order's stored delivery audit, or null if the listing was not audited (any value)."
                 },
                 {
                   "key": "summary",
@@ -938,7 +944,7 @@
               "host": ["{{baseUrl}}"],
               "path": ["api", "query"]
             },
-            "description": "Requires an order for this dataset in `DELIVERED`, `CAPTURED` or\n`PAID_OUT`. The question is screened for identifiers and row-level asks,\ncompiled to parameterized aggregate-only SQL, re-checked, executed\nvendor-side (mocked), and put through small-cell suppression (k ≥ 11).\nOnly answered queries are metered, at the server-set per-query fee, in\nour own ledger (not PayPal). If one more query would take the order past\nits `queryCapCents`, the answer is `402` before any privacy check runs,\nand nothing is metered.\n",
+            "description": "Requires an order for this dataset in `DELIVERED`, `CAPTURED` or\n`PAID_OUT`. The question is screened for identifiers and row-level asks,\ncompiled to parameterized aggregate-only SQL, re-checked, executed\nvendor-side (mocked), and put through small-cell suppression (k ≥ 11).\nOnly answered queries are metered, at the server-set per-query fee, in\nour own ledger (not PayPal). If one more query would take the order past\nits `queryCapCents`, the answer is `402` before any privacy check runs,\nand nothing is metered.\n\nSend `analysis` instead of `question` for a Kaplan-Meier survival answer\non a SYNTHETIC fixture listing. It is metered the same way. Grouping comes\nfrom a fixed list and filters are refused with `422`. Curves sit on a\n3-month grid and at-risk counts are rounded to the nearest 5. A group\nunder the floor is withheld along with the next smallest group, so\nsubtraction cannot reveal it.\n",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"datasetId\": \"{{datasetId}}\",\n  \"question\": \"average age by sex\"\n}",
