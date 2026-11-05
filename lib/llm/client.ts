@@ -14,7 +14,7 @@ import { AnthropicBedrockMantle } from "@anthropic-ai/bedrock-sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type * as z from "zod/v4";
 
-import { tracedCall, type TraceOutcome } from "./trace";
+import { LlmTimeoutError, tracedCall, type TraceOutcome } from "./trace";
 
 /** Bedrock model id for Claude Opus 5.5 (override with LLM_MODEL). */
 export const DEFAULT_MODEL = "anthropic.claude-opus-5-5";
@@ -30,6 +30,44 @@ export function llmModel(
   env: Record<string, string | undefined> = process.env,
 ): string {
   return env.LLM_MODEL || DEFAULT_MODEL;
+}
+
+/** Longest we wait on one model call before falling back (30 s). */
+export const DEFAULT_TIMEOUT_MS = 30_000;
+
+/** Per-call timeout: LLM_TIMEOUT_MS if it is a positive number, else 30 s. */
+export function llmTimeoutMs(
+  env: Record<string, string | undefined> = process.env,
+): number {
+  const n = Number(env.LLM_TIMEOUT_MS);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_TIMEOUT_MS;
+}
+
+/**
+ * Run `call` with an AbortSignal that fires after `timeoutMs`, and reject with
+ * LlmTimeoutError at that moment even if the call ignores the signal (a stuck
+ * socket). The SDK takes the signal as a request option and stops retrying
+ * once it aborts.
+ */
+export async function withTimeout<T>(
+  timeoutMs: number,
+  call: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  let timer: NodeJS.Timeout | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new LlmTimeoutError(timeoutMs));
+    }, timeoutMs);
+  });
+  const pending = call(controller.signal);
+  pending.catch(() => {}); // a late failure after the timeout is not news
+  try {
+    return await Promise.race([pending, timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** The narrow slice of the SDK client we use — lets tests inject a fake. */
@@ -54,6 +92,8 @@ export interface StructuredRequest<S extends z.ZodType> {
   /** Short, well-specified extraction tasks don't need deep reasoning. */
   effort?: "low" | "medium" | "high";
   client?: LlmClient;
+  /** Give up after this long (default: LLM_TIMEOUT_MS, then 30 s). */
+  timeoutMs?: number;
 }
 
 /**
@@ -76,16 +116,21 @@ export async function structured<S extends z.ZodType>(
       fellBack: () => true,
     },
     () =>
-      client.messages.parse({
-        model,
-        max_tokens: 16000,
-        system: req.system,
-        messages: [{ role: "user", content: req.prompt }],
-        output_config: {
-          effort: req.effort ?? "low",
-          format: zodOutputFormat(req.schema),
-        },
-      }),
+      withTimeout(req.timeoutMs ?? llmTimeoutMs(), (signal) =>
+        client.messages.parse(
+          {
+            model,
+            max_tokens: 16000,
+            system: req.system,
+            messages: [{ role: "user", content: req.prompt }],
+            output_config: {
+              effort: req.effort ?? "low",
+              format: zodOutputFormat(req.schema),
+            },
+          },
+          { signal },
+        ),
+      ),
     (m): TraceOutcome =>
       m.stop_reason === "refusal"
         ? "refusal"

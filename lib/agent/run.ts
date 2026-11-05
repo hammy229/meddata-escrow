@@ -20,6 +20,8 @@ import {
   getLlmClient,
   llmEnabled,
   llmModel,
+  llmTimeoutMs,
+  withTimeout,
   type LlmClient,
 } from "../llm/client";
 import { tracedCall, type TraceOutcome } from "../llm/trace";
@@ -61,6 +63,8 @@ export interface AgentRunOptions {
   useLlm?: boolean;
   /** Max model calls in the LLM loop (default MAX_TURNS). */
   maxTurns?: number;
+  /** Per model call; a hung call falls back (default LLM_TIMEOUT_MS). */
+  timeoutMs?: number;
   escrowDeps?: EscrowDeps;
 }
 
@@ -130,6 +134,7 @@ async function runLlm(
   ctx: AgentContext,
   client: LlmClient,
   maxTurns: number,
+  timeoutMs: number,
 ): Promise<AgentRunResult> {
   const messages: Anthropic.MessageParam[] = [
     {
@@ -154,14 +159,19 @@ async function runLlm(
         fellBack: () => !ctx.order,
       },
       () =>
-        client.messages.create({
-          model,
-          max_tokens: 16000,
-          system: SYSTEM,
-          messages,
-          tools: AGENT_TOOLS,
-          tool_choice: { type: "auto" },
-        }),
+        withTimeout(timeoutMs, (signal) =>
+          client.messages.create(
+            {
+              model,
+              max_tokens: 16000,
+              system: SYSTEM,
+              messages,
+              tools: AGENT_TOOLS,
+              tool_choice: { type: "auto" },
+            },
+            { signal },
+          ),
+        ),
       (r): TraceOutcome =>
         r.stop_reason === "refusal"
           ? "refusal"
@@ -341,6 +351,7 @@ export async function runProcurementAgent(
         ctx,
         opts.client ?? getLlmClient(),
         opts.maxTurns ?? MAX_TURNS,
+        opts.timeoutMs ?? llmTimeoutMs(),
       );
     } catch (err) {
       // Never buy twice: if the model already opened an order, report it.
