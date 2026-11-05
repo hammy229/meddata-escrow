@@ -5,7 +5,15 @@ import { runFitnessAudit } from "./audit";
 import { checkLeakImpact, measureLeakImpact } from "./leak-impact";
 
 const STUDY = "Predict survival from baseline FVC and age at onset";
-const FEATURES = ["age_at_onset", "age_band", "sex", "onset_site", "baseline_alsfrs", "baseline_fvc_pct", "last_contact_alsfrs"];
+const FEATURES = [
+  "age_at_onset",
+  "age_band",
+  "sex",
+  "onset_site",
+  "baseline_alsfrs",
+  "baseline_fvc_pct",
+  "last_contact_alsfrs",
+];
 
 function flawed(seed = 2, subjects = 400) {
   return generateAlsCohort({ seed, variant: "flawed", subjects });
@@ -20,7 +28,10 @@ const base = (subjects: readonly object[]) => ({
 
 describe("leak impact", () => {
   it("shows a model gains a lot from the planted leak", () => {
-    const f = checkLeakImpact({ ...base(flawed().subjects), flagged: ["last_contact_alsfrs"] });
+    const f = checkLeakImpact({
+      ...base(flawed().subjects),
+      flagged: ["last_contact_alsfrs"],
+    });
     assert.ok(f);
     assert.equal(f.id, "leak_impact");
     assert.equal(f.severity, "info");
@@ -30,32 +41,55 @@ describe("leak impact", () => {
     assert.ok(m.aucWith > 0.75, `with ${m.aucWith}`);
     assert.ok(m.aucWithout < 0.75, `without ${m.aucWithout}`);
     assert.ok(m.gap > 0.08, `gap ${m.gap}`);
-    assert.ok(m.gapLow <= m.gap && m.gap <= m.gapHigh);
-    assert.match(f.reason, /is a leak, not signal/);
+    assert.ok(m.gapFoldLow <= m.gap && m.gap <= m.gapFoldHigh);
+    assert.match(f.reason, /larger lift than ordinary signal usually gives/);
+    assert.match(f.reason, /known at the time a prediction is made/);
+    assert.match(f.reason, /not a confidence interval/);
+    assert.match(f.reason, /outcome at any time/);
+    assert.doesNotMatch(f.reason, /is a leak, not signal/);
     assert.match(f.reason, /censored before month 12/);
   });
 
   it("is deterministic", () => {
-    const a = checkLeakImpact({ ...base(flawed().subjects), flagged: ["last_contact_alsfrs"] });
-    const b = checkLeakImpact({ ...base(flawed().subjects), flagged: ["last_contact_alsfrs"] });
+    const a = checkLeakImpact({
+      ...base(flawed().subjects),
+      flagged: ["last_contact_alsfrs"],
+    });
+    const b = checkLeakImpact({
+      ...base(flawed().subjects),
+      flagged: ["last_contact_alsfrs"],
+    });
     assert.deepEqual(a, b);
   });
 
   it("emits nothing when no column is flagged", () => {
     const clean = generateAlsCohort({ seed: 3, variant: "clean" });
-    assert.equal(checkLeakImpact({ ...base(clean.subjects), flagged: [] }), null);
+    assert.equal(
+      checkLeakImpact({ ...base(clean.subjects), flagged: [] }),
+      null,
+    );
   });
 
   it("says a flagged but harmless column adds little", () => {
-    const clean = generateAlsCohort({ seed: 3, variant: "clean", subjects: 600 });
-    const f = checkLeakImpact({ ...base(clean.subjects), flagged: ["baseline_fvc_pct"] });
+    const clean = generateAlsCohort({
+      seed: 3,
+      variant: "clean",
+      subjects: 600,
+    });
+    const f = checkLeakImpact({
+      ...base(clean.subjects),
+      flagged: ["baseline_fvc_pct"],
+    });
     assert.ok(f);
     assert.match(f.title, /adds little/);
     assert.doesNotMatch(f.reason, /is a leak/);
   });
 
   it("skips with a reason when there are too few events", () => {
-    const f = checkLeakImpact({ ...base(flawed(2, 40).subjects), flagged: ["last_contact_alsfrs"] });
+    const f = checkLeakImpact({
+      ...base(flawed(2, 40).subjects),
+      flagged: ["last_contact_alsfrs"],
+    });
     assert.ok(f);
     assert.equal(f.severity, "info");
     assert.match(f.title, /not measured/);
@@ -64,10 +98,15 @@ describe("leak impact", () => {
   });
 
   it("drops subjects censored before month 12 and counts them", () => {
-    const r = measureLeakImpact({ ...base(flawed().subjects), flagged: ["last_contact_alsfrs"] });
+    const r = measureLeakImpact({
+      ...base(flawed().subjects),
+      flagged: ["last_contact_alsfrs"],
+    });
     assert.ok(!("skipped" in r));
     const subs = flawed().subjects;
-    const censoredEarly = subs.filter((s) => s.died === 0 && s.survival_months <= 12).length;
+    const censoredEarly = subs.filter(
+      (s) => s.died === 0 && s.survival_months <= 12,
+    ).length;
     assert.equal(r.censoredDropped, censoredEarly);
     assert.equal(r.cases + r.nonCases + r.censoredDropped, subs.length);
   });
@@ -82,11 +121,17 @@ describe("leak impact", () => {
   });
 
   it("never emits row-level data and hides small counts", () => {
-    const f = checkLeakImpact({ ...base(flawed().subjects), flagged: ["last_contact_alsfrs"] });
+    const f = checkLeakImpact({
+      ...base(flawed().subjects),
+      flagged: ["last_contact_alsfrs"],
+    });
     assert.ok(f);
     const text = JSON.stringify(f);
     assert.doesNotMatch(text, /SYN-\d/);
-    const small = checkLeakImpact({ ...base(flawed(2, 400).subjects.slice(0, 3)), flagged: ["last_contact_alsfrs"] });
+    const small = checkLeakImpact({
+      ...base(flawed(2, 400).subjects.slice(0, 3)),
+      flagged: ["last_contact_alsfrs"],
+    });
     assert.ok(small);
     assert.match(JSON.stringify(small), /fewer than/);
   });
@@ -113,13 +158,20 @@ describe("leak impact in the audit", () => {
     assert.equal(impact[0].severity, "info");
     assert.equal(r.verdict, "fail");
     const withoutInfo = r.findings.filter((f) => f.id !== "leak_impact");
-    assert.equal(r.verdict, withoutInfo.some((f) => f.severity === "fail") ? "fail" : "warn");
+    assert.equal(
+      r.verdict,
+      withoutInfo.some((f) => f.severity === "fail") ? "fail" : "warn",
+    );
   });
 
   it("emits nothing for clean cohorts", () => {
     for (const seed of [1, 2, 3, 4, 5]) {
       const r = run("clean", seed);
-      assert.equal(r.findings.filter((f) => f.id === "leak_impact").length, 0, `seed ${seed}`);
+      assert.equal(
+        r.findings.filter((f) => f.id === "leak_impact").length,
+        0,
+        `seed ${seed}`,
+      );
     }
   });
 });

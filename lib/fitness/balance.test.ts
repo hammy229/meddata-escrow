@@ -107,6 +107,29 @@ describe("checkGroupBalance", () => {
     assert.equal(f[0].severity, "fail");
   });
 
+  it("names the noise gate in the pass, warn and fail wording", () => {
+    const small = [
+      ...[-1, 0, 1, -1, 0, 1].map((x) => ({ g: "A", x })),
+      ...[-1, 0, 1, -1, 0, 1].map((x) => ({ g: "B", x: x + 0.3 })),
+    ];
+    const pass = checkGroupBalance(small, "g", ["x"], {
+      noiseZ: SMD_NOISE_Z,
+    })[0];
+    assert.match(pass.reason, /above sampling noise/);
+    assert.match(pass.reason, /effective cutoff/);
+    const big = [
+      ...[-1, 0, 1, -1, 0, 1].map((x) => ({ g: "A", x })),
+      ...[-1, 0, 1, -1, 0, 1].map((x) => ({ g: "B", x: x + 3 })),
+    ];
+    const fail = checkGroupBalance(big, "g", ["x"], { noiseZ: SMD_NOISE_Z })[0];
+    assert.match(fail.reason, /and above sampling noise/);
+    // Without the gate the old wording is unchanged.
+    assert.doesNotMatch(
+      checkGroupBalance(big, "g", ["x"])[0].reason,
+      /sampling noise/,
+    );
+  });
+
   it("standard error of an SMD shrinks with sample size", () => {
     assert.ok(smdStdError(0, 50, 50) > smdStdError(0, 500, 500));
     assert.ok(Math.abs(smdStdError(0, 50, 50) - 0.2) < 1e-9);

@@ -443,7 +443,10 @@ export const TUNING_NOTE =
 
 export const LIMITATIONS =
   "All cohorts are SYNTHETIC, made by lib/synth/als, and the checks were designed against that same generator family. " +
-  "The flaws are injected by this script at graded strengths, one at a time. " +
+  "In the per-check tables the flaws are injected by this script at graded strengths, one at a time. " +
+  "The leak_impact, selection and drift sections are different setups: leak_impact force-flags a named column on clean or leaked rows, " +
+  "selection adds pure-noise columns, and drift pairs two independent clean cohorts. " +
+  "leak_impact uses death by month 12 while the screens use the outcome at any time. " +
   "These numbers describe how the checks behave on that setup. They do not measure performance on real data, " +
   "real vendors, or flaws that look different from the ones planted here. A pass is a screen, not proof.";
 

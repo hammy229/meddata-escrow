@@ -42,8 +42,8 @@ export interface LeakImpact {
   aucWith: number;
   aucWithout: number;
   gap: number;
-  gapLow: number;
-  gapHigh: number;
+  gapFoldLow: number;
+  gapFoldHigh: number;
   cases: number;
   nonCases: number;
   censoredDropped: number;
@@ -172,8 +172,8 @@ export function measureLeakImpact(
     aucWith: mean(aw),
     aucWithout: mean(ao),
     gap: mean(diff),
-    gapLow: percentile(sorted, 0.025),
-    gapHigh: percentile(sorted, 0.975),
+    gapFoldLow: percentile(sorted, 0.025),
+    gapFoldHigh: percentile(sorted, 0.975),
     ...meta,
     folds: k,
     repeats,
@@ -203,13 +203,15 @@ export function checkLeakImpact(input: LeakImpactInput): Finding | null {
   const wo = round2(r.aucWithout);
   const gap = round2(r.gap);
   const how =
-    `Target: death by month ${horizon}; ${displayCount(r.censoredDropped)} subjects censored before month ${horizon} are left out. ` +
-    `Scores are held-out AUC, ${r.folds}-fold cross-validation repeated ${r.repeats} times; the range is across folds.`;
-  const range = `${round2(r.gapLow)} to ${round2(r.gapHigh)}`;
+    `Target: death by month ${horizon}; ${displayCount(r.censoredDropped)} subjects censored before month ${horizon} are left out, which can bias the comparison if they differ from the rest. ` +
+    `The flag itself comes from screens that use the outcome at any time, while this model uses death by month ${horizon}. ` +
+    `Scores are held-out AUC, ${r.folds}-fold cross-validation repeated ${r.repeats} times. ` +
+    `The spread is the range across folds that share rows, so it is not a confidence interval.`;
+  const range = `${round2(r.gapFoldLow)} to ${round2(r.gapFoldHigh)}`;
   const leaky = r.gap >= LEAK_GAP;
   const reason = leaky
-    ? `With ${list} a model scores AUC ${w} on held-out rows. Without it, ${wo}. The extra ${gap} (range ${range}) is a leak, not signal. ${how}`
-    : `With ${list} a model scores AUC ${w} on held-out rows. Without it, ${wo}. The flagged column adds only ${gap} (range ${range}) here. ${how}`;
+    ? `With ${list} a model scores AUC ${w} on held-out rows. Without it, ${wo}. The extra ${gap} (spread across folds ${range}) is a larger lift than ordinary signal usually gives. Check whether ${list} is known at the time a prediction is made. A strong legitimate predictor can also lift a model. ${how}`
+    : `With ${list} a model scores AUC ${w} on held-out rows. Without it, ${wo}. The flagged column adds only ${gap} (spread across folds ${range}) here. ${how}`;
   return {
     id: "leak_impact",
     severity: "info",
@@ -222,8 +224,8 @@ export function checkLeakImpact(input: LeakImpactInput): Finding | null {
       aucWith: w,
       aucWithout: wo,
       gap,
-      gapLow: round2(r.gapLow),
-      gapHigh: round2(r.gapHigh),
+      gapFoldLow: round2(r.gapFoldLow),
+      gapFoldHigh: round2(r.gapFoldHigh),
       cases: displayCount(r.cases),
       nonCases: displayCount(r.nonCases),
       censoredDropped: displayCount(r.censoredDropped),

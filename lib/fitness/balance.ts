@@ -123,6 +123,9 @@ export function checkGroupBalance(
   const g0 = rows.filter((r) => String(cell(r, groupColumn)) === levels[0]);
   const g1 = rows.filter((r) => String(cell(r, groupColumn)) === levels[1]);
   const findings: Finding[] = [];
+  const round2 = (x: number) => Math.round(x * 100) / 100;
+  const gateNote =
+    noiseZ > 0 ? ` and above sampling noise, ${noiseZ} standard errors` : "";
   for (const column of features) {
     if (column === groupColumn) continue;
     const got = columnSmd(g0, g1, column);
@@ -142,7 +145,7 @@ export function checkGroupBalance(
         severity: "fail",
         column,
         title: `${column} differs a lot between groups`,
-        reason: `The standardized difference in ${column} is ${rounded} (fail from ${SMD_FAIL_AT}). A raw comparison of the groups is confounded unless ${column} is held fixed.`,
+        reason: `The standardized difference in ${column} is ${rounded} (fail from ${SMD_FAIL_AT}${gateNote}). A raw comparison of the groups is confounded unless ${column} is held fixed.`,
         metric,
       });
     } else if (smd >= SMD_WARN_AT) {
@@ -151,7 +154,7 @@ export function checkGroupBalance(
         severity: "warn",
         column,
         title: `${column} differs somewhat between groups`,
-        reason: `The standardized difference in ${column} is ${rounded} (warn from ${SMD_WARN_AT}).`,
+        reason: `The standardized difference in ${column} is ${rounded} (warn from ${SMD_WARN_AT}${gateNote}).`,
         metric,
       });
     }
@@ -163,7 +166,7 @@ export function checkGroupBalance(
       title: "Groups are balanced on the checked features",
       reason:
         noiseZ > 0
-          ? `Every checked feature has a standardized difference under ${SMD_WARN_AT} between the groups, or one too small to tell from chance at this sample size.`
+          ? `No checked feature has a standardized difference that is both over ${SMD_WARN_AT} and above sampling noise (${noiseZ} standard errors). In small groups the noise gate, not ${SMD_FAIL_AT}, is the effective cutoff: about ${round2(noiseZ * smdStdError(0, g0.length, g1.length))} at these group sizes.`
           : `Every checked feature has a standardized difference under ${SMD_WARN_AT} between the groups.`,
     });
   }
