@@ -80,6 +80,8 @@ export interface AgentRunResult {
 }
 
 export const MAX_TURNS = 8;
+/** Tool calls run per model reply; the rest are refused (a flood guard). */
+export const MAX_TOOL_CALLS_PER_TURN = 8;
 
 const SYSTEM = [
   "You are a procurement agent buying medical research datasets for a researcher.",
@@ -204,7 +206,18 @@ async function runLlm(
 
     // Sequential on purpose: the guardrails read state earlier calls set.
     const results: Anthropic.ToolResultBlockParam[] = [];
-    for (const use of uses) {
+    for (const [i, use] of uses.entries()) {
+      if (i >= MAX_TOOL_CALLS_PER_TURN) {
+        results.push({
+          type: "tool_result",
+          tool_use_id: use.id,
+          content: JSON.stringify({
+            error: `too many tool calls in one turn (max ${MAX_TOOL_CALLS_PER_TURN}); this one was not run`,
+          }),
+          is_error: true,
+        });
+        continue;
+      }
       const outcome = await executeTool(ctx, use.name, use.input);
       results.push({
         type: "tool_result",
