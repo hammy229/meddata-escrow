@@ -6,6 +6,7 @@ import {
   fitLogistic,
   holdoutEvaluate,
   predictProba,
+  stratifiedFolds,
   stratifiedSplit,
   type Cell,
 } from "./logistic";
@@ -98,6 +99,15 @@ describe("logistic regression", () => {
     assert.equal(new Set([...train, ...test]).size, 100);
     assert.equal(test.filter((i) => y[i] === 1).length, 5);
     assert.equal(test.filter((i) => y[i] === 0).length, 20);
+  });
+
+  it("makes folds that cover every row once and spread each class", () => {
+    const y = Array.from({ length: 50 }, (_, i) => (i % 5 === 0 ? 1 : 0));
+    const folds = stratifiedFolds(y, 5, 3);
+    assert.equal(folds.flat().length, 50);
+    assert.equal(new Set(folds.flat()).size, 50);
+    for (const f of folds) assert.equal(f.filter((i) => y[i] === 1).length, 2);
+    assert.deepEqual(folds, stratifiedFolds(y, 5, 3));
   });
 
   it("computes the Brier score and rejects bad input", () => {

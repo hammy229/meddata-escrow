@@ -1,6 +1,7 @@
 import { checkGroupBalance } from "./balance";
 import { cell, displayCount, isMissing, verdictOf, type Row } from "./common";
 import { checkCoverage, coveragePct } from "./coverage";
+import { checkLeakImpact } from "./leak-impact";
 import { checkLabelAssociation, checkTemporalLeak, type Timing } from "./leakage";
 import { deriveNeeds } from "./needs";
 import { checkEventsPerVariable } from "./power";
@@ -168,6 +169,25 @@ export function runFitnessAudit(input: AuditInput): FitnessReport {
     ...checkLabelAssociation(input.subjects, label, features),
     ...checkGroupBalance(input.subjects, groupColumn, features),
   ];
+
+  // Evidence only: how much do the flagged columns inflate a model? Info severity.
+  const flagged = findings
+    .filter(
+      (f) =>
+        (f.id === "temporal_leak" || f.id === "label_association") &&
+        (f.severity === "fail" || f.severity === "warn") &&
+        f.column !== undefined &&
+        features.includes(f.column),
+    )
+    .map((f) => f.column as string);
+  const impact = checkLeakImpact({
+    subjects: input.subjects,
+    label,
+    timeColumn,
+    features,
+    flagged,
+  });
+  if (impact) findings.push(impact);
 
   if (input.claims) {
     const coverage: Record<string, number> = {};

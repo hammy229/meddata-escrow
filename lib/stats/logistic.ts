@@ -217,6 +217,28 @@ export function brierScore(p: readonly number[], y: readonly number[]): number {
   return s / p.length;
 }
 
+/** Seeded stratified k-fold. Returns, per fold, the row indexes held out. Every row lands in exactly one fold. */
+export function stratifiedFolds(labels: readonly number[], k: number, seed: number): number[][] {
+  const rng = createRng(seed);
+  const folds: number[][] = Array.from({ length: k }, () => []);
+  let next = 0;
+  for (const cls of [0, 1]) {
+    const idx: number[] = [];
+    labels.forEach((y, i) => {
+      if (y === cls) idx.push(i);
+    });
+    for (let i = idx.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(rng.next() * (i + 1));
+      [idx[i], idx[j]] = [idx[j], idx[i]];
+    }
+    for (const i of idx) {
+      folds[next % k].push(i);
+      next += 1;
+    }
+  }
+  return folds.map((f) => f.sort((a, b) => a - b));
+}
+
 export interface HoldoutResult {
   auc: number | null;
   brier: number;
