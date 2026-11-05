@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import FitnessAuditCard, { heldReason } from "./FitnessAuditCard";
+import FitnessAuditCard, { heldReason, sortFindings } from "./FitnessAuditCard";
 import type { FitnessReport } from "../../lib/fitness/types";
 
 const report = {
@@ -66,4 +66,21 @@ test("heldReason is plain and differs by side", () => {
   );
   for (const r of ["researcher", "vendor"] as const)
     assert.equal(/proof|tamper/i.test(heldReason(blocked, r)!), false);
+});
+
+test("a broken claim leads, then problems, with passes last", () => {
+  const order = sortFindings([
+    { id: "coverage", severity: "pass" },
+    { id: "leak_impact", severity: "info" },
+    { id: "imbalance", severity: "fail" },
+    { id: "claim", severity: "fail" },
+    { id: "drift", severity: "warn" },
+  ]).map((f) => f.id);
+  assert.deepEqual(order, [
+    "claim",
+    "imbalance",
+    "drift",
+    "leak_impact",
+    "coverage",
+  ]);
 });

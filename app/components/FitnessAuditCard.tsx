@@ -15,6 +15,15 @@ import { AlertTriangle, Check } from "./icons";
 
 const ORDER: Record<string, number> = { fail: 0, warn: 1, info: 2, pass: 3 };
 
+/** Worst first. A broken claim leads, because it is what holds the money. */
+export function sortFindings<T extends { id: string; severity: string }>(
+  findings: readonly T[],
+): T[] {
+  const rank = (f: T) =>
+    f.id === "claim" && f.severity === "fail" ? -1 : (ORDER[f.severity] ?? 9);
+  return [...findings].sort((a, b) => rank(a) - rank(b));
+}
+
 const SEVERITY_WORD: Record<string, string> = {
   fail: "Problem",
   warn: "Warning",
@@ -98,9 +107,9 @@ export default function FitnessAuditCard({
     : warn
       ? "border-amber-300 dark:border-amber-500/40"
       : "border-rule";
-  const findings = [...(report?.findings ?? [])].sort(
-    (a, b) => (ORDER[a.severity] ?? 9) - (ORDER[b.severity] ?? 9),
-  );
+  const findings = sortFindings(report?.findings ?? []);
+  const problems = findings.filter((f) => f.severity !== "pass");
+  const passed = findings.filter((f) => f.severity === "pass");
   return (
     <section
       aria-label={heading}
@@ -133,12 +142,24 @@ export default function FitnessAuditCard({
         {VERDICT_TEXT[v] ?? v}
       </p>
       {children}
-      {findings.length > 0 && (
+      {problems.length > 0 && (
         <ul className="mt-3">
-          {findings.map((f, i) => (
+          {problems.map((f, i) => (
             <FindingRow key={`${f.id}-${f.column ?? ""}-${i}`} finding={f} />
           ))}
         </ul>
+      )}
+      {passed.length > 0 && (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-sm text-muted">
+            {passed.length} {passed.length === 1 ? "check" : "checks"} passed
+          </summary>
+          <ul className="mt-2">
+            {passed.map((f, i) => (
+              <FindingRow key={`${f.id}-${f.column ?? ""}-${i}`} finding={f} />
+            ))}
+          </ul>
+        </details>
       )}
       <p className="mt-3 text-xs text-muted">
         {report?.disclaimer ??
