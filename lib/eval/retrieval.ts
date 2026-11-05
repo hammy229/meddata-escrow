@@ -12,7 +12,12 @@
 import golden from "../../evals/golden/matcher.json";
 import heldout from "../../evals/golden/matcher-heldout.json";
 import { llmEnabled, type LlmClient } from "../llm/client";
-import { llmMatch, loadCatalog, type CatalogEntry } from "../ai/matcher";
+import {
+  MIN_KEYWORD_RELEVANCE,
+  llmMatch,
+  loadCatalog,
+  type CatalogEntry,
+} from "../ai/matcher";
 import { bm25Rank } from "../ai/matcher-bm25";
 import { synonymRank } from "../ai/matcher-synonyms";
 import {
@@ -243,6 +248,8 @@ export interface RetrievalReport {
     answerable: number;
     noAnswer: number;
   };
+  /** The offline matcher flags a match relevant:false at or below this score. */
+  minRelevanceThreshold: number;
   rankersRun: string[];
   rankersSkipped: { name: string; reason: string }[];
   /** True only if Claude ranked every golden query with no errors. */
@@ -326,6 +333,7 @@ export async function runRetrieval(
       answerable: queries.filter((q) => q.kind !== "none").length,
       noAnswer: queries.filter((q) => q.kind === "none").length,
     },
+    minRelevanceThreshold: MIN_KEYWORD_RELEVANCE,
     rankersRun,
     rankersSkipped: skipped,
     claudeEvaluated,

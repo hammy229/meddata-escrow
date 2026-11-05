@@ -270,6 +270,7 @@ async function searchDatasets(ctx: AgentContext, input: unknown) {
           datasetId: m.datasetId,
           title: catalog.get(m.datasetId)?.title ?? null,
           score: m.score,
+          ...(m.relevant === undefined ? {} : { relevant: m.relevant }),
           rationale: m.rationale,
           priceCents,
           withinBudget: priceCents !== null && priceCents <= ctx.budgetCents,

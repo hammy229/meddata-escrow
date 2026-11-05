@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T06:41:16.615Z",
+  "generatedAt": "2026-11-05T06:43:41.264Z",
   "caveats": [
     "The catalog holds only 9 listings and the relevance labels are the author's own judgment, so these numbers are a regression check, not a benchmark.",
     "The golden set was written before any ranker was scored on it and its labels have not been edited to raise a score.",
@@ -14,6 +14,7 @@
     "answerable": 31,
     "noAnswer": 8
   },
+  "minRelevanceThreshold": 10,
   "rankersRun": [
     "overlap_baseline",
     "bm25",

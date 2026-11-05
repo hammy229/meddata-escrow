@@ -200,6 +200,17 @@ test("BM25 floors on the golden set", async () => {
   assert.ok(m.ndcgAt3! >= 0.7, `ndcg@3 ${m.ndcgAt3}`); // 0.736
 });
 
+test("the matcher's relevance cut-off is a point on the reported curve", async () => {
+  const { minRelevanceThreshold, results } = await runRetrieval({ env: {} });
+  const curve = results.find((r) => r.ranker === "bm25_synonyms")!.noAnswer
+    .curve;
+  const at = curve.find((c) => c.threshold === minRelevanceThreshold)!;
+  assert.ok(at, "add the cut-off to THRESHOLDS");
+  // observed: 0.5 of no-answer queries look relevant at >0, 0.125 above 10
+  assert.ok(at.falseRelevantRate! <= 0.125);
+  assert.ok(at.answerableTop1Kept! >= 0.8); // 0.8387
+});
+
 test("synonyms help on the held-out queries, not just the main set", async () => {
   const { results, heldout } = await runRetrieval({ env: {} });
   const get = (rs: typeof results, n: string) =>

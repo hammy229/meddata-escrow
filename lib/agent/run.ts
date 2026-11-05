@@ -86,7 +86,7 @@ const SYSTEM = [
   "Work in this order: search_datasets for the study; get_dataset on the best candidate;",
   "check_sample on it; then, only if the sample check passed and the listed price is",
   "within the budget, call create_escrow_order exactly once. If a sample fails, try",
-  "the next in-budget candidate (at most 3 sample checks per run). check_sample also runs a fitness audit; a FAIL line from it means the sample's data has a problem, so do not buy that dataset. Never buy a dataset marked alreadyOwned. Use only dataset ids",
+  "the next in-budget candidate (at most 3 sample checks per run). check_sample also runs a fitness audit; a FAIL line from it means the sample's data has a problem, so do not buy that dataset. Never buy a dataset marked alreadyOwned or a match marked relevant: false (too weak a match). Use only dataset ids",
   "returned by the tools; never invent ids or prices. If no dataset fits the study,",
   "the budget, or the sample check, do not buy. The order only opens a PayPal escrow",
   "the researcher must approve; you cannot move money. Finish with a short plain-text",
@@ -231,6 +231,8 @@ interface SearchMatch {
   title: string | null;
   score: number;
   rationale: string;
+  /** False: too weak to act on (offline matches only). */
+  relevant?: boolean;
   priceCents: number | null;
   withinBudget: boolean;
   alreadyOwned: boolean;
@@ -247,11 +249,16 @@ async function runScripted(
     study: ctx.study,
   });
   if (!search.ok) return done(`Search failed: ${search.error}`);
-  const matches = (search.output as { matches: SearchMatch[] }).matches.filter(
-    (m) => m.score > 0,
-  );
-  if (matches.length === 0)
-    return done("No dataset in the catalog matches this study.");
+  const all = (search.output as { matches: SearchMatch[] }).matches;
+  const matches = all.filter((m) => m.score > 0 && m.relevant !== false);
+  if (matches.length === 0) {
+    const closest = all.find((m) => m.score > 0);
+    return done(
+      closest
+        ? `No dataset in the catalog matches this study. The closest, ${closest.datasetId}, is too weak a match to buy (score ${closest.score}).`
+        : "No dataset in the catalog matches this study.",
+    );
+  }
 
   const inBudget = matches.filter((m) => m.withinBudget);
   const candidates = inBudget.filter((m) => !m.alreadyOwned);

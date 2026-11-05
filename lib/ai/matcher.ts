@@ -21,6 +21,12 @@ export interface DatasetMatch {
   rationale: string;
   /** Which ranker produced this match ("keyword" for LLM-skipped entries). */
   source?: "llm" | "keyword";
+  /**
+   * Offline matches only: false when the score is too low to act on (see
+   * MIN_KEYWORD_RELEVANCE). Left unset for Claude's scores, whose cut-off has
+   * not been measured.
+   */
+  relevant?: boolean;
 }
 
 export interface CatalogEntry {
@@ -37,11 +43,24 @@ export function loadCatalog(): CatalogEntry[] {
   return structuredClone(catalogData) as CatalogEntry[];
 }
 
+/**
+ * Offline scores at or below this are flagged relevant:false. The golden set
+ * showed a no-answer study ("Alzheimer's disease MRI brain scans") still scored
+ * about 6 on one generic word it shares with a COPD listing. 10 clears those
+ * generic-word hits; it does not catch a study that shares one specific word
+ * ("pediatric oncology imaging" scores about 20 on the asthma pilot). See the
+ * threshold curve in evals/results/retrieval.json.
+ */
+export const MIN_KEYWORD_RELEVANCE = 10;
+
 function keywordMatch(
   studyDescription: string,
   catalog: CatalogEntry[],
 ): DatasetMatch[] {
-  return synonymRank(studyDescription, catalog);
+  return synonymRank(studyDescription, catalog).map((m) => ({
+    ...m,
+    relevant: m.score > MIN_KEYWORD_RELEVANCE,
+  }));
 }
 
 const Ranking = z.object({

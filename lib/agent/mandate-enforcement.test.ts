@@ -138,10 +138,17 @@ test(
   "the scripted planner falls through to a candidate the mandate allows",
   withAgentDb(async () => {
     // Cardio (4900) is best but over the 4000 per-order cap; the planner
-    // moves on to the hypertension registry (3900), which fits.
+    // moves on to the hypertension registry (3900), which fits. The study
+    // names hypertension so that listing is a relevant match: it used to be
+    // reached through the single word "synthetic", which the offline
+    // matcher now flags as too weak to buy.
     const m = mandate({ maxPerOrderCents: 4000 });
     const run = await runProcurementAgent(
-      { study: STUDY, budgetCents: 10_000, mandate: m },
+      {
+        study: "Cardiology outcomes and hypertension in a synthetic cohort",
+        budgetCents: 10_000,
+        mandate: m,
+      },
       { useLlm: false },
     );
     assert.equal(run.order?.datasetId, "ds_hypertension_registry_v1");
