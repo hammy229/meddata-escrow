@@ -20,7 +20,7 @@ export default function SiteNav({ current }: { current: string }) {
     <>
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-[72px] flex-col items-center justify-between border-r border-rule bg-paper py-8 lg:flex">
         <Link href="/" aria-label="MedData Escrow home">
-          <ShieldCheck className="h-6 w-6 text-tangerine-600" />
+          <ShieldCheck className="h-6 w-6 text-pp-900" />
         </Link>
         <nav className="flex flex-col items-center gap-9 text-sm text-muted">
           {NAV.map((n) => (
@@ -42,7 +42,7 @@ export default function SiteNav({ current }: { current: string }) {
       <header className="sticky top-0 z-40 border-b border-rule bg-paper/85 backdrop-blur lg:hidden">
         <nav className="flex h-14 items-center justify-between px-5">
           <Link href="/" className="inline-flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5 text-tangerine-600" />
+            <ShieldCheck className="h-5 w-5 text-pp-900" />
             <span className="text-sm">MedData Escrow</span>
           </Link>
           <div className="flex gap-5 text-sm text-muted">

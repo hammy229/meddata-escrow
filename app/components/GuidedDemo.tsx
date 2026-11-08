@@ -134,7 +134,7 @@ export default function GuidedDemo() {
     "px-4 py-2 text-sm transition-opacity disabled:cursor-not-allowed disabled:opacity-40";
   const primary = `${btn} bg-ink text-paper hover:opacity-85`;
   const secondary = `${btn} border border-rule hover:border-ink`;
-  // Tangerine is saved for the one action that starts the walkthrough.
+  // PayPal gold is saved for the one action that starts the walkthrough.
   const cta = `${btn} bg-cta font-medium text-cta-ink hover:bg-cta-hover`;
 
   return (

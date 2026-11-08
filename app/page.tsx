@@ -1,6 +1,6 @@
 // MedData Escrow landing page. Server component, no client JS.
 // Editorial layout: Spectral headlines, Inter Tight body, hairline rules on
-// cream paper, a steel-blue accent, one tangerine CTA, auto dark mode.
+// white paper, PayPal blue accents, one PayPal gold CTA, light only.
 
 import Link from "next/link";
 import { ShieldCheck } from "./components/icons";
@@ -102,7 +102,7 @@ const GUARANTEES: Array<{ t: string; d: string }> = [
   },
 ];
 
-// The one tangerine call to action on the page: the researcher entry point.
+// The one gold call to action on the page: the researcher entry point.
 const CTA_LINK =
   "group inline-flex items-center gap-1.5 rounded-[3px] bg-cta px-5 py-2.5 text-[0.95rem] font-medium text-cta-ink transition-colors hover:bg-cta-hover active:translate-y-px";
 
@@ -221,7 +221,7 @@ export default function Home() {
                 <span className="font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase">
                   Order MD-4821
                 </span>
-                <span className="inline-flex items-center gap-2 font-mono text-[0.7rem] tracking-[0.18em] text-tangerine-700 uppercase dark:text-tangerine-400">
+                <span className="inline-flex items-center gap-2 font-mono text-[0.7rem] tracking-[0.18em] text-gold-700 uppercase">
                   <span className="held-dot-cta h-1.5 w-1.5 rounded-full bg-cta" />
                   Funds held
                 </span>

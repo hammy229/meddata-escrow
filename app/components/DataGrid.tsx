@@ -4,7 +4,7 @@
 //
 // AG Grid 33+ requires explicit module registration and uses the Theming API
 // instead of imported CSS. We register the community bundle once and pick a
-// light Quartz theme, since the site is light only (oat and cream). Richer grids pass extra grid
+// light Quartz theme, since the site is light only (PayPal white). Richer grids pass extra grid
 // options through `options` and reach the API through `gridRef`.
 import type { Ref } from "react";
 import { AgGridReact, type AgGridReactProps } from "ag-grid-react";
@@ -22,7 +22,7 @@ import {
 ModuleRegistry.registerModules([AllCommunityModule]);
 
 // Match the grid to the site: the colors are the design tokens from
-// globals.css (cream page, oat rules, coffee ink, steel-blue accent), read as
+// globals.css (white page, grey rules, navy ink, PayPal blue accent), read as
 // CSS variables so the grid follows the palette without
 // its own hex values. Inter Tight text, generous row height, and a
 // near-square wrapper.

@@ -1,36 +1,36 @@
 @import "tailwindcss";
 
-/* Light only: the oat and cream page shows even when the OS is in dark mode.
+/* Light only: the white PayPal page shows even when the OS is in dark mode.
    No element carries .dark, so the dark: utilities stay off. */
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Design tokens. Palette: cream page, oat surfaces and rules, coffee ink,
- * steel blue for everything interactive, and tangerine as small hints
- * across the site (top rule, eyebrow marks, current page, link hover,
- * selection) plus the few places that must grab attention (main CTA, live
- * "funds held" signal).
+ * Design tokens. Palette: PayPal. White page, cool grey surfaces and rules,
+ * deep navy ink, PayPal blue (#0070e0) for everything interactive with navy
+ * (#003087) for the logo and strong states, and PayPal gold (#ffc439) for
+ * the main buttons plus small hints across the site (top rule, eyebrow
+ * marks, current page, link hover, selection).
  * Every color in the app should come from here, so a palette change is one
  * edit in this file (plus the AG Grid params in DataGrid.tsx, which read
  * these variables, and the themeColor meta in layout.tsx).
  */
 :root {
   color-scheme: light;
-  --background: #faf6ee; /* cream */
-  --foreground: #3b2a20; /* coffee, 12.7:1 on cream */
-  --muted: #6f5643; /* light coffee, 6.3:1 on cream */
-  --rule: #d8cbb3; /* oat rule */
-  --surface: #f1e9da; /* oat card / header surface */
-  --surface-strong: #e9dfcc; /* deeper oat */
-  /* Steel blue: links, focus rings, selection, charts. */
-  --accent: #2f5d8a; /* 6.4:1 on cream */
-  --accent-strong: #264d73;
-  --accent-soft: #eef3f8;
-  --ring: #3f6a96;
-  /* Tangerine: attention only. Dark ink on it, since white fails contrast. */
-  --cta: #f28c28;
-  --cta-hover: #f59e47;
-  --cta-ink: #2a1a10; /* 6.8:1 on tangerine */
+  --background: #ffffff;
+  --foreground: #001435; /* PayPal navy ink, 18.2:1 on white */
+  --muted: #545d68; /* 6.7:1 on white, 6.2:1 on surface */
+  --rule: #dbe2ea;
+  --surface: #f5f7fa; /* cards, grid header */
+  --surface-strong: #eaf0f7;
+  /* PayPal blue: links, focus rings, selection, charts. */
+  --accent: #0070e0; /* 4.8:1 on white; white on it 4.8:1 */
+  --accent-strong: #003087; /* PayPal navy */
+  --accent-soft: #e9f3ff;
+  --ring: #0070e0;
+  /* PayPal gold: main buttons and decorative hints. Navy ink on it. */
+  --cta: #ffc439;
+  --cta-hover: #f2b52e;
+  --cta-ink: #001435; /* 11.5:1 on gold */
 }
 
 @theme inline {
@@ -52,85 +52,30 @@
 }
 
 @theme {
-  /* Brand blue ramp (kept under the historic "pp" name used across the app). */
-  --color-pp-50: #eef3f8;
-  --color-pp-100: #dce6f0;
-  --color-pp-200: #bccee1;
-  --color-pp-300: #93afcb;
-  --color-pp-400: #7a9cc0;
-  --color-pp-500: #4774a0;
-  --color-pp-600: #2f5d8a;
-  --color-pp-700: #264d73;
-  --color-pp-800: #1f3f5e;
-  --color-pp-900: #1a334c;
-  --color-pp-950: #102131;
+  /* PayPal blue ramp, the product's accent across every surface. */
+  --color-pp-50: #e9f3ff;
+  --color-pp-100: #d3e6fe;
+  --color-pp-200: #b2d4fc;
+  --color-pp-300: #86bbf7;
+  --color-pp-400: #529bf0;
+  --color-pp-500: #2280e6;
+  --color-pp-600: #0070e0;
+  --color-pp-700: #005bbd;
+  --color-pp-800: #014a9c;
+  --color-pp-900: #003087;
+  --color-pp-950: #012169;
 
-  /* Oat ramp, for surfaces and borders. */
-  --color-oat-50: #f6f0e4;
-  --color-oat-100: #f1e9da;
-  --color-oat-200: #e9dfcc;
-  --color-oat-300: #d8cbb3;
-  --color-oat-400: #bfae90;
+  /* PayPal gold ramp. 700 and 800 are dark enough for small text. */
+  --color-gold-50: #fff9e8;
+  --color-gold-100: #fff0c7;
+  --color-gold-300: #ffd977;
+  --color-gold-400: #ffce57;
+  --color-gold-500: #ffc439;
+  --color-gold-600: #e0a800;
+  --color-gold-700: #8a6100; /* 5.5:1 on white */
+  --color-gold-800: #6b4b00;
 
-  /* Tangerine ramp, for attention points only. */
-  --color-tangerine-50: #fef2e6;
-  --color-tangerine-100: #fde1c4;
-  --color-tangerine-300: #f8b36e;
-  --color-tangerine-400: #f59e47;
-  --color-tangerine-500: #f28c28;
-  --color-tangerine-600: #d9731a;
-  --color-tangerine-700: #a0520f; /* 5.3:1 on cream, for tangerine text */
-
-  /*
-   * Stock Tailwind ramps the components already use, retuned to the palette
-   * so status colors still read clearly but sit in the same warm family.
-   * zinc = coffee/oat neutrals, amber = ochre warning (kept apart from the
-   * tangerine CTA), rose = brick error, emerald = sage success.
-   */
-  --color-zinc-50: #f7f2e8;
-  --color-zinc-100: #efe7d8;
-  --color-zinc-200: #e3d7c2;
-  --color-zinc-300: #cdbda3;
-  --color-zinc-400: #8a7560;
-  --color-zinc-500: #806b56;
-  --color-zinc-600: #6f5643;
-  --color-zinc-700: #57432f;
-  --color-zinc-800: #463427;
-  --color-zinc-900: #2f231b;
-  --color-zinc-950: #1e1611;
-
-  --color-amber-50: #fbf3e0;
-  --color-amber-100: #f6e6c2;
-  --color-amber-200: #eed49d;
-  --color-amber-300: #e2c27e;
-  --color-amber-400: #d3a64a;
-  --color-amber-500: #b98a2e;
-  --color-amber-600: #8c6419;
-  --color-amber-700: #7f5a17;
-  --color-amber-800: #654713;
-  --color-amber-900: #4a340f;
-
-  --color-rose-50: #fbeeeb;
-  --color-rose-100: #f6ddd7;
-  --color-rose-200: #f0c9c0;
-  --color-rose-300: #e2a597;
-  --color-rose-400: #cf7c6a;
-  --color-rose-500: #b85a47;
-  --color-rose-600: #a04533;
-  --color-rose-700: #873828;
-  --color-rose-800: #6b2c20;
-  --color-rose-900: #4f2018;
-
-  --color-emerald-50: #eef5ef;
-  --color-emerald-100: #d9e9dc;
-  --color-emerald-200: #b8d6bf;
-  --color-emerald-300: #9cc4a5;
-  --color-emerald-400: #7fb08a;
-  --color-emerald-500: #4f8a5e;
-  --color-emerald-600: #3f7550;
-  --color-emerald-700: #335f41;
-  --color-emerald-800: #284a33;
-  --color-emerald-900: #1d3625;
+  /* zinc, amber, rose and emerald use the stock Tailwind ramps again. */
 }
 
 html {
@@ -212,16 +157,16 @@ a {
   text-underline-offset: 3px;
 }
 
-/* ---- Tangerine hints: small touches, never text color on cream. ---- */
-/* A thin tangerine rule across the top of every page. */
+/* ---- Gold hints: small touches, never text color on white. ---- */
+/* A thin gold rule across the top of every page. */
 body {
   border-top: 3px solid var(--cta);
 }
-/* Underlined links pick up a tangerine underline on hover. */
+/* Underlined links pick up a gold underline on hover. */
 a:hover {
   text-decoration-color: var(--cta);
 }
-/* Mono eyebrow labels above sections get a small tangerine mark. */
+/* Mono eyebrow labels above sections get a small gold mark. */
 p.font-mono.uppercase.tracking-\[0\.18em\]::before {
   content: "";
   display: inline-block;
@@ -268,7 +213,7 @@ p.font-mono.uppercase.tracking-\[0\.18em\]::before {
 .held-dot {
   animation: held-pulse 2.4s ease-in-out infinite;
 }
-/* Tangerine variant for the one "funds held" signal on the landing page. */
+/* Gold variant for the one "funds held" signal on the landing page. */
 @keyframes held-pulse-cta {
   0%,
   100% {
