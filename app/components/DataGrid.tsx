@@ -23,10 +23,22 @@ import {
 // CSV export and grid state. No Enterprise modules.
 ModuleRegistry.registerModules([AllCommunityModule]);
 
-// Match the grid to the site: PayPal-blue accent, Inter Tight text, hairline
-// borders on warm paper, generous row height, and a near-square wrapper.
+// Match the grid to the site: the colors are the design tokens from
+// globals.css (cream page, oat rules, coffee ink, steel-blue accent), read as
+// CSS variables so the grid follows the palette and the automatic dark mode
+// without its own hex values. Inter Tight text, generous row height, and a
+// near-square wrapper.
 const shared = {
-  accentColor: "#0070e0",
+  accentColor: "var(--accent)",
+  foregroundColor: "var(--foreground)",
+  textColor: "var(--foreground)",
+  backgroundColor: "var(--background)",
+  borderColor: "var(--rule)",
+  headerBackgroundColor: "var(--surface)",
+  headerTextColor: "var(--foreground)",
+  rowHoverColor: "color-mix(in srgb, var(--accent) 8%, transparent)",
+  selectedRowBackgroundColor:
+    "color-mix(in srgb, var(--accent) 16%, transparent)",
   fontFamily: "var(--font-sans)",
   cellFontFamily: "var(--font-sans)",
   headerFontWeight: 500,
@@ -36,21 +48,12 @@ const shared = {
   fontSize: 14,
 };
 
-const lightTheme = themeQuartz.withPart(colorSchemeLight).withParams({
-  ...shared,
-  backgroundColor: "#fafaf7",
-  borderColor: "#e4e3dd",
-  headerBackgroundColor: "#f3f2ed",
-  rowHoverColor: "color-mix(in srgb, #0070e0 7%, transparent)",
-  selectedRowBackgroundColor: "color-mix(in srgb, #0070e0 14%, transparent)",
-});
+const lightTheme = themeQuartz.withPart(colorSchemeLight).withParams(shared);
 const darkTheme = themeQuartz.withPart(colorSchemeDark).withParams({
   ...shared,
-  backgroundColor: "#0e0e0c",
-  borderColor: "#272724",
-  headerBackgroundColor: "#151513",
-  rowHoverColor: "color-mix(in srgb, #0070e0 12%, transparent)",
-  selectedRowBackgroundColor: "color-mix(in srgb, #0070e0 24%, transparent)",
+  rowHoverColor: "color-mix(in srgb, var(--accent) 12%, transparent)",
+  selectedRowBackgroundColor:
+    "color-mix(in srgb, var(--accent) 24%, transparent)",
 });
 
 // Subscribe to the OS color-scheme via useSyncExternalStore (SSR-safe: the
