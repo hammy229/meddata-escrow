@@ -221,8 +221,8 @@ export default function Home() {
                 <span className="font-mono text-[0.7rem] tracking-[0.18em] text-muted uppercase">
                   Order MD-4821
                 </span>
-                <span className="inline-flex items-center gap-2 font-mono text-[0.7rem] tracking-[0.18em] text-pp-600 uppercase dark:text-pp-400">
-                  <span className="held-dot h-1.5 w-1.5 rounded-full bg-pp-600 dark:bg-pp-400" />
+                <span className="inline-flex items-center gap-2 font-mono text-[0.7rem] tracking-[0.18em] text-tangerine-700 uppercase dark:text-tangerine-400">
+                  <span className="held-dot-cta h-1.5 w-1.5 rounded-full bg-cta" />
                   Funds held
                 </span>
               </div>

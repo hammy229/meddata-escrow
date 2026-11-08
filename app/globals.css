@@ -72,7 +72,7 @@
   --color-tangerine-400: #f59e47;
   --color-tangerine-500: #f28c28;
   --color-tangerine-600: #d9731a;
-  --color-tangerine-700: #b35c12;
+  --color-tangerine-700: #a0520f; /* 5.3:1 on cream, for tangerine text */
 
   /*
    * Stock Tailwind ramps the components already use, retuned to the palette
@@ -257,6 +257,19 @@ a {
 }
 .held-dot {
   animation: held-pulse 2.4s ease-in-out infinite;
+}
+/* Tangerine variant for the one "funds held" signal on the landing page. */
+@keyframes held-pulse-cta {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--cta) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--cta) 0%, transparent);
+  }
+}
+.held-dot-cta {
+  animation: held-pulse-cta 2.4s ease-in-out infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
