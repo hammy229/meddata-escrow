@@ -20,14 +20,14 @@ export default function SiteNav({ current }: { current: string }) {
     <>
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-[72px] flex-col items-center justify-between border-r border-rule bg-paper py-8 lg:flex">
         <Link href="/" aria-label="MedData Escrow home">
-          <ShieldCheck className="h-6 w-6" />
+          <ShieldCheck className="h-6 w-6 text-tangerine-600" />
         </Link>
         <nav className="flex flex-col items-center gap-9 text-sm text-muted">
           {NAV.map((n) => (
             <Link
               key={n.label}
               href={n.href}
-              className="rotate-180 transition-colors [writing-mode:vertical-rl] hover:text-ink aria-[current=page]:text-ink"
+              className="rotate-180 transition-colors [writing-mode:vertical-rl] hover:text-ink aria-[current=page]:text-ink aria-[current=page]:underline aria-[current=page]:decoration-cta aria-[current=page]:decoration-2 aria-[current=page]:underline-offset-8"
               aria-current={n.href === current ? "page" : undefined}
             >
               {n.label}
@@ -42,7 +42,7 @@ export default function SiteNav({ current }: { current: string }) {
       <header className="sticky top-0 z-40 border-b border-rule bg-paper/85 backdrop-blur lg:hidden">
         <nav className="flex h-14 items-center justify-between px-5">
           <Link href="/" className="inline-flex items-center gap-2">
-            <ShieldCheck className="h-5 w-5" />
+            <ShieldCheck className="h-5 w-5 text-tangerine-600" />
             <span className="text-sm">MedData Escrow</span>
           </Link>
           <div className="flex gap-5 text-sm text-muted">
@@ -52,7 +52,7 @@ export default function SiteNav({ current }: { current: string }) {
               <Link
                 key={n.label}
                 href={n.href}
-                className="hover:text-ink aria-[current=page]:text-ink"
+                className="hover:text-ink aria-[current=page]:text-ink aria-[current=page]:underline aria-[current=page]:decoration-cta aria-[current=page]:decoration-2 aria-[current=page]:underline-offset-8"
                 aria-current={n.href === current ? "page" : undefined}
               >
                 {n.label}
