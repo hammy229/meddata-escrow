@@ -5,6 +5,8 @@
 [![CI](https://github.com/hammy229/meddata-escrow/actions/workflows/ci.yml/badge.svg)](https://github.com/hammy229/meddata-escrow/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
+**Links:** [Evals](docs/evals.md) · [Architecture](docs/architecture.md) · [PayPal escrow flow](docs/paypal-flow.md) · [API](docs/api.md) · [Privacy](docs/privacy.md) · [Arham Doshi](https://arhamdoshi.dev) · [LinkedIn](https://linkedin.com/in/arhamdoshi)
+
 ![MedData Escrow: research data you can trust, paid for only once it is delivered](docs/screenshots/home-thumbnail.png)
 
 MedData Escrow is an AI procurement and escrow marketplace for medical research data. Buyers describe the data they need, Amazon Bedrock (Claude) matches relevant dataset listings, PayPal authorizes and holds payment before access is granted, and the vendor delivers through an expiring download link before payment is captured and settled with the seller. That download link is mocked for now; S3 presigned URLs are the planned version.
