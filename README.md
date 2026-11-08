@@ -1,63 +1,17 @@
-# meddata-escrow
+# MedData Escrow
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+**An AI procurement and escrow marketplace for medical research data. Describe a study in plain English, an AI agent finds a matching dataset and checks a sample, and PayPal holds the money until the data passes. Synthetic (Synthea) data only.**
+
 [![CI](https://github.com/hammy229/meddata-escrow/actions/workflows/ci.yml/badge.svg)](https://github.com/hammy229/meddata-escrow/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ![MedData Escrow: research data you can trust, paid for only once it is delivered](docs/screenshots/home-thumbnail.png)
 
-## In Progress: MedData Escrow
-
 MedData Escrow is an AI procurement and escrow marketplace for medical research data. Buyers describe the data they need, Amazon Bedrock (Claude) matches relevant dataset listings, PayPal authorizes and holds payment before access is granted, and the vendor delivers through an expiring download link before payment is captured and settled with the seller. That download link is mocked for now; S3 presigned URLs are the planned version.
-
-**Tech stack:** Next.js and React (AG Grid for tables), Amazon Bedrock (Claude, opt-in), PayPal sandbox APIs, and PostgreSQL for hosted persistence (SQLite through Node's `node:sqlite` for local development), deployed on Render. Planned, not used yet: Amazon S3 presigned delivery, DynamoDB, and AWS Lambda with API Gateway.
 
 **Status:** Actively building for the PayPal AI Hackathon (Devpost deadline: November 12, 2026).
 
-**Architecture flow:** Request → Bedrock match → PayPal authorization → mock delivery link → capture → seller payout.
-
-> **An AI procurement + escrow marketplace for medical research data.** Describe your study in plain English; an AI agent finds the right dataset, verifies a sample, and buys it via PayPal escrow, and funds are captured only if the sample passes.
-
-## Problem & who it's for
-
-Medical-school researchers waste weeks sourcing data: they can't inspect quality before paying, vendors can't trust buyers, and sharing raw records creates serious privacy risk. **meddata-escrow** is for **academic medical researchers** (and the data vendors who serve them). It makes buying research data trustworthy on both sides:
-
-- Buyers never pay for data that fails a quality/privacy check.
-- Vendors never release raw records. Only privacy-safe aggregates leave their systems.
-- Everything is metered, so researchers pay for exactly what they use.
-
-> ⚕️ **All data is synthetic**, generated with [Synthea](https://github.com/synthetichealth/synthea). **No real patient data** is used anywhere.
-
-## Accounts and setup
-
-Open `/signup` to create a researcher or data-provider account, then complete
-`/setup`. Researchers save their institution and research focus; providers save
-organization and PayPal payout details. Sessions persist in SQLite, and each
-account sees only its own orders and research runs. Provider listings and
-pricing are scoped to their organization. New providers start with an empty
-catalog; connect a PostgreSQL research view and publish synthetic cohorts in the provider workspace.
-
-See [account setup and deployment notes](docs/accounts.md). Email verification,
-password recovery, and MFA remain launch prerequisites. The global demo reset
-endpoint is disabled. Existing CLI/Postman demo sequences require authenticated
-sessions and the appropriate researcher/provider identity for each action.
-
-## Screens
-
-| Landing (light)                                               | Landing (dark)                                              |
-| ------------------------------------------------------------- | ----------------------------------------------------------- |
-| ![Landing page, light theme](docs/screenshots/home-light.png) | ![Landing page, dark theme](docs/screenshots/home-dark.png) |
-
-**Procurement agent**: a $60 budget runs search, inspect and sample check, then opens a
-`MATCHED` escrow order the buyer approves in PayPal (mock mode, synthetic data).
-
-![Researcher workspace: the agent's steps, recommendation and opened escrow order](docs/screenshots/researcher-agent.png)
-
-**Vendor workspace**: listings, where the money sits (held, captured, paid
-out), incoming orders with dispute buttons, and the full ledger.
-
-![Vendor workspace: listing stats, earnings, incoming orders and the order ledger](docs/screenshots/vendor-workspace.png)
-
-## Measured, not claimed
+## Results
 
 Each AI and ML piece has a number you can reproduce with `npm run eval`, no keys
 needed, and CI fails if a number moves without being committed. Everything is on
@@ -75,7 +29,7 @@ The evals have already found real problems: an imbalance check firing on 97% of
 small clean cohorts, an agent willing to buy a COPD dataset for an Alzheimer's study,
 one model reply running 300 tool calls, and a hidden group recoverable by subtraction.
 
-## Audits and survival
+### Audits and survival
 
 Added Nov 4 and 5. It runs in mock mode with no keys, and you can watch it at `/demo`.
 
@@ -97,7 +51,47 @@ Added Nov 4 and 5. It runs in mock mode with no keys, and you can watch it at `/
 
 Audits only run on the seeded SYNTHETIC listings. Other listings show as not applicable.
 
-## Agentic commerce, trust and insights
+## Why it matters
+
+Medical-school researchers waste weeks sourcing data: they can't inspect quality before paying, vendors can't trust buyers, and sharing raw records creates serious privacy risk. **meddata-escrow** is for **academic medical researchers** (and the data vendors who serve them). It makes buying research data trustworthy on both sides:
+
+- Buyers never pay for data that fails a quality/privacy check.
+- Vendors never release raw records. Only privacy-safe aggregates leave their systems.
+- Everything is metered, so researchers pay for exactly what they use.
+
+> ⚕️ **All data is synthetic**, generated with [Synthea](https://github.com/synthetichealth/synthea). **No real patient data** is used anywhere.
+
+### Prize map
+
+Where each judging area and prize is addressed. "Mock" means it runs end to end
+locally without credentials; see the status line above for what is not yet live.
+
+| Prize or criterion           | Where to look                                                                                                                                                                                         |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Best Use of Agentic Commerce | Procurement agent with code-enforced spending mandates (`lib/agent`), and an MCP server so outside agents can buy through PayPal escrow (`docs/mcp.md`)                                               |
+| Best Use of PayPal + AI      | Authorize-then-capture escrow, Payouts, verified webhooks, partial capture to settle split disputes, with Claude for matching, sample checks and an advisory dispute arbiter (`lib/escrow`, `lib/ai`) |
+| Most Impactful               | Cuts weeks of data sourcing for medical researchers; buyers never pay for failed samples, vendors never hand over raw records                                                                         |
+| Best Demo Delivery           | `/demo` runs the whole story through the real APIs in one click; script in `docs/demo-script.md`                                                                                                      |
+| Most Creative                | Pay-per-query aggregates, trust scores and a signed data use agreement on every order                                                                                                                 |
+| Most Creative: research fit  | Payment tied to whether the data holds up: fitness audit, leak lift, survival query. Numbers in `docs/evals.md`, story at `/demo`                                                                     |
+| AG Grid                      | Catalog, compare, order queue, ledger, insights and trust tables (`app/components`, `/insights`)                                                                                                      |
+| APIMatic                     | OpenAPI 3.1 spec with drift tests (`openapi/openapi.yaml`); SDK generation steps in `docs/api.md`. Not run through APIMatic yet                                                                       |
+| Render                       | `render.yaml` Blueprint with a seeded SQLite demo and health check. A hosted deploy is still pending                                                                                                  |
+
+## How it works
+
+**Architecture flow:** Request → Bedrock match → PayPal authorization → mock delivery link → capture → seller payout.
+
+### The 6-step flow
+
+1. **Describe**: A researcher describes their study in plain English.
+2. **Match**: An AI agent matches vendor datasets in the catalog and ranks them by fit (`lib/ai/matcher`).
+3. **Sample check**: The agent runs an automated quality + privacy check on a sample of the top match.
+4. **Escrow (authorize)**: PayPal **authorizes** the purchase amount. Funds are _held, not captured_ (`/api/orders`).
+5. **Capture or void**: If the sample check passes, PayPal **captures** the payment; if it fails, the authorization is **voided** and the researcher is never charged.
+6. **Query & meter**: After purchase, plain-English queries return **privacy-safe aggregates** (`lib/ai/nl2query` + `lib/ai/privacy-guard`), each **metered per query** against the order's spend cap in our own ledger. Raw records never leave the vendor.
+
+### Agentic commerce, trust and insights
 
 Added Nov 2 for the PayPal AI Hackathon. All of it runs in mock mode with no keys.
 
@@ -131,29 +125,7 @@ Added Nov 2 for the PayPal AI Hackathon. All of it runs in mock mode with no key
 | ----------------------------------------------- | ---------------------------------------------------------- |
 | ![Insights page](docs/screenshots/insights.png) | ![Guided demo, funds held](docs/screenshots/demo-hold.png) |
 
-## How it works (6-step flow)
-
-1. **Describe**: A researcher describes their study in plain English.
-2. **Match**: An AI agent matches vendor datasets in the catalog and ranks them by fit (`lib/ai/matcher`).
-3. **Sample check**: The agent runs an automated quality + privacy check on a sample of the top match.
-4. **Escrow (authorize)**: PayPal **authorizes** the purchase amount. Funds are _held, not captured_ (`/api/orders`).
-5. **Capture or void**: If the sample check passes, PayPal **captures** the payment; if it fails, the authorization is **voided** and the researcher is never charged.
-6. **Query & meter**: After purchase, plain-English queries return **privacy-safe aggregates** (`lib/ai/nl2query` + `lib/ai/privacy-guard`), each **metered per query** against the order's spend cap in our own ledger. Raw records never leave the vendor.
-
-## Tools used & how
-
-| Tool                                      | How it's used                                                                                                                                                                      |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **PayPal** (Orders/Payments API, sandbox) | Escrow via authorize-then-capture (`lib/paypal/client.ts`, `app/api/orders`). Per-query charges are metered in our own ledger (`app/api/billing`), not billed through PayPal       |
-| **PayPal** (Payouts + Webhooks)           | Vendor payouts minus a 10% fee (`lib/escrow/fees.ts`); verified, deduped webhooks at `/api/webhooks/paypal`; `PayPal-Request-Id` idempotency on every write                        |
-| **Claude on Amazon Bedrock**              | Dataset ranking, question → query plan, tighten-only privacy review, sample check, and the procurement agent (`lib/llm`, `lib/ai`, `lib/agent`); opt-in via `LLM_PROVIDER=bedrock` |
-| **OpenAPI 3.1**                           | Contract for every route (`openapi/openapi.yaml`, served at `/api/openapi`) with drift tests; Postman collection generated from it                                                 |
-| **Zapier** (outbound webhooks)            | Every escrow transition POSTs a signed event to `OUTBOUND_WEBHOOK_URL` (`lib/events/outbound.ts`)                                                                                  |
-| **AG Grid**                               | Dataset catalog, vendor order queue, ledger and query-result tables in the researcher and vendor workspaces                                                                        |
-| **Render**                                | One-click Blueprint deploy via [`render.yaml`](./render.yaml): Render PostgreSQL app database, `/api/health` check                                                                 |
-| **Postman**                               | API collection to exercise and demo every endpoint ([`postman/`](./postman))                                                                                                       |
-
-## Settling a dispute
+### Settling a dispute
 
 The arbiter suggests refund, release or split, and it cannot move money. A split
 takes both sides: one offers (`propose_split`), the other accepts with the same
@@ -162,7 +134,7 @@ part with `final_capture` and release the rest. The order's amount becomes what
 was captured, so the fee, payout and receipt all follow it. Nobody can accept
 their own offer, or an offer that changed after they read it.
 
-## Escrow deadlines
+### Escrow deadlines
 
 Nobody can leave money stuck by going quiet. `POST /api/escrow/sweep` (bearer
 `ESCROW_SWEEP_SECRET`, meant for a scheduler such as a Render cron job) releases
@@ -172,24 +144,7 @@ flagged for a person. The render.yaml Blueprint sets the secret but not the
 schedule, so add a cron job when you deploy. `GET /api/orders?id=` returns the
 order's `deadline`, and both workspaces show it.
 
-## Prize map
-
-Where each judging area and prize is addressed. "Mock" means it runs end to end
-locally without credentials; see the status line above for what is not yet live.
-
-| Prize or criterion           | Where to look                                                                                                                                                                                         |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Best Use of Agentic Commerce | Procurement agent with code-enforced spending mandates (`lib/agent`), and an MCP server so outside agents can buy through PayPal escrow (`docs/mcp.md`)                                               |
-| Best Use of PayPal + AI      | Authorize-then-capture escrow, Payouts, verified webhooks, partial capture to settle split disputes, with Claude for matching, sample checks and an advisory dispute arbiter (`lib/escrow`, `lib/ai`) |
-| Most Impactful               | Cuts weeks of data sourcing for medical researchers; buyers never pay for failed samples, vendors never hand over raw records                                                                         |
-| Best Demo Delivery           | `/demo` runs the whole story through the real APIs in one click; script in `docs/demo-script.md`                                                                                                      |
-| Most Creative                | Pay-per-query aggregates, trust scores and a signed data use agreement on every order                                                                                                                 |
-| Most Creative: research fit  | Payment tied to whether the data holds up: fitness audit, leak lift, survival query. Numbers in `docs/evals.md`, story at `/demo`                                                                     |
-| AG Grid                      | Catalog, compare, order queue, ledger, insights and trust tables (`app/components`, `/insights`)                                                                                                      |
-| APIMatic                     | OpenAPI 3.1 spec with drift tests (`openapi/openapi.yaml`); SDK generation steps in `docs/api.md`. Not run through APIMatic yet                                                                       |
-| Render                       | `render.yaml` Blueprint with a seeded SQLite demo and health check. A hosted deploy is still pending                                                                                                  |
-
-## Architecture
+### Architecture
 
 See [`docs/architecture.md`](docs/architecture.md) for the full design and the escrow-flow Mermaid diagram.
 
@@ -215,7 +170,7 @@ an order's status. Read a single order's timeline (oldest-first) with
 `GET /api/orders?id=<orderId>&events=1`. A `dispute` or `resolve` PATCH can
 include a `note` (e.g. the dispute reason), recorded on that transition's event.
 
-### Trust guarantees
+#### Trust guarantees
 
 The server, not the client, decides who pays what and who sees what:
 
@@ -244,7 +199,7 @@ The server, not the client, decides who pays what and who sees what:
   The total adds per-query charges, and the receipt shows the order's query
   cap. A voided or cancelled order shows zeros.
 
-### AI & the procurement agent
+#### AI & the procurement agent
 
 Claude on Amazon Bedrock is opt-in (`LLM_PROVIDER=bedrock`, client in
 `lib/llm/client.ts`). Every AI step has a deterministic fallback, so the full
@@ -285,7 +240,7 @@ stored in `agent_runs` (`GET /api/agent?runId=`). Each run also returns a
 for each. `/agent/<runId>` shows the same run as a shareable replay page, with
 each guardrail marked as enforced or triggered.
 
-### Escrow in the workspaces
+#### Escrow in the workspaces
 
 - **Checkout round trip.** Buy (escrow) saves the study text, opens (or reuses)
   the `MATCHED` order, and sends the buyer to its approval page: `/checkout/mock`
@@ -328,7 +283,7 @@ each guardrail marked as enforced or triggered.
   money moves. **Reset** clears the demo data. **Reset with sample orders** also
   adds six orders in different states, including a hold with 2 days left.
 
-### API reference
+#### API reference
 
 | Method & path                                                            | Purpose                                                                                                                                                                                  |
 | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -363,7 +318,40 @@ each guardrail marked as enforced or triggered.
 
 Errors are always `{ error }` (plus `reasons` on privacy rejections).
 
-## Quick start
+### Screens
+
+| Landing (light)                                               | Landing (dark)                                              |
+| ------------------------------------------------------------- | ----------------------------------------------------------- |
+| ![Landing page, light theme](docs/screenshots/home-light.png) | ![Landing page, dark theme](docs/screenshots/home-dark.png) |
+
+**Procurement agent**: a $60 budget runs search, inspect and sample check, then opens a
+`MATCHED` escrow order the buyer approves in PayPal (mock mode, synthetic data).
+
+![Researcher workspace: the agent's steps, recommendation and opened escrow order](docs/screenshots/researcher-agent.png)
+
+**Vendor workspace**: listings, where the money sits (held, captured, paid
+out), incoming orders with dispute buttons, and the full ledger.
+
+![Vendor workspace: listing stats, earnings, incoming orders and the order ledger](docs/screenshots/vendor-workspace.png)
+
+## Tech stack
+
+Next.js and React (AG Grid for tables), Amazon Bedrock (Claude, opt-in), PayPal sandbox APIs, and PostgreSQL for hosted persistence (SQLite through Node's `node:sqlite` for local development), deployed on Render. Planned, not used yet: Amazon S3 presigned delivery, DynamoDB, and AWS Lambda with API Gateway.
+
+### Tools used and how
+
+| Tool                                      | How it's used                                                                                                                                                                      |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **PayPal** (Orders/Payments API, sandbox) | Escrow via authorize-then-capture (`lib/paypal/client.ts`, `app/api/orders`). Per-query charges are metered in our own ledger (`app/api/billing`), not billed through PayPal       |
+| **PayPal** (Payouts + Webhooks)           | Vendor payouts minus a 10% fee (`lib/escrow/fees.ts`); verified, deduped webhooks at `/api/webhooks/paypal`; `PayPal-Request-Id` idempotency on every write                        |
+| **Claude on Amazon Bedrock**              | Dataset ranking, question → query plan, tighten-only privacy review, sample check, and the procurement agent (`lib/llm`, `lib/ai`, `lib/agent`); opt-in via `LLM_PROVIDER=bedrock` |
+| **OpenAPI 3.1**                           | Contract for every route (`openapi/openapi.yaml`, served at `/api/openapi`) with drift tests; Postman collection generated from it                                                 |
+| **Zapier** (outbound webhooks)            | Every escrow transition POSTs a signed event to `OUTBOUND_WEBHOOK_URL` (`lib/events/outbound.ts`)                                                                                  |
+| **AG Grid**                               | Dataset catalog, vendor order queue, ledger and query-result tables in the researcher and vendor workspaces                                                                        |
+| **Render**                                | One-click Blueprint deploy via [`render.yaml`](./render.yaml): Render PostgreSQL app database, `/api/health` check                                                                 |
+| **Postman**                               | API collection to exercise and demo every endpoint ([`postman/`](./postman))                                                                                                       |
+
+## Getting started
 
 ```bash
 # 1. Clone
@@ -392,7 +380,7 @@ for both paths are in `compose.yaml`. Run `npm run db:configure` once to generat
 the provider credential encryption key, then `npm run db:migrate` and
 `npm run db:check` after setting `APP_DATABASE_URL`.
 
-### Environment variables
+#### Environment variables
 
 | Variable                    | Required | Description                                                                                 |
 | --------------------------- | :------: | ------------------------------------------------------------------------------------------- |
@@ -414,7 +402,7 @@ the provider credential encryption key, then `npm run db:migrate` and
 
 > 🔒 Never commit secrets. Only `.env.example` (with empty placeholders) is tracked.
 
-### PayPal sandbox setup
+#### PayPal sandbox setup
 
 1. Sign in at the [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/).
 2. Go to **Apps & Credentials → Sandbox** and **Create App**.
@@ -422,12 +410,26 @@ the provider credential encryption key, then `npm run db:migrate` and
 4. Keep `PAYPAL_API_BASE=https://api-m.sandbox.paypal.com`.
 5. Use the dashboard's **Sandbox → Accounts** to get a test buyer login for the demo.
 
-## Demo
+### Accounts and setup
+
+Open `/signup` to create a researcher or data-provider account, then complete
+`/setup`. Researchers save their institution and research focus; providers save
+organization and PayPal payout details. Sessions persist in SQLite, and each
+account sees only its own orders and research runs. Provider listings and
+pricing are scoped to their organization. New providers start with an empty
+catalog; connect a PostgreSQL research view and publish synthetic cohorts in the provider workspace.
+
+See [account setup and deployment notes](docs/accounts.md). Email verification,
+password recovery, and MFA remain launch prerequisites. The global demo reset
+endpoint is disabled. Existing CLI/Postman demo sequences require authenticated
+sessions and the appropriate researcher/provider identity for each action.
+
+### Demo
 
 - 🌐 **Hosted demo:** _placeholder, link coming soon_
 - 🎥 **Demo video (YouTube, < 3 min):** _placeholder, link coming soon_
 
-### Run it locally
+#### Run it locally
 
 ```bash
 npm test               # unit tests (node:test + tsx): escrow state machine, SQLite
@@ -499,10 +501,27 @@ meddata-escrow/
 └─ .github/                  # CI workflow + PR/issue templates
 ```
 
-## Contributing & security
+## Testing
+
+```bash
+npm test          # unit and integration tests
+npm run eval      # reproduces every number in Results, no keys needed
+```
+
+CI runs lint, the type check, the tests, the audit eval, and the production build on every push. It fails if the audit eval's committed results change without being committed again.
+
+## Limitations and next steps
+
+- All data is synthetic, generated with Synthea. No real patient data is used anywhere.
+- The vendor download link is mocked. S3 presigned URLs are the planned version.
+- Claude itself has not been evaluated, because Bedrock access is not on yet. The evals cover everything around it.
+- Email verification, password recovery, and MFA are still needed before a real launch.
+- Planned, not used yet: Amazon S3 presigned delivery, DynamoDB, and AWS Lambda with API Gateway.
+
+### Contributing and security
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) and [SECURITY.md](./SECURITY.md).
 
 ## License
 
-[MIT](./LICENSE) © 2026 Arham Doshi
+MIT, see [LICENSE](LICENSE). Built by [Arham Doshi](https://arhamdoshi.dev).
