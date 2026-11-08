@@ -1,6 +1,6 @@
 // MedData Escrow landing page. Server component, no client JS.
 // Editorial layout: Spectral headlines, Inter Tight body, hairline rules on
-// warm paper, one PayPal-blue accent, auto dark mode.
+// cream paper, a steel-blue accent, one tangerine CTA, auto dark mode.
 
 import Link from "next/link";
 import { ShieldCheck } from "./components/icons";
@@ -102,6 +102,10 @@ const GUARANTEES: Array<{ t: string; d: string }> = [
   },
 ];
 
+// The one tangerine call to action on the page: the researcher entry point.
+const CTA_LINK =
+  "group inline-flex items-center gap-1.5 rounded-[3px] bg-cta px-5 py-2.5 text-[0.95rem] font-medium text-cta-ink transition-colors hover:bg-cta-hover active:translate-y-px";
+
 // Shared text-link style: underlined label + arrow, no button chrome.
 const TEXT_LINK =
   "group inline-flex items-center gap-1 border-b border-ink pb-0.5 text-[0.95rem] text-ink transition-colors hover:border-pp-600 hover:text-pp-600 dark:hover:border-pp-400 dark:hover:text-pp-400";
@@ -122,8 +126,8 @@ export default function Home() {
               We match your study to vetted datasets and hold the payment in
               PayPal until you confirm the delivery.
             </p>
-            <div className="mt-10 flex flex-wrap gap-8">
-              <Link href="/researcher" className={TEXT_LINK}>
+            <div className="mt-10 flex flex-wrap items-center gap-8">
+              <Link href="/researcher" className={CTA_LINK}>
                 Browse datasets
                 <span className="transition-transform group-hover:translate-x-0.5">
                   &rarr;
