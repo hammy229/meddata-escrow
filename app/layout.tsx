@@ -31,10 +31,7 @@ const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 // Match the browser UI chrome (mobile address bar) to the page background.
 // Meta tags need literal colors: keep these equal to --background in globals.css.
 export const viewport: Viewport = {
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#faf6ee" },
-    { media: "(prefers-color-scheme: dark)", color: "#1e1611" },
-  ],
+  themeColor: "#faf6ee",
 };
 
 export const metadata: Metadata = {

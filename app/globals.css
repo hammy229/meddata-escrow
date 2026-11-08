@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Light only: the oat and cream page shows even when the OS is in dark mode.
+   No element carries .dark, so the dark: utilities stay off. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /*
  * Design tokens. Palette: cream page, oat surfaces and rules, coffee ink,
  * steel blue for everything interactive, and tangerine kept for the few
@@ -9,6 +13,7 @@
  * these variables, and the themeColor meta in layout.tsx).
  */
 :root {
+  color-scheme: light;
   --background: #faf6ee; /* cream */
   --foreground: #3b2a20; /* coffee, 12.7:1 on cream */
   --muted: #6f5643; /* light coffee, 6.3:1 on cream */
@@ -124,24 +129,6 @@
   --color-emerald-700: #335f41;
   --color-emerald-800: #284a33;
   --color-emerald-900: #1d3625;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #1e1611; /* espresso */
-    --foreground: #f2eadb; /* cream, 14.9:1 */
-    --muted: #bba88f; /* oat, 7.7:1 */
-    --rule: #3a2d23;
-    --surface: #261c16;
-    --surface-strong: #30241c;
-    --accent: #7a9cc0; /* 6.2:1 */
-    --accent-strong: #93afcb;
-    --accent-soft: color-mix(in srgb, #4774a0 18%, transparent);
-    --ring: #7a9cc0;
-    --cta: #f28c28;
-    --cta-hover: #f59e47;
-    --cta-ink: #1e1611;
-  }
 }
 
 html {

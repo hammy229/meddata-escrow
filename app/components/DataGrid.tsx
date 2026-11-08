@@ -4,16 +4,14 @@
 //
 // AG Grid 33+ requires explicit module registration and uses the Theming API
 // instead of imported CSS. We register the community bundle once and pick a
-// light/dark Quartz theme that follows the OS `prefers-color-scheme`, so the
-// grid matches the site's automatic dark mode. Richer grids pass extra grid
+// light Quartz theme, since the site is light only (oat and cream). Richer grids pass extra grid
 // options through `options` and reach the API through `gridRef`.
-import { useSyncExternalStore, type Ref } from "react";
+import type { Ref } from "react";
 import { AgGridReact, type AgGridReactProps } from "ag-grid-react";
 import {
   AllCommunityModule,
   ModuleRegistry,
   themeQuartz,
-  colorSchemeDark,
   colorSchemeLight,
   type ColDef,
 } from "ag-grid-community";
@@ -25,8 +23,8 @@ ModuleRegistry.registerModules([AllCommunityModule]);
 
 // Match the grid to the site: the colors are the design tokens from
 // globals.css (cream page, oat rules, coffee ink, steel-blue accent), read as
-// CSS variables so the grid follows the palette and the automatic dark mode
-// without its own hex values. Inter Tight text, generous row height, and a
+// CSS variables so the grid follows the palette without
+// its own hex values. Inter Tight text, generous row height, and a
 // near-square wrapper.
 const shared = {
   accentColor: "var(--accent)",
@@ -49,29 +47,6 @@ const shared = {
 };
 
 const lightTheme = themeQuartz.withPart(colorSchemeLight).withParams(shared);
-const darkTheme = themeQuartz.withPart(colorSchemeDark).withParams({
-  ...shared,
-  rowHoverColor: "color-mix(in srgb, var(--accent) 12%, transparent)",
-  selectedRowBackgroundColor:
-    "color-mix(in srgb, var(--accent) 24%, transparent)",
-});
-
-// Subscribe to the OS color-scheme via useSyncExternalStore (SSR-safe: the
-// server snapshot is always light, then the client reconciles on hydration).
-const DARK_QUERY = "(prefers-color-scheme: dark)";
-function subscribeScheme(onChange: () => void): () => void {
-  const mq = window.matchMedia(DARK_QUERY);
-  mq.addEventListener("change", onChange);
-  return () => mq.removeEventListener("change", onChange);
-}
-function usePrefersDark(): boolean {
-  return useSyncExternalStore(
-    subscribeScheme,
-    () => window.matchMedia(DARK_QUERY).matches,
-    () => false,
-  );
-}
-
 export interface DataGridProps<T> {
   rowData: T[];
   columnDefs: ColDef<T>[];
@@ -111,7 +86,6 @@ export default function DataGrid<T>({
   gridRef,
   options,
 }: DataGridProps<T>) {
-  const dark = usePrefersDark();
   // The selected-row highlight merges with any rules the caller passes.
   const rowClassRules =
     getRowId && selectedRowId
@@ -126,7 +100,7 @@ export default function DataGrid<T>({
     <div style={{ height, width: "100%" }}>
       <AgGridReact<T>
         ref={gridRef}
-        theme={dark ? darkTheme : lightTheme}
+        theme={lightTheme}
         rowData={rowData}
         columnDefs={columnDefs}
         defaultColDef={DEFAULT_COL_DEF}
