@@ -466,7 +466,7 @@ CLI (`npm run demo`) and the app (`PAYPAL_MODE=mock`) drive the real state machi
 matcher, and privacy guard against stubbed PayPal + delivery, so no AWS and no
 credentials are needed. The real sandbox path drops in behind the same interfaces.
 See [TODO-paypal-tools.md](./TODO-paypal-tools.md) for the sponsor-tool
-verification pass (AI-Toolkit plugin + PayPal MCP).
+verification pass (PayPal AI-Toolkit + PayPal MCP).
 
 ## Project structure
 

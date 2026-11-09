@@ -46,7 +46,7 @@ draft: [`devpost.md`](devpost.md).
 ## Quality gates
 
 - [x] `npm install` succeeds (last seen 2026-10-22; not re-run today)
-- [ ] `npm run lint` passes. Not today: it also scans `.claude/worktrees`. `npx eslint --ignore-pattern '.claude/**' .` passes on 2026-11-01
+- [ ] `npm run lint` passes. Not today: it also scans local worktree copies outside the source tree. Linting the source alone passes on 2026-11-01
 - [x] `npm run typecheck` passes (re-run 2026-11-01)
 - [x] `npm test` passes: 511 tests (2026-11-01)
 - [x] `npm run build` passes (re-run 2026-11-01)

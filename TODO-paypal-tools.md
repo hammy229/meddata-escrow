@@ -1,28 +1,21 @@
-# Sponsor-tool verification pass (do in a plugin-loaded session)
+# Sponsor-tool verification pass
 
-Today's build is mock-first. These steps need the **PayPal AI-Toolkit plugin**
-and the **PayPal sandbox MCP server**, which aren't available in a plain
-`claude` session. Relaunch from this repo with:
+Today's build is mock-first. These steps need the **PayPal AI-Toolkit** and the
+**PayPal sandbox MCP server**, set up with a sandbox access token as the
+AI-Toolkit README describes. Then:
 
-```bash
-claude --plugin-dir /path/to/AI-Toolkit
-```
-
-(after minting a sandbox token into `~/.claude/settings.json` → `env.PAYPAL_SANDBOX_ACCESS_TOKEN`,
-per the AI-Toolkit README), then:
-
-- [ ] `/paypal:setup` — confirm the plugin is wired to the sandbox app.
+- [ ] Confirm the toolkit is wired to the sandbox app with its setup check.
 - [ ] Put the sandbox Client ID/Secret in `.env.local` (`cp .env.example .env.local`), never in a prompt.
-- [ ] `/paypal:test-accounts` — grab a sandbox **buyer** login to approve orders.
+- [ ] Create sandbox test accounts and grab a **buyer** login to approve orders.
 - [ ] Run the real loop end-to-end via the **PayPal sandbox MCP**: create an
       `intent=AUTHORIZE` order → approve as the buyer → authorize → **capture** one,
       and **void** another. Confirm `lib/paypal/client.ts` matches the MCP's observed calls.
-- [ ] `/paypal:doctor` — run after the escrow module (it's written: `lib/paypal/client.ts`).
-- [ ] Use the `paypal-best-practices` skill when hardening the PayPal code.
+- [ ] Run the toolkit's diagnostics after the escrow module (it's written: `lib/paypal/client.ts`).
+- [ ] Check the PayPal code against PayPal's integration best practices.
 - [ ] Add the webhook handler: verify signatures before any state change; treat
       webhooks as the source of truth (not in today's scope).
 
-## Agent Toolkit × Bedrock — finding (your item 3, before building that piece)
+## Agent Toolkit × Bedrock — finding
 
 **Verdict: it works with Bedrock directly — no custom adapter needed, and our
 TypeScript stack is the supported one.**
