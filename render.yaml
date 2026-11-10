@@ -62,5 +62,6 @@ services:
         sync: false
       - key: OUTBOUND_WEBHOOK_SECRET
         sync: false
+      # Public URL for share previews (OpenGraph/Twitter); change it on a fork.
       - key: NEXT_PUBLIC_SITE_URL
-        sync: false
+        value: https://meddata-escrow.onrender.com
