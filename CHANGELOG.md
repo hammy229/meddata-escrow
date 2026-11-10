@@ -407,5 +407,5 @@ on `main` and green (90 tests, lint, typecheck, build).
 ### Notes
 
 - No credentials/accounts/money touched — still mock-first. PayPal sandbox
-  verification remains a separate dedicated pass (see `TODO-paypal-tools.md`).
+  verification remains a separate dedicated pass (see `docs/paypal-sandbox-checklist.md`).
 - Run `npm run seed` once so datasets exist before POSTing an order.

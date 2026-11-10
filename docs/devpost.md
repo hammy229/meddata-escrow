@@ -1,8 +1,7 @@
-# Devpost submission draft
+# Devpost write-up
 
-Working copy of the PayPal AI Hackathon write-up (deadline 2026-11-12). Every
-claim here maps to code in this repo; keep it that way when editing. Links
-marked `TODO` are filled in once the video and hosted demo exist.
+The PayPal AI Hackathon write-up for MedData Escrow (November 2026). Every claim
+here maps to code in this repo.
 
 ## Tagline
 
@@ -166,5 +165,4 @@ TypeScript · AG Grid · SQLite · OpenAPI · Postman · Render · Zapier
 ## Links
 
 - Repo: https://github.com/hammy229/meddata-escrow
-- Demo video (< 3 min): TODO
 - Hosted demo: https://meddata-escrow.onrender.com (guided story at https://meddata-escrow.onrender.com/demo)

@@ -11,7 +11,7 @@
 
 MedData Escrow is an AI procurement and escrow marketplace for medical research data. Buyers describe the data they need, Amazon Bedrock (Claude) matches relevant dataset listings, PayPal authorizes and holds payment before access is granted, and the vendor delivers through an expiring download link before payment is captured and settled with the seller. That download link is mocked for now; S3 presigned URLs are the planned version.
 
-**Status:** Actively building for the PayPal AI Hackathon (Devpost deadline: November 12, 2026).
+**Status:** Live at [meddata-escrow.onrender.com](https://meddata-escrow.onrender.com). Built for the PayPal AI Hackathon (November 2026).
 
 ## Results
 
@@ -424,7 +424,6 @@ sessions and the appropriate researcher/provider identity for each action.
 ### Demo
 
 - 🌐 **Hosted demo:** [https://meddata-escrow.onrender.com](https://meddata-escrow.onrender.com), with the guided story at [`/demo`](https://meddata-escrow.onrender.com/demo). Mock PayPal, synthetic data, free Render plan
-- 🎥 **Demo video (YouTube, < 3 min):** _placeholder, link coming soon_
 
 #### Run it locally
 
@@ -469,7 +468,7 @@ The escrow lifecycle is a pure state machine in `lib/escrow/state-machine.ts`
 CLI (`npm run demo`) and the app (`PAYPAL_MODE=mock`) drive the real state machine,
 matcher, and privacy guard against stubbed PayPal + delivery, so no AWS and no
 credentials are needed. The real sandbox path drops in behind the same interfaces.
-See [TODO-paypal-tools.md](./TODO-paypal-tools.md) for the sponsor-tool
+See [the PayPal sandbox checklist](docs/paypal-sandbox-checklist.md) for the sponsor-tool
 verification pass (PayPal AI-Toolkit + PayPal MCP).
 
 ## Project structure
