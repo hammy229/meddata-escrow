@@ -26,6 +26,10 @@ after 30 days, which would take the live demo down.
    sleeps. One always-on service fits in Render's 750 free instance hours a
    month.
 
+Until `APP_DATABASE_URL` is set, the service falls back to SQLite on the
+instance's disk: it works, but accounts and orders reset on every deploy. The
+live demo at https://meddata-escrow.onrender.com runs this way today.
+
 Neon's certificate is publicly trusted, so the default `verify-full` TLS mode
 applies. A host with a private CA can supply `APP_DATABASE_CA_CERT` (PEM), and
 `APP_DATABASE_TLS_MODE=require` exists for private networks with self-signed

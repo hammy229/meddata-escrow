@@ -5,7 +5,7 @@
 [![CI](https://github.com/hammy229/meddata-escrow/actions/workflows/ci.yml/badge.svg)](https://github.com/hammy229/meddata-escrow/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Links:** [Evals](docs/evals.md) · [Architecture](docs/architecture.md) · [PayPal escrow flow](docs/paypal-flow.md) · [API](docs/api.md) · [Privacy](docs/privacy.md) · [Arham Doshi](https://arhamdoshi.dev) · [LinkedIn](https://linkedin.com/in/arhamdoshi)
+**Links:** [Live demo](https://meddata-escrow.onrender.com/demo) · [Evals](docs/evals.md) · [Architecture](docs/architecture.md) · [PayPal escrow flow](docs/paypal-flow.md) · [API](docs/api.md) · [Privacy](docs/privacy.md) · [Arham Doshi](https://arhamdoshi.dev) · [LinkedIn](https://linkedin.com/in/arhamdoshi)
 
 ![MedData Escrow: research data you can trust, paid for only once it is delivered](docs/screenshots/home-thumbnail.png)
 
@@ -78,7 +78,7 @@ locally without credentials; see the status line above for what is not yet live.
 | Most Creative: research fit  | Payment tied to whether the data holds up: fitness audit, leak lift, survival query. Numbers in `docs/evals.md`, story at `/demo`                                                                     |
 | AG Grid                      | Catalog, compare, order queue, ledger, insights and trust tables (`app/components`, `/insights`)                                                                                                      |
 | APIMatic                     | OpenAPI 3.1 spec with drift tests (`openapi/openapi.yaml`); SDK generation steps in `docs/api.md`. Not run through APIMatic yet                                                                       |
-| Render                       | `render.yaml` Blueprint (free web service + free Neon Postgres, kept awake by a ping workflow), a seeded demo and a health check. A hosted deploy is still pending                                    |
+| Render                       | `render.yaml` Blueprint (free web service + free Neon Postgres, kept awake by a ping workflow), a seeded demo and a health check. Live at https://meddata-escrow.onrender.com                         |
 
 ## How it works
 
@@ -423,7 +423,7 @@ sessions and the appropriate researcher/provider identity for each action.
 
 ### Demo
 
-- 🌐 **Hosted demo:** _placeholder, link coming soon_
+- 🌐 **Hosted demo:** [https://meddata-escrow.onrender.com](https://meddata-escrow.onrender.com), with the guided story at [`/demo`](https://meddata-escrow.onrender.com/demo). Mock PayPal, synthetic data, free Render plan
 - 🎥 **Demo video (YouTube, < 3 min):** _placeholder, link coming soon_
 
 #### Run it locally
