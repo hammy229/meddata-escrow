@@ -273,17 +273,11 @@ each guardrail marked as enforced or triggered.
 - **Ledger.** Each row splits the amount into the platform fee and the vendor's
   net. A pinned total row sums both, so the amount equals the fee plus the net on
   every row and in the total.
-- **Webhook replay.** In mock mode the webhook simulator sends a buyer approval
-  (authorization created), a capture, a refund, a void or a dispute. **Replay
-  last event** sends the same event id again. The server answers that it is a
-  duplicate, so nothing changes.
-- **Demo catalog.** Six synthetic datasets. Two are built to fail their sample
+- **Demo catalog.** Nine synthetic datasets, including three ALS survival
+  listings for the fitness audit. Two others are built to fail their sample
   check: the Pediatric Asthma Pilot (640 records, under the 1,000 minimum) and
   the COPD Exacerbations Panel (3.4% duplicate rows, over the 2% limit). The
   Heart Failure Readmissions dataset lists at $240, above a $60 demo budget.
-- **Mock-mode bar.** In mock mode a bar at the bottom right says that no real
-  money moves. **Reset** clears the demo data. **Reset with sample orders** also
-  adds six orders in different states, including a hold with 2 days left.
 
 #### API reference
 
@@ -314,7 +308,7 @@ each guardrail marked as enforced or triggered.
 | `GET /api/orders?id=<id>&arbitrate=1`                                    | Advisory dispute recommendation (`409` unless the order is `DISPUTED`)                                                                                                                   |
 | `GET /api/insights`                                                      | Marketplace figures: held vs released money, fees, dispute rate, vendors, datasets                                                                                                       |
 | `POST /api/webhooks/paypal`                                              | Signature-verified, deduped PayPal events applied to escrow state, matched by PayPal ids or our order id                                                                                 |
-| `POST /api/demo/reset`                                                   | Mock mode only: clears orders, events, usage and agent runs, then reseeds the catalog. Body `{ "seed": "story" }` also adds six sample orders (`404` otherwise, `422` for other bodies)  |
+| `POST /api/demo/reset` | Disabled: always answers `403`. Shared demo data is not reset over HTTP; delete the local SQLite file and seed again |
 | `GET /api/openapi`                                                       | The OpenAPI 3.1 spec (`openapi/openapi.yaml`)                                                                                                                                            |
 | `GET /api/health`                                                        | Uptime check: `{ status, mode, db }` (Render health check)                                                                                                                               |
 
@@ -435,29 +429,38 @@ sessions and the appropriate researcher/provider identity for each action.
 #### Run it locally
 
 ```bash
-npm test               # unit tests (node:test + tsx): escrow state machine, SQLite
-                       # persistence, PayPal client, matcher, nl2query, privacy guard, routes
-                       # (511 passing as of November 1, 2026)
+npm test               # 1,066 unit tests (node:test + tsx): escrow state machine,
+                       # persistence, PayPal client, matcher, privacy guard, routes
 npm run demo           # happy-path CLI: match → authorize → deliver → capture → payout
 npm run dev:mock       # full UI + API, no PayPal keys needed (http://localhost:3000)
 npm run demo -- --sandbox "heart disease cohort"   # real sandbox calls (.env.local)
 ```
 
-**Try the full flow in the browser (no credentials):** `npm run dev:mock`, then
-open [`/researcher`](http://localhost:3000/researcher). Describe a study, tick up
-to three matches to compare them, and pick one. **Buy (escrow)** opens the local
-checkout page at `/checkout/mock`, which stands in for PayPal's approval page.
-Approve there, then **Back to the workspace** returns you to
-`/researcher?orderId=…`, where the order is reloaded from the server. Run a
-privacy-safe query, read the receipt card, and use **Confirm & release payment**
-and **Pay out vendor**. The vendor delivers the data on
-[`/vendor`](http://localhost:3000/vendor) with **Deliver data**. Cancel is
-available until the order is approved. A refused question offers a **Try
-instead** rewrite. The vendor page also has the catalog (edit a price inline and
-the next order charges it; Ctrl+Z undoes the edit), the order queue, the ledger
-with fee and net, the order drawer and a PayPal webhook simulator. To start over
-between takes, use **Reset** or **Reset with sample orders** in the mock-mode bar
-(or call `POST /api/demo/reset` in mock mode).
+**Fastest way to see everything:** open [`/demo`](http://localhost:3000/demo)
+and press **Start the demo**. It plays the whole story through the real APIs
+with no account.
+
+**Try it by hand with two accounts (no credentials):**
+
+1. `npm run db:seed`, then `npm run dev:mock`.
+2. Sign up at [`/signup`](http://localhost:3000/signup) as a **data provider**
+   and finish `/setup`.
+3. Give that provider the three synthetic ALS listings (a provider can only
+   deliver listings it owns, and the seeded ones belong to seed vendors):
+   `node --import tsx --env-file-if-exists=.env.local scripts/demo/assign-als-listings.ts --email <provider email>`
+4. In a private window, sign up as a **researcher** and finish `/setup`. Describe
+   an ALS survival study on `/researcher`, compare matches, and pick one.
+   **Buy (escrow)** opens `/checkout/mock`, which stands in for PayPal's approval
+   page; approve there and return to the workspace with the funds held.
+5. Back as the provider on [`/vendor`](http://localhost:3000/vendor), deliver
+   the order from the order queue. The delivery audit runs at this point.
+6. As the researcher, run privacy-safe queries (a refused question offers a
+   **Try instead** rewrite), read the receipt, and **Confirm & release
+   payment**. The provider then sends the payout from its order queue.
+
+The provider page also has the catalog (edit a price inline; Ctrl+Z undoes it),
+the ledger with fee and net, and the order drawer. To start over, delete
+`data/dev.sqlite` and seed again.
 
 The escrow lifecycle is a pure state machine in `lib/escrow/state-machine.ts`
 (`MATCHED → AUTHORIZED → DELIVERED → CAPTURED → PAID_OUT`, with
@@ -475,7 +478,7 @@ verification pass (PayPal AI-Toolkit + PayPal MCP).
 meddata-escrow/
 ├─ app/
 │  ├─ researcher/            # researcher workspace (browse, compare, query, buy)
-│  ├─ vendor/                # vendor workspace (catalog, ledger, order drawer, webhook simulator)
+│  ├─ vendor/                # vendor workspace (catalog, ledger, order drawer)
 │  ├─ agent/[runId]/         # shareable replay of one procurement agent run
 │  ├─ checkout/mock/         # local stand-in for PayPal's approval page (mock mode)
 │  └─ api/
@@ -485,7 +488,7 @@ meddata-escrow/
 │     ├─ query/              # POST: plain-English query (paid order required; privacy-safe aggregate, metered, one-sentence summary)
 │     ├─ billing/            # GET/POST: per-query usage and spend
 │     ├─ agent/              # POST/GET: procurement agent runs (with shortlist)
-│     ├─ demo/reset/         # POST: mock mode only, resets the demo data (optionally with sample orders)
+│     ├─ demo/reset/         # disabled (403); reset locally instead
 │     └─ health/             # GET: uptime check
 ├─ lib/
 │  ├─ ai/                    # matcher, nl2query, privacy-guard (incl. safe rewrites), answer-summary
