@@ -95,9 +95,21 @@ PAID_OUT`, plus dispute/void) with an append-only audit trail of every
 - **Disputes that can actually split.** One side offers a split and the other
   accepts. PayPal captures that part of the hold and releases the rest, and the
   fee, payout and receipt follow the settled amount.
+- **Accounts and live databases.** Buyers and vendors sign up with scrypt-hashed
+  passwords and server sessions, and every order route checks the caller owns
+  every order id it touches. Hosted data lives in PostgreSQL (SQLite locally), and
+  a vendor can connect its own Postgres as a live source, stored encrypted.
 - **Insights and a guided demo.** An `/insights` page shows money held versus
   released, fees and dispute rate. `/demo` plays the whole story through the real
   APIs in one click.
+
+## What runs live today
+
+Being plain about it: the demo runs PayPal in mock mode (the code targets the
+real Orders v2, Payouts and webhook APIs, but has not been run against the
+sandbox yet), and Claude falls back to deterministic code because Bedrock model
+access is not on for our account. All data is synthetic. Download links are mock
+links.
 
 ## Challenges
 
