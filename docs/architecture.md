@@ -10,25 +10,25 @@ TypeScript codebase. AI logic sits in `lib/ai`, the PayPal integration in
 
 ## Components
 
-| Layer         | Location                                                                                                  | Responsibility                                                                        |
-| ------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Researcher UI | `app/researcher`                                                                                          | Describe a study, browse matches, query, buy, confirm and pay out                     |
-| Vendor UI     | `app/vendor`                                                                                              | Catalog and prices, order queue (deliver, release, refund), ledger |
-| Checkout      | `app/checkout/mock`                                                                                       | Mock-mode stand-in for PayPal's approval page (approve or cancel, then back)          |
-| API           | `app/api/{match,datasets,query,orders,billing,agent,demo/reset,webhooks/paypal,openapi,health}`           | Request handlers                                                                      |
-| LLM           | `lib/llm/client`                                                                                          | Claude on Bedrock (opt-in), structured outputs                                        |
-| AI            | `lib/ai/{matcher,nl2query,privacy-guard,sample-check,answer-summary}`                                     | Matching, NL→plan→SQL, privacy, rewrites, summaries                                   |
-| Agent         | `lib/agent/{tools,run,store,shortlist,replay}`                                                            | Guardrailed procurement tool loop, run audit, ranked shortlist, replay                |
-| Escrow        | `lib/escrow/{state-machine,service,fees,receipt,auth-window,paypal-webhooks,mock-webhook-events}`         | Transitions, fee split, receipts, hold window, inbound webhooks                       |
-| Query caps    | `lib/db/usage` (`queryCapStatus`), `lib/query/pricing`                                                    | Per-order spend cap (default 1000 cents, 50 to 100000) checked before each charge     |
-| Catalog       | `lib/catalog/price-rules`, `lib/db/datasets`                                                              | Listing prices (whole cents, $1 to $10,000) and reads                                 |
-| Demo data     | `lib/db/reset`, `lib/db/demo-story`                                                                       | Mock-mode reset; optional six sample orders built through the state machine           |
-| UI helpers    | `lib/ui/{compare,bar-scale,status-filter,escrow-response,order-sync,ledger,listing-stats,vendor-actions}` | Pure helpers behind the grids, polling, ledger totals and vendor buttons              |
-| Payments      | `lib/paypal/client`                                                                                       | Authorize / capture / void / payouts / verify; return URLs and `custom_id` on create  |
-| Delivery      | `lib/delivery/mock-s3`                                                                                    | Mock expiring download links (`presignDelivery`), an S3 presigned URL stand-in        |
-| Events        | `lib/events/outbound`                                                                                     | Signed outbound webhook per transition                                                |
-| HTTP          | `proxy.ts`, `lib/http`                                                                                    | Security headers, rate limits, body caps, req ids                                     |
-| Data          | `lib/db/{schema.sql,seed.ts}`, `data/catalog.json`                                                        | Schema + seed (six catalog datasets)                                                  |
+| Layer         | Location                                                                                                  | Responsibility                                                                       |
+| ------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Researcher UI | `app/researcher`                                                                                          | Describe a study, browse matches, query, buy, confirm and pay out                    |
+| Vendor UI     | `app/vendor`                                                                                              | Catalog and prices, order queue (deliver, release, refund), ledger                   |
+| Checkout      | `app/checkout/mock`                                                                                       | Mock-mode stand-in for PayPal's approval page (approve or cancel, then back)         |
+| API           | `app/api/{match,datasets,query,orders,billing,agent,demo/reset,webhooks/paypal,openapi,health}`           | Request handlers                                                                     |
+| LLM           | `lib/llm/client`                                                                                          | Claude on Bedrock (opt-in), structured outputs                                       |
+| AI            | `lib/ai/{matcher,nl2query,privacy-guard,sample-check,answer-summary}`                                     | Matching, NL→plan→SQL, privacy, rewrites, summaries                                  |
+| Agent         | `lib/agent/{tools,run,store,shortlist,replay}`                                                            | Guardrailed procurement tool loop, run audit, ranked shortlist, replay               |
+| Escrow        | `lib/escrow/{state-machine,service,fees,receipt,auth-window,paypal-webhooks,mock-webhook-events}`         | Transitions, fee split, receipts, hold window, inbound webhooks                      |
+| Query caps    | `lib/db/usage` (`queryCapStatus`), `lib/query/pricing`                                                    | Per-order spend cap (default 1000 cents, 50 to 100000) checked before each charge    |
+| Catalog       | `lib/catalog/price-rules`, `lib/db/datasets`                                                              | Listing prices (whole cents, $1 to $10,000) and reads                                |
+| Demo data     | `lib/db/reset`, `lib/db/demo-story`                                                                       | Mock-mode reset; optional six sample orders built through the state machine          |
+| UI helpers    | `lib/ui/{compare,bar-scale,status-filter,escrow-response,order-sync,ledger,listing-stats,vendor-actions}` | Pure helpers behind the grids, polling, ledger totals and vendor buttons             |
+| Payments      | `lib/paypal/client`                                                                                       | Authorize / capture / void / payouts / verify; return URLs and `custom_id` on create |
+| Delivery      | `lib/delivery/mock-s3`                                                                                    | Mock expiring download links (`presignDelivery`), an S3 presigned URL stand-in       |
+| Events        | `lib/events/outbound`                                                                                     | Signed outbound webhook per transition                                               |
+| HTTP          | `proxy.ts`, `lib/http`                                                                                    | Security headers, rate limits, body caps, req ids                                    |
+| Data          | `lib/db/{schema.sql,seed.ts}`, `data/catalog.json`                                                        | Schema + seed (six catalog datasets)                                                 |
 
 ## Escrow flow
 
