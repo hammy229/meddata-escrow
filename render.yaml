@@ -1,9 +1,11 @@
 # Render deploy config — https://render.com/docs/blueprint-spec
 # Secrets (PayPal, AWS) are set in the Render dashboard, never committed.
 #
-# Hosted app data uses Render Postgres. Provider source credentials are encrypted.
-# Apply this blueprint in Render to provision the database and generated secrets.
-# Free PostgreSQL is for evaluation; choose a paid plan for durable production use.
+# Hosted app data lives in an external PostgreSQL (a free Neon database works and
+# never expires, unlike Render's free Postgres, which is deleted after 30 days).
+# Render asks for APP_DATABASE_URL when the blueprint is applied. Provider source
+# credentials are encrypted. .github/workflows/keep-alive.yml pings the service so
+# the free instance does not sleep.
 services:
   - type: web
     name: meddata-escrow
@@ -17,15 +19,12 @@ services:
       # node:sqlite needs Node >= 22 (package.json engines); match CI's 24.
       - key: NODE_VERSION
         value: "24"
+      # Neon's DIRECT connection string (turn "Connection pooling" off; the
+      # pooler rejects the timezone and timeout settings the app sends), with
+      # sslmode=require. Neon's certificate is publicly trusted, so the default
+      # verify-full TLS mode applies.
       - key: APP_DATABASE_URL
-        fromDatabase:
-          name: meddata-escrow-db
-          property: connectionString
-      # Render private-network PostgreSQL uses a self-signed certificate.
-      # Require encryption on that internal connection. Provider sources still
-      # require full certificate verification.
-      - key: APP_DATABASE_TLS_MODE
-        value: require
+        sync: false
       - key: CONNECTION_ENCRYPTION_KEY
         generateValue: true
       - key: MANDATE_SECRET
@@ -63,10 +62,3 @@ services:
         sync: false
       - key: NEXT_PUBLIC_SITE_URL
         sync: false
-
-databases:
-  - name: meddata-escrow-db
-    databaseName: meddata_escrow
-    user: meddata_app
-    plan: free
-    ipAllowList: []
