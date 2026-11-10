@@ -411,6 +411,7 @@ the provider credential encryption key, then `npm run db:migrate` and
 3. Copy the **Client ID** and **Secret** into `.env.local` (`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`) and remove `PAYPAL_MODE=mock`.
 4. Keep `PAYPAL_API_BASE=https://api-m.sandbox.paypal.com`.
 5. Use the dashboard's **Sandbox → Accounts** to get a test buyer login for the demo.
+6. Run `npm run demo -- --sandbox`. It creates a real sandbox escrow order and prints the approve link. After the test buyer approves it, run `npm run demo -- --sandbox --resume <orderId>` to authorize, deliver, capture and pay out. Set `SANDBOX_PAYOUT_EMAIL` to a sandbox account to receive the payout.
 
 ### Accounts and setup
 

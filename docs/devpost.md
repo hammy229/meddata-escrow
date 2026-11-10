@@ -105,9 +105,11 @@ PAID_OUT`, plus dispute/void) with an append-only audit trail of every
 
 ## What runs live today
 
-Being plain about it: the demo runs PayPal in mock mode (the code targets the
-real Orders v2, Payouts and webhook APIs, but has not been run against the
-sandbox yet), and Claude falls back to deterministic code because Bedrock model
+Being plain about it: the demo runs PayPal in mock mode so it never waits on a
+login. The code targets the real Orders v2, Payouts and webhook APIs. Against the
+PayPal sandbox we have checked the credentials and created real escrow orders
+(`npm run demo -- --sandbox`); buyer approval, capture and payout are tested in
+mock mode only. Claude falls back to deterministic code because Bedrock model
 access is not on for our account. All data is synthetic. Download links are mock
 links.
 
