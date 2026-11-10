@@ -11,6 +11,8 @@ services:
     name: meddata-escrow
     runtime: node
     plan: free
+    # Same AWS region as the Neon database (us-east-1).
+    region: virginia
     # tsx (a devDependency) runs the seed script at boot, so keep dev deps.
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run db:migrate && npm run db:seed && npm start
