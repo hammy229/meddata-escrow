@@ -78,7 +78,7 @@ locally without credentials; see the status line above for what is not yet live.
 | Most Creative: research fit  | Payment tied to whether the data holds up: fitness audit, leak lift, survival query. Numbers in `docs/evals.md`, story at `/demo`                                                                     |
 | AG Grid                      | Catalog, compare, order queue, ledger, insights and trust tables (`app/components`, `/insights`)                                                                                                      |
 | APIMatic                     | OpenAPI 3.1 spec with drift tests (`openapi/openapi.yaml`); SDK generation steps in `docs/api.md`. Not run through APIMatic yet                                                                       |
-| Render                       | `render.yaml` Blueprint with Render Postgres, a seeded demo and a health check. A hosted deploy is still pending                                                                                      |
+| Render                       | `render.yaml` Blueprint (free web service + free Neon Postgres, kept awake by a ping workflow), a seeded demo and a health check. A hosted deploy is still pending                                    |
 
 ## How it works
 
@@ -344,7 +344,7 @@ Next.js and React (AG Grid for tables), Amazon Bedrock (Claude, opt-in), PayPal 
 | **OpenAPI 3.1**                           | Contract for every route (`openapi/openapi.yaml`, served at `/api/openapi`) with drift tests; Postman collection generated from it                                                 |
 | **Zapier** (outbound webhooks)            | Every escrow transition POSTs a signed event to `OUTBOUND_WEBHOOK_URL` (`lib/events/outbound.ts`)                                                                                  |
 | **AG Grid**                               | Dataset catalog, vendor order queue, ledger and query-result tables in the researcher and vendor workspaces                                                                        |
-| **Render**                                | One-click Blueprint deploy via [`render.yaml`](./render.yaml): Render PostgreSQL app database, `/api/health` check                                                                 |
+| **Render**                                | One-click Blueprint deploy via [`render.yaml`](./render.yaml): free Neon PostgreSQL app database, `/api/health` check, keep-alive workflow                                         |
 | **Postman**                               | API collection to exercise and demo every endpoint ([`postman/`](./postman))                                                                                                       |
 
 ## Getting started
@@ -370,8 +370,8 @@ npm run dev                       # http://localhost:3000
 Production build: `npm run build && npm start`.
 
 For hosted app persistence and live provider sources, see
-[Live databases](docs/live-databases.md). The Render blueprint creates the app
-PostgreSQL database and supplies its URL automatically. Optional local servers
+[Live databases](docs/live-databases.md). The Render blueprint asks for the app
+database URL (a free Neon PostgreSQL) when you apply it. Optional local servers
 for both paths are in `compose.yaml`. Run `npm run db:configure` once to generate
 the provider credential encryption key, then `npm run db:migrate` and
 `npm run db:check` after setting `APP_DATABASE_URL`.
@@ -388,7 +388,7 @@ the provider credential encryption key, then `npm run db:migrate` and
 | `LLM_PROVIDER`              |    no    | `bedrock` enables Claude on Amazon Bedrock; unset = deterministic fallbacks                 |
 | `AWS_REGION`                | Bedrock  | Bedrock region (default `us-east-1`); credentials from the AWS chain                        |
 | `LLM_MODEL`                 |    no    | Bedrock model id override (default `anthropic.claude-opus-5-5`)                             |
-| `APP_DATABASE_URL`          |  hosted  | PostgreSQL URL; supplied automatically by the Render blueprint                              |
+| `APP_DATABASE_URL`          |  hosted  | PostgreSQL URL (direct Neon string); Render asks for it when the blueprint is applied       |
 | `CONNECTION_ENCRYPTION_KEY` | sources  | 32-byte base64 key; `npm run db:configure` locally, generated on Render                     |
 | `PROVIDER_DATABASE_HOSTS`   | sources  | Exact comma-separated approved source hostnames                                             |
 | `DATABASE_URL`              |    ✅    | SQLite local fallback (`file:./data/dev.sqlite`); hosted PostgreSQL uses `APP_DATABASE_URL` |

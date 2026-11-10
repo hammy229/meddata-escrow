@@ -5,28 +5,33 @@ and already listed PostgreSQL as the next persistence layer (`docs/devpost.md`).
 The implementation therefore uses standard PostgreSQL for both app persistence
 and provider research sources. It also works with other PostgreSQL hosts.
 
-## Hosted app database: Render
+## Hosted app database: Neon on Render
 
-Apply the updated `render.yaml` blueprint in your Render workspace. It declares
-`meddata-escrow-db` and injects its private connection string as `APP_DATABASE_URL`.
-Render generates `CONNECTION_ENCRYPTION_KEY`; there is no database API key to
-copy into the source code. Startup runs migrations, seeds missing synthetic
-catalog rows without changing prices, then starts the web service. The health
-endpoint checks the database and required tables.
+The Render blueprint runs the web service on Render's free plan and keeps app
+data in an external PostgreSQL. A free [Neon](https://neon.tech) database is the
+suggested host because it does not expire; Render's free Postgres is deleted
+after 30 days, which would take the live demo down.
 
-The blueprint uses the free database plan to match this project's evaluation
-deployment. Free databases are for evaluation; select a production plan and
-backup policy before relying on long-term retention. This repository change
-does not itself provision a database or deploy the service. Apply the blueprint
-or connect the Render integration to activate it.
+1. Create a Neon project and copy its **direct** connection string (turn
+   "Connection pooling" off). The pooler rejects the timezone and timeout
+   settings the app sends at connect time. Keep `sslmode=require`.
+2. Apply `render.yaml` in Render. It asks for `APP_DATABASE_URL`; paste the
+   Neon string. Render generates `CONNECTION_ENCRYPTION_KEY`, `MANDATE_SECRET`
+   and `ESCROW_SWEEP_SECRET`; no database key goes into the source code.
+3. Startup runs migrations, seeds missing synthetic catalog rows without
+   changing prices, then starts the web service. `/api/health` checks the
+   database and required tables.
+4. Set the repository variable `LIVE_URL` to the Render URL. The `Keep alive`
+   workflow pings `/api/health` every 5 minutes so the free instance never
+   sleeps. One always-on service fits in Render's 750 free instance hours a
+   month.
 
-Render private connections use self-signed certificates. The blueprint explicitly
-sets `APP_DATABASE_TLS_MODE=require`: traffic is encrypted, but certificate
-verification is disabled for that private app connection. The default for other
-app connections is `verify-full`, and provider connections always verify their
-certificates. Private-CA deployments can supply `APP_DATABASE_CA_CERT` (PEM).
-See [Render connection documentation](https://render.com/docs/postgresql-creating-connecting)
-and [blueprint references](https://render.com/docs/blueprint-spec).
+Neon's certificate is publicly trusted, so the default `verify-full` TLS mode
+applies. A host with a private CA can supply `APP_DATABASE_CA_CERT` (PEM), and
+`APP_DATABASE_TLS_MODE=require` exists for private networks with self-signed
+certificates (encrypted, not verified). Provider connections always verify
+their certificates. See the
+[blueprint references](https://render.com/docs/blueprint-spec).
 
 `APP_DATABASE_URL` takes precedence over `DATABASE_URL`. Leave it unset for the
 existing local SQLite database. Do not put a PostgreSQL URL into a `file:` URL.

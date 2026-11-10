@@ -7,8 +7,8 @@ study request. Providers save an organization description and PayPal payout
 email. Setup can be edited later. Roles are fixed at signup.
 
 Accounts, profiles, and sessions persist in PostgreSQL when `APP_DATABASE_URL`
-is set, with SQLite as the local fallback. The Render blueprint provisions the
-hosted app database. Run `npm run db:migrate` and `npm run db:check`; see
+is set, with SQLite as the local fallback. The hosted demo uses a free Neon
+PostgreSQL, wired in through the Render blueprint. Run `npm run db:migrate` and `npm run db:check`; see
 [live database setup](live-databases.md), including the one-time SQLite import.
 
 Passwords are salted with scrypt (N=32768, r=8, p=1). Seven-day opaque sessions
