@@ -127,9 +127,9 @@ Command names and flags can vary between CLI versions. Check
 - `POST /api/query` and `POST /api/billing` return `402` once one more query
   would pass the order's cap. The body is `QueryCapReached`:
   `{ error, spentCents, capCents }`. Nothing is metered on a `402`.
-- `POST /api/demo/reset` takes an optional JSON body. `{ "seed": "story" }` adds
-  six sample orders; an empty body is a plain reset. Any other `seed` value, or
-  invalid JSON, is `422`. Outside mock mode the route is `404`, whatever the body.
+- `POST /api/demo/reset` is disabled and always answers `403`: shared demo data
+  is never reset over HTTP. To start over locally, delete the SQLite file and
+  seed again.
 - In mock mode (`PAYPAL_MODE=mock`), responses add `mock: true` and use
   `MOCK-*` PayPal ids. In live mode, PayPal failures pass PayPal's status
   through (the `default` response).

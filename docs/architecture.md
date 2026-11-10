@@ -13,7 +13,7 @@ TypeScript codebase. AI logic sits in `lib/ai`, the PayPal integration in
 | Layer         | Location                                                                                                  | Responsibility                                                                        |
 | ------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | Researcher UI | `app/researcher`                                                                                          | Describe a study, browse matches, query, buy, confirm and pay out                     |
-| Vendor UI     | `app/vendor`                                                                                              | Catalog and prices, order queue (deliver, release, refund), ledger, webhook simulator |
+| Vendor UI     | `app/vendor`                                                                                              | Catalog and prices, order queue (deliver, release, refund), ledger |
 | Checkout      | `app/checkout/mock`                                                                                       | Mock-mode stand-in for PayPal's approval page (approve or cancel, then back)          |
 | API           | `app/api/{match,datasets,query,orders,billing,agent,demo/reset,webhooks/paypal,openapi,health}`           | Request handlers                                                                      |
 | LLM           | `lib/llm/client`                                                                                          | Claude on Bedrock (opt-in), structured outputs                                        |
