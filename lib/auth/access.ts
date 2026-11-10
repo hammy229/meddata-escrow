@@ -7,12 +7,33 @@ import {
   type Account,
   type Role,
 } from "./store";
+/**
+ * True when a state-changing request comes from our own site. Compares the
+ * Origin's host with the host the browser addressed. Hosts such as Render end
+ * TLS at a proxy, so the app sees http:// and sometimes an internal host; the
+ * browser-set Host / X-Forwarded-Host carry the public one. The scheme is not
+ * compared, since a cross-site page cannot make the browser send our host.
+ */
 export function sameOrigin(request: Request): boolean {
+  if (request.headers.get("sec-fetch-site") === "cross-site") return false;
   const origin = request.headers.get("origin");
-  return (
-    (!origin || origin === new URL(request.url).origin) &&
-    request.headers.get("sec-fetch-site") !== "cross-site"
+  if (!origin) return true;
+  let originHost: string;
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    return false;
+  }
+  if (!originHost) return false;
+  const first = (v: string | null) => v?.split(",")[0].trim().toLowerCase();
+  const hosts = new Set(
+    [
+      new URL(request.url).host,
+      first(request.headers.get("host")),
+      first(request.headers.get("x-forwarded-host")),
+    ].filter((h): h is string => !!h),
   );
+  return hosts.has(originHost.toLowerCase());
 }
 export function secure(
   handler: (request: Request, account: Account) => Promise<Response>,
