@@ -78,7 +78,7 @@ locally without credentials; see the status line above for what is not yet live.
 | Most Creative: research fit  | Payment tied to whether the data holds up: fitness audit, leak lift, survival query. Numbers in `docs/evals.md`, story at `/demo`                                                                     |
 | AG Grid                      | Catalog, compare, order queue, ledger, insights and trust tables (`app/components`, `/insights`)                                                                                                      |
 | APIMatic                     | OpenAPI 3.1 spec with drift tests (`openapi/openapi.yaml`); SDK generation steps in `docs/api.md`. Not run through APIMatic yet                                                                       |
-| Render                       | `render.yaml` Blueprint with a seeded SQLite demo and health check. A hosted deploy is still pending                                                                                                  |
+| Render                       | `render.yaml` Blueprint with Render Postgres, a seeded demo and a health check. A hosted deploy is still pending                                                                                      |
 
 ## How it works
 

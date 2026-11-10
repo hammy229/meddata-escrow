@@ -1,10 +1,8 @@
 # Hackathon Submission Checklist
 
-Tracking every PayPal AI Hackathon submission requirement. Local gates were
-re-run on 2026-11-01 (lint with the ignore pattern, typecheck, test, build).
-CI and repo settings were last checked on 2026-10-22 and have not been
-re-checked since the November commits, which are not pushed yet. Write-up
-draft: [`devpost.md`](devpost.md).
+Tracking every PayPal AI Hackathon submission requirement. Local gates
+(lint, typecheck, test) were re-run on 2026-11-10, and CI was green on `main`
+the same day. Write-up draft: [`devpost.md`](devpost.md).
 
 ## Repository & licensing
 
@@ -45,12 +43,13 @@ draft: [`devpost.md`](devpost.md).
 
 ## Quality gates
 
-- [x] `npm install` succeeds (last seen 2026-10-22; not re-run today)
-- [ ] `npm run lint` passes. Not today: it also scans local worktree copies outside the source tree. Linting the source alone passes on 2026-11-01
-- [x] `npm run typecheck` passes (re-run 2026-11-01)
-- [x] `npm test` passes: 511 tests (2026-11-01)
-- [x] `npm run build` passes (re-run 2026-11-01)
-- [ ] CI green on `main` (last seen 2026-10-22; re-check after the November commits are pushed)
+- [x] `npm install` succeeds (2026-11-10)
+- [x] `npm run lint` passes (2026-11-10)
+- [x] `npm run typecheck` passes (2026-11-10)
+- [x] `npm test` passes: 1,066 tests (2026-11-10)
+- [x] `npm run build` passes (in CI, 2026-11-10)
+- [x] CI green on `main` (2026-11-10)
+- [x] `npm audit` reports 0 vulnerabilities (2026-11-10)
 
 ## Data & privacy
 
