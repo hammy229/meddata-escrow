@@ -39,7 +39,7 @@ the same day. Write-up draft: [`devpost.md`](devpost.md).
 
 - [ ] Devpost write-up finalized from [`devpost.md`](devpost.md)
 - [x] Hosted demo link: https://meddata-escrow.onrender.com (all 12 `/demo` steps and signup/buy checked live on 2026-11-10; kept awake by the Keep alive workflow)
-- [ ] Demo video link: YouTube, **under 3 minutes** (placeholder → real URL)
+- [x] Demo video link: https://www.youtube.com/watch?v=RWKwjd5Zat0
 
 ## Quality gates
 

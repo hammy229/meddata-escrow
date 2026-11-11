@@ -165,4 +165,5 @@ TypeScript · AG Grid · SQLite · OpenAPI · Postman · Render · Zapier
 ## Links
 
 - Repo: https://github.com/hammy229/meddata-escrow
+- Demo video: https://www.youtube.com/watch?v=RWKwjd5Zat0
 - Hosted demo: https://meddata-escrow.onrender.com (guided story at https://meddata-escrow.onrender.com/demo)

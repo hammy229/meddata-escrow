@@ -5,7 +5,7 @@
 [![CI](https://github.com/hammy229/meddata-escrow/actions/workflows/ci.yml/badge.svg)](https://github.com/hammy229/meddata-escrow/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Links:** [Live demo](https://meddata-escrow.onrender.com/demo) · [Evals](docs/evals.md) · [Architecture](docs/architecture.md) · [PayPal escrow flow](docs/paypal-flow.md) · [API](docs/api.md) · [Privacy](docs/privacy.md) · [Arham Doshi](https://arhamdoshi.dev) · [LinkedIn](https://linkedin.com/in/arhamdoshi)
+**Links:** [Demo video](https://www.youtube.com/watch?v=RWKwjd5Zat0) · [Live demo](https://meddata-escrow.onrender.com/demo) · [Evals](docs/evals.md) · [Architecture](docs/architecture.md) · [PayPal escrow flow](docs/paypal-flow.md) · [API](docs/api.md) · [Privacy](docs/privacy.md) · [Arham Doshi](https://arhamdoshi.dev) · [LinkedIn](https://linkedin.com/in/arhamdoshi)
 
 ![MedData Escrow: research data you can trust, paid for only once it is delivered](docs/screenshots/home-thumbnail.png)
 
@@ -424,6 +424,7 @@ sessions and the appropriate researcher/provider identity for each action.
 ### Demo
 
 - 🌐 **Hosted demo:** [https://meddata-escrow.onrender.com](https://meddata-escrow.onrender.com), with the guided story at [`/demo`](https://meddata-escrow.onrender.com/demo). Mock PayPal, synthetic data, free Render plan
+- 🎥 **Demo video (YouTube, under 3 min):** [https://www.youtube.com/watch?v=RWKwjd5Zat0](https://www.youtube.com/watch?v=RWKwjd5Zat0)
 
 #### Run it locally
 
